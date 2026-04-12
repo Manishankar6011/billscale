@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Allow: /register
+Allow: /login
+Disallow: /dashboard/*
+Disallow: /api/*
+
+Sitemap: https://buildmateerp.in/sitemap.xml

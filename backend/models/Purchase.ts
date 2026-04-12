@@ -1,0 +1,60 @@
+import mongoose, { Schema } from 'mongoose';
+import { IPurchase } from '../types';
+
+const purchaseSchema: Schema = new mongoose.Schema({
+    tenantId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Tenant',
+        required: true
+    },
+    supplierName: {
+        type: String,
+        required: true,
+        trim: true
+    },
+    productId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Product',
+        required: true
+    },
+    quantity: {
+        type: Number,
+        required: true
+    },
+    purchasePrice: {
+        type: Number,
+        required: true
+    },
+    totalAmount: {
+        type: Number,
+        required: true
+    },
+    taxAmount: {
+        type: Number,
+        default: 0
+    },
+    discount: {
+        type: Number,
+        default: 0
+    },
+    paymentMode: {
+        type: String,
+        enum: ['cash', 'credit', 'upi', 'card', 'bank_transfer'],
+        default: 'cash'
+    },
+    paymentStatus: {
+        type: String,
+        enum: ['paid', 'pending'],
+        default: 'pending'
+    },
+    date: {
+        type: Date,
+        default: Date.now
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now
+    }
+});
+
+export default mongoose.model<IPurchase>('Purchase', purchaseSchema);

@@ -1,0 +1,15 @@
+{
+  "name": "buildmate-erp",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "cd backend && npm run start",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd backend && npm run dev",
+    "client": "cd frontend && npm run dev",
+    "install-all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "build": "cd backend && npm install && NODE_OPTIONS=--max-old-space-size=4096 npm run build && cd ../frontend && npm install && NODE_OPTIONS=--max-old-space-size=4096 npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

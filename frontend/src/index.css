@@ -1,0 +1,47 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply font-['Inter'] bg-slate-50 text-slate-900;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-['Outfit'] font-semibold;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-xl font-medium transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-primary {
+    @apply btn bg-primary-600 text-white hover:bg-primary-700 shadow-lg shadow-primary-200;
+  }
+  .btn-primary-emerald {
+    @apply btn bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-200;
+  }
+  .btn-secondary {
+    @apply btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50;
+  }
+  .card {
+    @apply bg-white rounded-2xl p-6 shadow-sm border border-slate-100;
+  }
+  .input {
+    @apply w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-500 transition-all;
+  }
+}
+
+/* WhatsApp-like Simple UI Elements */
+.mobile-nav-btn {
+  @apply flex flex-col items-center justify-center gap-1 text-slate-500 active:text-primary-600;
+}
+
+.attendance-pill {
+  @apply px-4 py-2 rounded-full font-semibold text-sm transition-all;
+}
+.attendance-present { @apply bg-emerald-100 text-emerald-700; }
+.attendance-absent { @apply bg-rose-100 text-rose-700; }
+.attendance-half { @apply bg-amber-100 text-amber-700; }
