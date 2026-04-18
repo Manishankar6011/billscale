@@ -68,6 +68,34 @@
   animation: float 3s ease-in-out infinite;
 }
 
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-in-bottom {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-in {
+  animation-duration: 0.6s;
+  animation-fill-mode: both;
+}
+
+.fade-in { animation-name: fade-in; }
+.slide-in-from-bottom-4 { animation-name: slide-in-bottom; }
+.slide-in-from-bottom-6 { animation-name: slide-in-bottom; animation-delay: 0.1s; }
+.slide-in-from-bottom-8 { animation-name: slide-in-bottom; animation-delay: 0.2s; }
+.slide-in-from-bottom-10 { animation-name: slide-in-bottom; animation-delay: 0.3s; }
+.slide-in-from-bottom-12 { animation-name: slide-in-bottom; animation-delay: 0.4s; }
+
+/* Delay classes */
+.delay-100 { animation-delay: 0.1s; }
+.delay-200 { animation-delay: 0.2s; }
+.delay-300 { animation-delay: 0.3s; }
+.delay-500 { animation-delay: 0.5s; }
+
 /* WhatsApp-like Simple UI Elements */
 .mobile-nav-btn {
   @apply flex flex-col items-center justify-center gap-1 text-slate-400 font-bold text-[10px] uppercase tracking-widest transition-all active:text-primary-600;
@@ -79,3 +107,40 @@
 .attendance-present { @apply bg-emerald-50 text-emerald-600 border border-emerald-100; }
 .attendance-absent { @apply bg-rose-50 text-rose-600 border border-rose-100; }
 .attendance-half { @apply bg-amber-50 text-amber-600 border border-amber-100; }
+
+/* Print Styles */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-invoice, #printable-invoice * {
+    visibility: visible;
+  }
+  #printable-invoice {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 2mm !important;
+    background: white !important;
+    color: black !important;
+    display: block !important;
+  }
+  
+  @page {
+    size: auto;
+    margin: 0mm;
+  }
+
+  /* Force colors in print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Specific sizing for common thermal printers if needed */
+  #printable-invoice {
+    max-width: 80mm; /* Standard Thermal Roll */
+  }
+}

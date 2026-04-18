@@ -160,6 +160,45 @@ const ErrorState = ({ message, onRetry }: any) => (
   </div>
 );
 
+const CustomTooltip = ({ active, payload, label, timeRange }: any) => {
+  if (active && payload && payload.length) {
+    const d = new Date(label.replace(" ", "T"));
+    let labelText = "";
+    if (timeRange === "today" || timeRange === "yesterday") {
+      labelText = d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+    } else {
+      labelText = d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+    }
+
+    return (
+      <div className="bg-white/80 backdrop-blur-xl border border-white/40 shadow-[0_20px_50px_rgba(0,0,0,0.12)] rounded-[2rem] p-6 animate-in zoom-in-95 duration-200 min-w-[220px]">
+        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-4 border-b border-slate-100 pb-3">
+          {labelText}
+        </p>
+        <div className="space-y-4">
+          {payload.map((entry: any, index: number) => (
+            <div key={index} className="flex items-center justify-between gap-6">
+              <div className="flex items-center gap-3">
+                <div 
+                  className="w-2.5 h-2.5 rounded-full" 
+                  style={{ backgroundColor: entry.color || entry.fill }} 
+                />
+                <span className="text-xs font-bold text-slate-500 capitalize">
+                  {entry.name}
+                </span>
+              </div>
+              <span className="text-sm font-black text-slate-900 tracking-tight">
+                ₹{entry.value.toLocaleString()}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
 const ActivityItem = ({ activity, onClick }: any) => {
   return (
     <div
@@ -590,7 +629,7 @@ const Dashboard = () => {
                     <TrendingUp size={24} />
                   </div>
                 </div>
-                <div className="h-[300px] w-full relative">
+                <div className="h-[320px] w-full relative">
                   {chartData.length === 0 ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300">
                       <TrendingUp size={48} className="mb-2 opacity-20" />
@@ -600,23 +639,35 @@ const Dashboard = () => {
                     </div>
                   ) : (
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={chartData}>
+                      <AreaChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                         <defs>
                           <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                            <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                            <stop offset="5%" stopColor="#0284c7" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="#0284c7" stopOpacity={0} />
                           </linearGradient>
                           <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
                             <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                           </linearGradient>
+                          <filter id="shadow" height="200%">
+                            <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="blur" />
+                            <feOffset in="blur" dx="0" dy="4" result="offsetBlur" />
+                            <feComponentTransfer>
+                              <feFuncA type="linear" slope="0.3" />
+                            </feComponentTransfer>
+                            <feMerge>
+                              <feMergeNode />
+                              <feMergeNode in="SourceGraphic" />
+                            </feMerge>
+                          </filter>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <CartesianGrid vertical={false} stroke="#E2E8F0" strokeDasharray="3 3" opacity={0.4} />
                         <XAxis
                           dataKey="date"
                           axisLine={false}
                           tickLine={false}
-                          tick={{ fill: "#94a3b8", fontSize: 10, fontWeight: 700 }}
+                          tick={{ fill: "#94a3b8", fontSize: 10, fontWeight: 900 }}
+                          dy={15}
                           tickFormatter={(str) => {
                             const d = new Date(str.replace(" ", "T"));
                             if (timeRange === "today" || timeRange === "yesterday") {
@@ -627,37 +678,38 @@ const Dashboard = () => {
                               : d.getDate().toString();
                           }}
                         />
-                        <YAxis hide />
+                        <YAxis 
+                          hide 
+                          axisLine={false}
+                          tickLine={false}
+                        />
                         <Tooltip
-                          labelFormatter={(label) => {
-                            const d = new Date(label.replace(" ", "T"));
-                            if (timeRange === "today" || timeRange === "yesterday")
-                              return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
-                            return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-                          }}
-                          contentStyle={{
-                            borderRadius: "20px",
-                            border: "none",
-                            boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)",
-                            padding: "15px",
-                          }}
-                          itemStyle={{ fontWeight: 900, fontSize: "12px" }}
+                          content={<CustomTooltip timeRange={timeRange} />}
+                          cursor={{ stroke: '#E2E8F0', strokeWidth: 2, strokeDasharray: '5 5' }}
                         />
                         <Area
                           type="monotone"
+                          name="Revenue"
                           dataKey="revenue"
-                          stroke="#6366f1"
+                          stroke="#0284c7"
                           strokeWidth={4}
                           fillOpacity={1}
                           fill="url(#colorRev)"
+                          activeDot={{ r: 8, strokeWidth: 0, fill: '#0284c7', className: 'animate-pulse' }}
+                          dot={false}
+                          animationDuration={1500}
                         />
                         <Area
                           type="monotone"
+                          name="Profit"
                           dataKey="profit"
                           stroke="#10b981"
                           strokeWidth={4}
                           fillOpacity={1}
                           fill="url(#colorProfit)"
+                          activeDot={{ r: 8, strokeWidth: 0, fill: '#10b981', className: 'animate-pulse' }}
+                          dot={false}
+                          animationDuration={2000}
                         />
                       </AreaChart>
                     </ResponsiveContainer>
@@ -680,7 +732,7 @@ const Dashboard = () => {
                     <Receipt size={24} />
                   </div>
                 </div>
-                <div className="h-[300px] w-full relative">
+                <div className="h-[320px] w-full relative text-slate-900 font-bold">
                   {chartData.length === 0 ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300">
                       <Receipt size={48} className="mb-2 opacity-20" />
@@ -690,21 +742,19 @@ const Dashboard = () => {
                     </div>
                   ) : (
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={chartData}>
+                      <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                         <CartesianGrid
-                          strokeDasharray="3 3"
                           vertical={false}
-                          stroke="#f1f5f9"
+                          stroke="#E2E8F0"
+                          strokeDasharray="3 3"
+                          opacity={0.4}
                         />
                         <XAxis
                           dataKey="date"
                           axisLine={false}
                           tickLine={false}
-                          tick={{
-                            fill: "#94a3b8",
-                            fontSize: 10,
-                            fontWeight: 700,
-                          }}
+                          tick={{ fill: "#94a3b8", fontSize: 10, fontWeight: 900 }}
+                          dy={15}
                           tickFormatter={(str) => {
                             const d = new Date(str.replace(" ", "T"));
                             if (timeRange === "today" || timeRange === "yesterday") {
@@ -717,39 +767,24 @@ const Dashboard = () => {
                         />
                         <YAxis hide />
                         <Tooltip
-                          cursor={{ fill: "#f8fafc" }}
-                          labelFormatter={(label) => {
-                            const d = new Date(label.replace(" ", "T"));
-                            if (timeRange === "today" || timeRange === "yesterday")
-                              return d.toLocaleTimeString("en-IN", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              });
-                            return d.toLocaleDateString("en-IN", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                            });
-                          }}
-                          contentStyle={{
-                            borderRadius: "20px",
-                            border: "none",
-                            boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)",
-                            padding: "15px",
-                          }}
-                          itemStyle={{ fontWeight: 900, fontSize: "12px" }}
+                          content={<CustomTooltip timeRange={timeRange} />}
+                          cursor={{ fill: '#F8FAFC', opacity: 0.4 }}
                         />
                         <Bar
+                          name="Revenue"
                           dataKey="revenue"
-                          fill="#6366f1"
+                          fill="#0284c7"
                           radius={[10, 10, 0, 0]}
-                          barSize={20}
+                          barSize={18}
+                          animationDuration={1500}
                         />
                         <Bar
+                          name="Expenses"
                           dataKey="expenses"
                           fill="#f59e0b"
                           radius={[10, 10, 0, 0]}
-                          barSize={20}
+                          barSize={18}
+                          animationDuration={2000}
                         />
                       </BarChart>
                     </ResponsiveContainer>

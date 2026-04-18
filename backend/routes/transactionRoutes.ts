@@ -4,6 +4,10 @@ import { protect, checkSubscription } from '../middleware/auth';
 import tenant from '../middleware/tenant';
 
 const router = express.Router();
+import { getPublicSale } from '../controllers/transactionController';
+
+// Public route for WhatsApp/Invoice viewing
+router.get('/public-sale/:id', getPublicSale);
 
 router.use(protect);
 router.use(tenant);

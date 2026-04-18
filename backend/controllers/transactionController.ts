@@ -1,9 +1,10 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import Sale from '../models/Sale';
 import Purchase from '../models/Purchase';
 import Product from '../models/Product';
 import Customer from '../models/Customer';
+import Tenant from '../models/Tenant';
 import mongoose from 'mongoose';
 
 // @desc    Get all sales
@@ -254,5 +255,22 @@ export const deletePurchase = async (req: AuthRequest, res: Response) => {
         res.status(400).json({ message: err.message });
     } finally {
         session.endSession();
+    }
+};
+// @desc    Get sale by ID for public invoice viewing (No Auth)
+// @route   GET /api/transactions/public-sale/:id
+export const getPublicSale = async (req: Request, res: Response) => {
+    try {
+        const sale = await Sale.findById(req.params.id)
+            .populate('items.productId', 'name unit')
+            .populate('tenantId', 'companyName phone address email');
+            
+        if (!sale) {
+            return res.status(404).json({ message: 'Invoice not found' });
+        }
+
+        res.status(200).json(sale);
+    } catch (err: any) {
+        res.status(500).json({ message: err.message });
     }
 };

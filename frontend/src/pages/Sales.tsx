@@ -15,7 +15,9 @@ import {
     MapPin,
     X,
     User,
-    Loader2
+    Loader2,
+    Printer,
+    MessageCircle
 } from 'lucide-react';
 import BarcodeScanner from '../components/BarcodeScanner';
 import CustomerSearch from '../components/CustomerSearch';
@@ -25,6 +27,7 @@ import { useAuth } from '../context/AuthContext';
 import Skeleton from '../components/Skeleton';
 import { useToast } from '../context/ToastContext';
 import { format } from 'date-fns';
+import PrintableInvoice from '../components/PrintableInvoice';
 import { generateInvoice } from '../utils/invoiceGenerator';
 
 const UNIT_GROUPS: Record<string, string[]> = {
@@ -70,6 +73,8 @@ const Sales = () => {
     const [newAdditional, setNewAdditional] = useState({ name: '', price: '' });
     const [matchingProducts, setMatchingProducts] = useState<Product[]>([]);
     const [hwScannerInput, setHwScannerInput] = useState('');
+    const [autoPrint, setAutoPrint] = useState(true);
+    const [printData, setPrintData] = useState<any>(null);
     const scannerInputRef = React.useRef<HTMLInputElement>(null);
 
     // Filter State
@@ -152,6 +157,21 @@ const Sales = () => {
         }
     };
 
+    const handleWhatsAppShare = (sale: any) => {
+        if (!sale) return;
+        const customerName = sale.customerName || 'Customer';
+        const storeName = user?.companyName || 'BuildMate ERP';
+        const total = (sale.totalAmount || 0).toLocaleString();
+        const invoiceNo = sale.invoiceNumber || 'N/A';
+        const publicLink = `${window.location.origin}/public-invoice/${sale._id}`;
+        
+        const message = `Hello ${customerName}, thank you for shopping at *${storeName}*! Your invoice ${invoiceNo} for *₹${total}* is ready. View it here: ${publicLink}`;
+        const encodedMessage = encodeURIComponent(message);
+        const whatsappUrl = `https://wa.me/${sale.customerPhone ? sale.customerPhone.replace(/\D/g, '') : ''}?text=${encodedMessage}`;
+        
+        window.open(whatsappUrl, '_blank');
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (cart.length === 0) {
@@ -161,7 +181,7 @@ const Sales = () => {
 
         setIsSubmitting(true);
         try {
-            await axios.post('/api/transactions/sales', {
+            const response = await axios.post('/api/transactions/sales', {
                 customerName,
                 customerPhone,
                 customerAddress,
@@ -180,7 +200,16 @@ const Sales = () => {
                 headers: { Authorization: `Bearer ${user?.token}` }
             });
 
+            const newSale = response.data.sale;
             showToast('Sale recorded successfully!', 'success');
+            
+            if (autoPrint && newSale) {
+                setPrintData(newSale);
+                setTimeout(() => {
+                    window.print();
+                }, 500);
+            }
+
             setIsModalOpen(false);
             fetchData();
             setCustomerName('');
@@ -326,6 +355,7 @@ const Sales = () => {
                                 <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">Cost Price</th>
                                 <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">Profit</th>
                                 <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">Margin %</th>
+                                <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">Items</th>
                                 <th className="px-6 py-4 text-right pr-10 text-xs font-black uppercase text-slate-400 tracking-widest">Action</th>
                             </tr>
                         </thead>
@@ -376,18 +406,41 @@ const Sales = () => {
                                         <div className={`flex items-center gap-1 font-black ${profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                                             {profit >= 0 ? '+' : ''}₹{Math.abs(profit).toLocaleString()}
                                         </div>
-                                        <p className={`text-[10px] font-black uppercase tracking-widest ${profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                            {profitPerc.toFixed(1)}% {profit >= 0 ? 'Profit' : 'Loss'}
+                                        <p className="text-[10px] text-slate-400 font-medium">Net Profit</p>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <p className={`font-black uppercase tracking-widest text-xs ${profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                            {profitPerc.toFixed(1)}%
                                         </p>
+                                        <p className="text-[10px] text-slate-400 font-medium">Margin</p>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 border border-slate-100">
+                                                <Barcode size={14} />
+                                            </div>
+                                            <p className="font-black text-slate-800 tracking-tight">
+                                                {(sale.items?.length || 0) + (sale.additionalItems?.length || 0)}
+                                            </p>
+                                        </div>
                                     </td>
                                     <td className="px-6 py-4 text-right pr-6">
-                                        <button 
-                                            onClick={() => generateInvoice(sale, user?.companyName || 'Business', user?.name || 'Admin')}
-                                            className="p-3 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-2xl transition-all"
-                                            title="Download Invoice"
-                                        >
-                                            <ArrowUpRight size={20} />
-                                        </button>
+                                        <div className="flex items-center justify-end gap-2">
+                                            <button 
+                                                onClick={() => handleWhatsAppShare(sale)}
+                                                className="p-3 bg-emerald-500 text-white hover:bg-emerald-600 rounded-2xl transition-all shadow-lg shadow-emerald-100 flex items-center justify-center transform hover:scale-105 active:scale-95"
+                                                title="Share on WhatsApp"
+                                            >
+                                                <MessageCircle size={18} fill="currentColor" />
+                                            </button>
+                                            <button 
+                                                onClick={() => generateInvoice(sale, user?.companyName || 'Business', user?.name || 'Admin')}
+                                                className="p-3 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-2xl transition-all"
+                                                title="Download Invoice"
+                                            >
+                                                <ArrowUpRight size={20} />
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                                 );
@@ -651,16 +704,30 @@ const Sales = () => {
                             )}
 
                             <div className="flex items-center justify-between px-2 pt-4">
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Payment</label>
-                                    <select 
-                                        className="bg-slate-100 border-none rounded-xl p-2 text-xs font-black uppercase text-slate-700"
-                                        value={paymentMode}
-                                        onChange={(e) => setPaymentMode(e.target.value as any)}
-                                    >
-                                        <option value="cash">Cash</option>
-                                        <option value="credit">Credit</option>
-                                    </select>
+                                <div className="flex flex-col gap-3">
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Payment</label>
+                                        <select 
+                                            className="bg-slate-100 border-none rounded-xl p-2 text-xs font-black uppercase text-slate-700"
+                                            value={paymentMode}
+                                            onChange={(e) => setPaymentMode(e.target.value as any)}
+                                        >
+                                            <option value="cash">Cash</option>
+                                            <option value="credit">Credit</option>
+                                        </select>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <input 
+                                            type="checkbox" 
+                                            id="auto-print" 
+                                            checked={autoPrint} 
+                                            onChange={(e) => setAutoPrint(e.target.checked)}
+                                            className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                                        />
+                                        <label htmlFor="auto-print" className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1 cursor-pointer">
+                                            <Printer size={10} /> Auto-Print Bill
+                                        </label>
+                                    </div>
                                 </div>
                                 <div className="text-right">
                                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Grand Total</p>
@@ -668,22 +735,90 @@ const Sales = () => {
                                 </div>
                             </div>
 
-                            <button 
-                                onClick={handleSubmit} 
-                                disabled={isSubmitting}
-                                className="w-full py-5 bg-primary-600 text-white rounded-[2rem] font-black uppercase tracking-widest text-sm shadow-xl shadow-primary-200 hover:bg-primary-700 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                            >
-                                {isSubmitting ? (
-                                    <>
-                                        <Loader2 size={24} className="animate-spin" />
-                                        Processing Sale...
-                                    </>
+                                {printData ? (
+                                    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[100] flex items-center justify-center p-4 md:p-10 animate-in fade-in duration-300">
+                                        <div className="bg-white w-full max-w-5xl h-full max-h-[90vh] rounded-[3.5rem] shadow-2xl flex flex-col md:flex-row overflow-hidden border border-white/20">
+                                            {/* Receipt Preview Area */}
+                                            <div className="flex-1 bg-slate-50/50 p-6 md:p-10 overflow-y-auto custom-scrollbar flex justify-center border-r border-slate-100">
+                                                <div className="bg-white shadow-2xl rounded-[2rem] p-6 md:p-10 w-full max-w-[80mm] h-fit">
+                                                    <PrintableInvoice 
+                                                        sale={printData} 
+                                                        businessName={user?.companyName || 'BuildMate ERP'} 
+                                                        ownerName={user?.name}
+                                                    />
+                                                    {/* In this modal we force it visible via local class or inline style if needed, 
+                                                        but PrintableInvoice already has print:block. We need it visible on screen too. */}
+                                                    <style>{`
+                                                        #printable-invoice { display: block !important; visibility: visible !important; }
+                                                    `}</style>
+                                                </div>
+                                            </div>
+
+                                            {/* Actions Panel */}
+                                            <div className="w-full md:w-[350px] bg-white p-8 md:p-12 flex flex-col justify-between">
+                                                <div>
+                                                    <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-[2rem] flex items-center justify-center mb-8 shadow-inner">
+                                                        <Receipt size={40} className="animate-bounce" />
+                                                    </div>
+                                                    <h3 className="text-3xl font-black text-slate-800 tracking-tight mb-2">Sale Recorded!</h3>
+                                                    <p className="text-slate-400 font-medium mb-8">Invoice #{printData.invoiceNumber} is ready.</p>
+                                                    
+                                                    <div className="space-y-4">
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => window.print()}
+                                                            className="w-full py-5 bg-primary-600 text-white rounded-[2rem] font-black uppercase tracking-widest text-xs shadow-xl shadow-primary-200 hover:bg-primary-700 transition-all flex items-center justify-center gap-3"
+                                                        >
+                                                            <Printer size={18} /> Print Invoice
+                                                        </button>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => handleWhatsAppShare(printData)}
+                                                            className="w-full py-5 bg-emerald-500 text-white rounded-[2rem] font-black uppercase tracking-widest text-xs shadow-xl shadow-emerald-200 hover:bg-emerald-600 transition-all flex items-center justify-center gap-3"
+                                                        >
+                                                            <MessageCircle size={18} fill="currentColor" /> Share WhatsApp
+                                                        </button>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => generateInvoice(printData, user?.companyName || 'Business', user?.name || 'Admin')}
+                                                            className="w-full py-5 bg-white border-2 border-slate-100 text-slate-600 rounded-[2rem] font-black uppercase tracking-widest text-xs hover:bg-slate-50 transition-all flex items-center justify-center gap-3"
+                                                        >
+                                                            <ArrowUpRight size={18} /> Download PDF
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setIsModalOpen(false);
+                                                        setPrintData(null);
+                                                    }}
+                                                    className="w-full py-4 text-slate-300 hover:text-rose-500 font-black uppercase tracking-[0.2em] text-[10px] transition-all"
+                                                >
+                                                    Close & New Sale
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
                                 ) : (
-                                    <>
-                                        <Receipt size={20} /> Complete Sale (₹{grandTotal.toLocaleString()})
-                                    </>
+                                    <button 
+                                        onClick={handleSubmit} 
+                                        disabled={isSubmitting}
+                                        className="w-full py-5 bg-primary-600 text-white rounded-[2rem] font-black uppercase tracking-widest text-sm shadow-xl shadow-primary-200 hover:bg-primary-700 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                                    >
+                                        {isSubmitting ? (
+                                            <>
+                                                <Loader2 size={24} className="animate-spin" />
+                                                Processing Sale...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Receipt size={20} /> Complete Sale (₹{grandTotal.toLocaleString()})
+                                            </>
+                                        )}
+                                    </button>
                                 )}
-                            </button>
                         </form>
                     </div>
                 </div>
@@ -829,6 +964,12 @@ const Sales = () => {
                     </div>
                 </div>
             )}
+           
+            <PrintableInvoice 
+                sale={printData} 
+                businessName={user?.companyName || 'BuildMate ERP'} 
+                ownerName={user?.name}
+            />
         </div>
     );
 };

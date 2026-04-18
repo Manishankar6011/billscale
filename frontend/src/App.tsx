@@ -23,6 +23,7 @@ import Landing from "./pages/Landing";
 import Layout from "./components/Layout";
 import { Pricing } from "./pages/Pricing";
 import { ResetPassword } from "./pages/ResetPassword";
+import PublicInvoice from "./pages/PublicInvoice";
 
 const App: React.FC = () => {
   const { user } = useAuth();
@@ -35,6 +36,7 @@ const App: React.FC = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/reset-password/:token" element={<ResetPassword />} />
+        <Route path="/public-invoice/:id" element={<PublicInvoice />} />
 
         <Route
           path="/dashboard"
