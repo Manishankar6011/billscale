@@ -2,6 +2,12 @@ export interface Tenant {
   _id?: string;
   companyName: string;
   email: string;
+  phone?: string;
+  address?: string;
+  logoUrl?: string;
+  billingEmail?: string;
+  billingAddress?: string;
+  signature?: string;
 }
 
 export interface User {
@@ -9,7 +15,7 @@ export interface User {
   name: string;
   email: string;
   role: 'super-admin' | 'owner' | 'accountant';
-  tenantId: string | null;
+  tenantId: Tenant | string | null;
   companyName: string;
   businessType: string;
   planType?: 'free' | 'business' | 'enterprise';
@@ -54,7 +60,7 @@ export interface Sale {
     customerPhone?: string;
     customerAddress?: string;
     items: {
-        productId: Product;
+        productId: Product | string;
         quantity: number;
         unit: string;
         conversionFactor: number;
@@ -64,6 +70,9 @@ export interface Sale {
     }[];
     totalAmount: number;
     totalProfit: number;
+    amountPaid: number;
+    balanceDue: number;
+    roundOffAmount: number;
     paymentMode: 'cash' | 'credit';
     status: 'paid' | 'pending';
     additionalItems?: { name: string, price: number }[];

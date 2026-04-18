@@ -17,11 +17,48 @@ export const getProducts = async (req: AuthRequest, res: Response) => {
 // @route   POST /api/inventory
 export const addProduct = async (req: AuthRequest, res: Response) => {
     try {
-        const product = new Product({
-            ...req.body,
-            tenantId: req.tenantId
-        });
+        const { name, purchasePrice, stock } = req.body;
+        
+        // 1. Check if a product with exact name and purchasePrice exists for this tenant
+        const query = {
+            tenantId: req.tenantId,
+            name: { $regex: new RegExp(`^${name.trim()}$`, 'i') }, 
+            purchasePrice: Number(purchasePrice)
+        };
 
+        const existingProduct = await Product.findOne(query);
+
+        if (existingProduct) {
+            // If exists, just increment the stock
+            existingProduct.stock += Number(stock);
+            
+            // Optionally sync other fields if they were provided in the request
+            if (req.body.pricePerUnit) existingProduct.pricePerUnit = Number(req.body.pricePerUnit);
+            if (req.body.mrp) existingProduct.mrp = Number(req.body.mrp);
+            if (req.body.barcode) existingProduct.barcode = req.body.barcode;
+            
+            const savedProduct = await existingProduct.save();
+            return res.status(200).json(savedProduct);
+        }
+
+        console.log(`[addProduct] No matching product found. Creating new document.`);
+        // 2. If name exists but price differs, or name doesn't exist at all, create new product/batch
+        const productData = { ...req.body, tenantId: req.tenantId };
+        
+        // Generate a batch number if "Default" or empty is provided and other batches exist
+        if (!productData.batchNumber || productData.batchNumber === 'Default' || productData.batchNumber === '') {
+            const count = await Product.countDocuments({ 
+                tenantId: req.tenantId, 
+                name: { $regex: new RegExp(`^${name.trim()}$`, 'i') } 
+            });
+            if (count > 0) {
+                productData.batchNumber = `Batch ${count + 1}`;
+            } else {
+                productData.batchNumber = 'Default';
+            }
+        }
+
+        const product = new Product(productData);
         const savedProduct = await product.save();
         res.status(201).json(savedProduct);
     } catch (err: any) {

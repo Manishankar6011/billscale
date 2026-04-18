@@ -794,6 +794,89 @@ const Dashboard = () => {
             </div>
           </div>
 
+
+          {/* Sales Report Block (matching reference image) */}
+          <div className="mt-8 bg-white/70 backdrop-blur-md rounded-[3rem] border border-white/40 shadow-xl p-8 group hover:shadow-2xl transition-all duration-500">
+            <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-8">
+              <div>
+                <h3 className="text-2xl font-black text-slate-800 tracking-tight">Sales Report</h3>
+                <p className="text-slate-400 text-sm font-medium mt-1">
+                  {chartData.length > 0
+                    ? `${new Date(chartData[0]?.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} to ${new Date(chartData[chartData.length - 1]?.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`
+                    : 'No data available'
+                  }
+                </p>
+              </div>
+              <div className="flex items-start gap-8 text-right">
+                <div>
+                  <p className="text-slate-400 text-xs font-medium mb-1">Period Sales</p>
+                  <p className="text-3xl font-black text-slate-800 tracking-tighter">₹{(stats?.periodSales || 0).toLocaleString()}</p>
+                </div>
+                <div className="pl-8 border-l border-slate-100">
+                  <p className="text-slate-400 text-xs font-medium mb-1">Invoices Made</p>
+                  <p className="text-3xl font-black text-slate-800 tracking-tighter">{stats?.invoiceCount || 0}</p>
+                </div>
+              </div>
+            </div>
+            <div className="h-[300px] w-full relative">
+              {chartData.length === 0 ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300">
+                  <TrendingUp size={48} className="mb-2 opacity-20" />
+                  <p className="text-[10px] font-black uppercase tracking-widest">No data for this period</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorSalesGreen" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#22c55e" stopOpacity={0.4} />
+                        <stop offset="95%" stopColor="#22c55e" stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} stroke="#E2E8F0" strokeDasharray="3 3" opacity={0.4} />
+                    <XAxis
+                      dataKey="date"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "#94a3b8", fontSize: 11, fontWeight: 900 }}
+                      dy={15}
+                      tickFormatter={(str) => {
+                        const d = new Date(str.replace(" ", "T"));
+                        if (timeRange === "today" || timeRange === "yesterday") return d.getHours() + ":00";
+                        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                        return timeRange === "year"
+                          ? d.toLocaleDateString("en-US", { month: "short" })
+                          : (days[d.getDay()] || d.getDate().toString());
+                      }}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "#94a3b8", fontSize: 10, fontWeight: 900 }}
+                      tickFormatter={(v) => `₹${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`}
+                    />
+                    <Tooltip
+                      content={<CustomTooltip timeRange={timeRange} />}
+                      cursor={{ stroke: '#E2E8F0', strokeWidth: 2, strokeDasharray: '5 5' }}
+                    />
+                    <Area
+                      type="monotone"
+                      name="Revenue"
+                      dataKey="revenue"
+                      stroke="#16a34a"
+                      strokeWidth={3}
+                      fillOpacity={1}
+                      fill="url(#colorSalesGreen)"
+                      activeDot={{ r: 7, strokeWidth: 0, fill: '#16a34a' }}
+                      dot={false}
+                      animationDuration={1500}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start mt-8">
             {/* Recent Transactions Activity */}
             <div className="lg:col-span-8 bg-white/70 backdrop-blur-md rounded-[3rem] border border-white/40 shadow-xl shadow-slate-200/50 overflow-hidden group hover:shadow-2xl transition-all duration-500">

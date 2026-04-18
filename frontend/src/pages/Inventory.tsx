@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Search, Box, AlertTriangle, Edit2, Trash2, Barcode, Scan, Loader2 } from 'lucide-react';
+import { Plus, Search, Box, AlertTriangle, Edit2, Trash2, Barcode, Scan, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
 import BarcodeScanner from '../components/BarcodeScanner';
+import JsBarcode from 'jsbarcode';
 import axios from 'axios';
 import type { Product } from '../types';
 import { useAuth } from '../context/AuthContext';
 import Skeleton from '../components/Skeleton';
 import { useToast } from '../context/ToastContext';
+import BarcodeLabel from '../components/BarcodeLabel';
 
 const UNIT_GROUPS = {
     weight: ['kg', 'gm', 'ton', 'bag', 'bundle', 'pack'],
@@ -50,6 +52,30 @@ const Inventory = () => {
         batchNumber: ''
     });
     const [isScannerOpen, setIsScannerOpen] = useState(false);
+    const [showLeaveWarning, setShowLeaveWarning] = useState(false);
+    const [printLabelData, setPrintLabelData] = useState<Product | null>(null);
+    const barcodePreviewRef = useRef<SVGSVGElement>(null);
+    
+    const isFormDirty = !!(formData.name || formData.barcode || formData.pricePerUnit);
+
+    const tryClose = () => {
+        if (isFormDirty) {
+            setShowLeaveWarning(true);
+        } else {
+            closeModal();
+        }
+    };
+
+    const closeModal = () => {
+        setIsModalOpen(false);
+        setEditingId(null);
+        setFormData({ name: '', unit: 'bag', stock: '0', minStockAlert: '10', pricePerUnit: '', purchasePrice: '', mrp: '', barcode: '', batchNumber: '' });
+    };
+
+    const generateBarcode = () => {
+        const code = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+        setFormData(prev => ({ ...prev, barcode: code }));
+    };
 
     useEffect(() => {
         fetchProducts();
@@ -150,6 +176,24 @@ const Inventory = () => {
 
     return (
         <div className="space-y-6">
+            {/* Leave Warning Modal */}
+            {showLeaveWarning && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-8 animate-in zoom-in duration-200">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center"><AlertCircle size={24} /></div>
+                            <div>
+                                <h3 className="text-lg font-black text-slate-800">Unsaved Changes</h3>
+                                <p className="text-sm text-slate-500">You have unsaved product data. Are you sure you want to leave?</p>
+                            </div>
+                        </div>
+                        <div className="flex gap-3 mt-6">
+                            <button onClick={() => setShowLeaveWarning(false)} className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-200 transition-all">Stay</button>
+                            <button onClick={() => { setShowLeaveWarning(false); closeModal(); }} className="flex-1 py-3 bg-rose-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-rose-700 transition-all">Leave Anyway</button>
+                        </div>
+                    </div>
+                </div>
+            )}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-800">{t('inventory.title')}</h1>
@@ -188,12 +232,23 @@ const Inventory = () => {
                                     <button 
                                         onClick={() => handleEdit(product)}
                                         className="p-2 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg"
+                                        title="Edit Product"
                                     >
                                         <Edit2 size={16} />
                                     </button>
+                                    {product.barcode && (
+                                        <button 
+                                            onClick={() => { setPrintLabelData(product); setTimeout(() => window.print(), 100); }}
+                                            className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg"
+                                            title="Print Barcode Sticker"
+                                        >
+                                            <Barcode size={16} />
+                                        </button>
+                                    )}
                                     <button 
                                         onClick={() => handleDelete(product._id!)}
                                         className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
+                                        title="Delete Product"
                                     >
                                         <Trash2 size={16} />
                                     </button>
@@ -256,22 +311,11 @@ const Inventory = () => {
             {/* Add Product Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-8 animate-in fade-in zoom-in duration-200">
-                        <div className="flex justify-between items-center mb-8">
-                            {/* <h2 className="text-2xl font-black text-slate-800 tracking-tighter">
-                                {editingId ? 'Edit Product' : 'Add New yyjtyfuuyg'}
-                            </h2> */}
-                            <button 
-                                onClick={() => {
-                                    setIsModalOpen(false);
-                                    setEditingId(null);
-                                    setFormData({ name: '', unit: 'bag', stock: '0', minStockAlert: '10', pricePerUnit: '', purchasePrice: '', mrp: '', barcode: '', batchNumber: '' });
-                                }} 
-                                className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 transition-all font-bold"
-                            >
-                                &times;
-                            </button>
-                        </div>
+                    <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-8 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto custom-scrollbar">
+                            <div className="flex justify-between items-center mb-8">
+                                <h2 className="text-2xl font-black text-slate-800 tracking-tighter">{editingId ? 'Edit Product' : 'Add New Product'}</h2>
+                                <button onClick={tryClose} className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 transition-all font-bold">&times;</button>
+                            </div>
 
                         <form onSubmit={handleSubmit} className="space-y-5">
                             <div>
@@ -331,40 +375,67 @@ const Inventory = () => {
                                 </div>
                             </div>
 
+                            {/* Pricing Section */}
+                            <div className="p-6 bg-primary-50/50 rounded-[2rem] border border-primary-100 space-y-5">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 bg-primary-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary-200">
+                                        <div className="text-[10px] font-black italic">₹</div>
+                                    </div>
+                                    <h3 className="text-[10px] font-black text-primary-600 uppercase tracking-widest">Pricing & Profit Logic</h3>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">Cost Price (Purchased / Unit)</label>
+                                        <input 
+                                            required
+                                            type="number" 
+                                            className="w-full bg-white border border-slate-200 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold"
+                                            placeholder="Supplier Cost per unit"
+                                            value={formData.purchasePrice}
+                                            onChange={(e) => setFormData({...formData, purchasePrice: e.target.value})}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">Selling Price (Sale / Unit)</label>
+                                        <input 
+                                            required
+                                            type="number" 
+                                            className="w-full bg-white border border-primary-500 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-black shadow-md shadow-primary-100"
+                                            placeholder="Price to Customer per unit"
+                                            value={formData.pricePerUnit}
+                                            onChange={(e) => setFormData({...formData, pricePerUnit: e.target.value})}
+                                        />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">MRP (Maximum Retail Price / Tag Price)</label>
+                                        <input 
+                                            required
+                                            type="number" 
+                                            className="w-full bg-white border border-slate-200 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold"
+                                            placeholder="Printed Price"
+                                            value={formData.mrp}
+                                            onChange={(e) => setFormData({...formData, mrp: e.target.value})}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Live Profit Indicator */}
+                                {Number(formData.pricePerUnit) > 0 && Number(formData.purchasePrice) > 0 && (
+                                    <div className="flex items-center justify-between p-4 bg-white rounded-2xl border border-primary-100 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Est. Profit Margin</span>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-md font-black text-emerald-600">₹{(Number(formData.pricePerUnit) - Number(formData.purchasePrice)).toFixed(2)}</p>
+                                            <p className="text-[9px] font-black text-slate-400">({(((Number(formData.pricePerUnit) - Number(formData.purchasePrice)) / Number(formData.purchasePrice)) * 100).toFixed(1)}% Markup)</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Price per Unit</label>
-                                    <input 
-                                        required
-                                        type="number" 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold"
-                                        placeholder="0"
-                                        value={formData.pricePerUnit}
-                                        onChange={(e) => setFormData({...formData, pricePerUnit: e.target.value})}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Purchase Price (Cost)</label>
-                                    <input 
-                                        required
-                                        type="number" 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold"
-                                        placeholder="0"
-                                        value={formData.purchasePrice}
-                                        onChange={(e) => setFormData({...formData, purchasePrice: e.target.value})}
-                                    />
-                                </div>
-                                <div className="col-span-2">
-                                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">MRP (Maximum Retail Price)</label>
-                                    <input 
-                                        required
-                                        type="number" 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold"
-                                        placeholder="0"
-                                        value={formData.mrp}
-                                        onChange={(e) => setFormData({...formData, mrp: e.target.value})}
-                                    />
-                                </div>
                                 <div>
                                     <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Low Stock Alert at</label>
                                     <input 
@@ -387,7 +458,12 @@ const Inventory = () => {
                                     />
                                 </div>
                                 <div className="col-span-2">
-                                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Barcode (Optional)</label>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="block text-xs font-black uppercase tracking-widest text-slate-400">Barcode (Optional)</label>
+                                        <button type="button" onClick={generateBarcode} className="text-[10px] font-black uppercase tracking-widest text-primary-600 flex items-center gap-1 hover:text-primary-700">
+                                            <RefreshCw size={10} /> Auto-Generate
+                                        </button>
+                                    </div>
                                     <div className="relative">
                                         <input 
                                             type="text" 
@@ -404,6 +480,15 @@ const Inventory = () => {
                                             <Scan size={20} />
                                         </button>
                                     </div>
+                                    {formData.barcode && (
+                                        <div className="mt-3 p-4 bg-white border-2 border-slate-100 rounded-2xl flex flex-col items-center justify-center">
+                                            <svg ref={(el) => {
+                                                if (el && formData.barcode) {
+                                                    try { JsBarcode(el, formData.barcode, { format: 'CODE128', width: 2, height: 60, displayValue: true, fontSize: 12, margin: 8 }); } catch {}
+                                                }
+                                            }} className="w-full max-w-[200px]" />
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -433,6 +518,20 @@ const Inventory = () => {
                     onScan={handleScan}
                     onClose={() => setIsScannerOpen(false)}
                 />
+            )}
+            {/* Barcode Print Container */}
+            {printLabelData && (
+                <div className="hidden print:block">
+                    <BarcodeLabel product={printLabelData} businessName={user?.companyName || 'BuildMate ERP'} />
+                    <style>{`
+                        @media print {
+                            @page { size: 50mm 25mm; margin: 0; }
+                            body * { visibility: hidden !important; }
+                            #barcode-sticker, #barcode-sticker * { visibility: visible !important; }
+                            #barcode-sticker { position: absolute; left: 0; top: 0; display: flex !important; width: 50mm !important; height: 25mm !important; }
+                        }
+                    `}</style>
+                </div>
             )}
         </div>
     );

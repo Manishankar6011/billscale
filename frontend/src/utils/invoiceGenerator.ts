@@ -42,8 +42,8 @@ export const generateInvoice = (sale: any, businessName: string = 'BuildMate ERP
             const itemData = [
                 item.productId?.name || 'Unknown Product',
                 `${item.quantity} ${item.productId?.unit || ''}`,
-                `INR ${(item.sellingPrice || 0).toLocaleString()}`,
-                `INR ${((item.quantity || 0) * (item.sellingPrice || 0)).toLocaleString()}`
+                `Rs.${(item.sellingPrice || 0).toFixed(2)}`,
+                `Rs.${((item.quantity || 0) * (item.sellingPrice || 0)).toFixed(2)}`
             ];
             tableRows.push(itemData);
         });
@@ -53,8 +53,8 @@ export const generateInvoice = (sale: any, businessName: string = 'BuildMate ERP
                 tableRows.push([
                     item.name,
                     "1 Unit",
-                    `INR ${(item.price || 0).toLocaleString()}`,
-                    `INR ${(item.price || 0).toLocaleString()}`
+                    `Rs.${(item.price || 0).toFixed(2)}`,
+                    `Rs.${(item.price || 0).toFixed(2)}`
                 ]);
             });
         }
@@ -67,15 +67,34 @@ export const generateInvoice = (sale: any, businessName: string = 'BuildMate ERP
             headStyles: { fillColor: [79, 70, 229] }, // primary-600
             styles: { fontSize: 10, cellPadding: 5 },
             columnStyles: {
+                2: { halign: 'right' },
                 3: { halign: 'right' }
             }
         });
 
-        const finalY = (doc as any).lastAutoTable.finalY + 10;
+        let finalY = (doc as any).lastAutoTable.finalY + 10;
 
         // Summary
         doc.setFont('helvetica', 'bold');
-        doc.text(`Grand Total: INR ${(sale.totalAmount || 0).toLocaleString()}`, pageWidth - 20, finalY, { align: 'right' });
+        doc.setFontSize(12);
+        doc.text(`Grand Total: Rs.${(sale.totalAmount || 0).toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' });
+
+        if (sale.amountPaid !== undefined && sale.amountPaid < sale.totalAmount) {
+            finalY += 7;
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Amount Paid: Rs.${(sale.amountPaid || 0).toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' });
+            finalY += 6;
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(220, 38, 38); // rose-600
+            doc.text(`Balance Due: Rs.${(sale.balanceDue || 0).toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' });
+            doc.setTextColor(0, 0, 0);
+        } else if (sale.amountPaid !== undefined) {
+            finalY += 7;
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Status: FULLY PAID`, pageWidth - 20, finalY, { align: 'right' });
+        }
 
         // Footer
         doc.setFontSize(8);

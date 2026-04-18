@@ -29,6 +29,10 @@ const tenantSchema: Schema = new mongoose.Schema({
         enum: ['active', 'inactive', 'trial'],
         default: 'trial'
     },
+    logoUrl: { type: String, default: '' },
+    billingEmail: { type: String, default: '' },
+    billingAddress: { type: String, default: '' },
+    signature: { type: String, default: '' },
     createdAt: {
         type: Date,
         default: Date.now

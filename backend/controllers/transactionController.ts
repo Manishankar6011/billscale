@@ -29,7 +29,9 @@ export const processSale = async (req: AuthRequest, res: Response) => {
         additionalItems, 
         paymentMode, 
         status, 
-        date 
+        date,
+        amountPaid,
+        roundOffAmount
     } = req.body;
     
     const session = await mongoose.startSession();
@@ -99,6 +101,13 @@ export const processSale = async (req: AuthRequest, res: Response) => {
             }
         }
 
+        // Apply Round Off if provided
+        const finalRoundOff = Number(roundOffAmount) || 0;
+        totalAmount += finalRoundOff;
+
+        const finalAmountPaid = Number(amountPaid) || 0;
+        const balanceDue = totalAmount - finalAmountPaid;
+
         const invoiceNumber = `INV-${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 90 + 10)}`;
 
         const sale = new Sale({
@@ -111,6 +120,9 @@ export const processSale = async (req: AuthRequest, res: Response) => {
             additionalItems: additionalItems || [],
             totalAmount,
             totalProfit,
+            amountPaid: finalAmountPaid,
+            balanceDue: balanceDue,
+            roundOffAmount: finalRoundOff,
             paymentMode,
             status,
             date: date || new Date()
@@ -152,10 +164,51 @@ export const processPurchase = async (req: AuthRequest, res: Response) => {
 
         const totalAmount = quantity * purchasePrice;
 
+        // 1. Find the selected product
+        const originalProduct = await Product.findOne({ _id: productId, tenantId: req.tenantId }).session(session);
+        if (!originalProduct) throw new Error('Product not found');
+
+        let targetProduct = originalProduct;
+
+        // 2. If price differs, find or create a new batch
+        if (Number(purchasePrice) !== originalProduct.purchasePrice) {
+            const existingBatch = await Product.findOne({
+                tenantId: req.tenantId,
+                name: originalProduct.name,
+                purchasePrice: Number(purchasePrice)
+            }).session(session);
+
+            if (existingBatch) {
+                targetProduct = existingBatch;
+            } else {
+                // Create a new batch/product entry
+                const count = await Product.countDocuments({ 
+                    tenantId: req.tenantId, 
+                    name: originalProduct.name 
+                }).session(session);
+
+                targetProduct = new Product({
+                    tenantId: req.tenantId,
+                    name: originalProduct.name,
+                    category: originalProduct.category,
+                    unit: originalProduct.unit,
+                    barcode: originalProduct.barcode,
+                    pricePerUnit: originalProduct.pricePerUnit, // Default to same selling price
+                    mrp: originalProduct.mrp,
+                    purchasePrice: Number(purchasePrice),
+                    stock: 0, // Will be updated below
+                    batchNumber: `Batch ${count + 1}`,
+                    minStockAlert: originalProduct.minStockAlert
+                });
+                await targetProduct.save({ session });
+            }
+        }
+
+        // 3. Create Purchase Record linked to the target batch
         const purchase = new Purchase({
             tenantId: req.tenantId,
             supplierName,
-            productId,
+            productId: targetProduct._id,
             quantity,
             purchasePrice,
             totalAmount,
@@ -163,13 +216,10 @@ export const processPurchase = async (req: AuthRequest, res: Response) => {
             date
         });
 
-        // Update Product Stock
-        const product = await Product.findOne({ _id: productId, tenantId: req.tenantId }).session(session);
-        if (!product) throw new Error('Product not found');
-
-        product.stock += Number(quantity);
-        product.purchasePrice = Number(purchasePrice); // Sync cost price
-        await product.save({ session });
+        // 4. Update Target Product Stock
+        targetProduct.stock += Number(quantity);
+        targetProduct.purchasePrice = Number(purchasePrice); // Ensure it's set
+        await targetProduct.save({ session });
         await purchase.save({ session });
 
         await session.commitTransaction();
@@ -193,27 +243,62 @@ export const updatePurchase = async (req: AuthRequest, res: Response) => {
         const oldPurchase = await Purchase.findOne({ _id: req.params.id, tenantId: req.tenantId }).session(session);
         if (!oldPurchase) throw new Error('Purchase not found');
 
-        // 1. Revert Old Stock
+        // 1. Revert Old Stock from the ORIGINAL product ID
         const oldProduct = await Product.findOne({ _id: oldPurchase.productId, tenantId: req.tenantId }).session(session);
         if (oldProduct) {
             oldProduct.stock -= Number(oldPurchase.quantity);
             await oldProduct.save({ session });
         }
 
-        // 2. Apply New Stock
-        const newProduct = await Product.findOne({ _id: productId, tenantId: req.tenantId }).session(session);
-        if (!newProduct) throw new Error('New product not found');
-        
-        newProduct.stock += Number(quantity);
-        newProduct.purchasePrice = Number(purchasePrice); // Sync cost price
-        await newProduct.save({ session });
+        // 2. Identify Target Product for new state
+        const selectedProduct = await Product.findOne({ _id: productId, tenantId: req.tenantId }).session(session);
+        if (!selectedProduct) throw new Error('Selected product not found');
 
-        // 3. Update Purchase Record
+        let targetProduct = selectedProduct;
+
+        // Check if price matches selectedProduct. If not, find or create the correct batch
+        if (Number(purchasePrice) !== selectedProduct.purchasePrice) {
+            const existingBatch = await Product.findOne({
+                tenantId: req.tenantId,
+                name: selectedProduct.name,
+                purchasePrice: Number(purchasePrice)
+            }).session(session);
+
+            if (existingBatch) {
+                targetProduct = existingBatch;
+            } else {
+                const count = await Product.countDocuments({ 
+                    tenantId: req.tenantId, 
+                    name: selectedProduct.name 
+                }).session(session);
+
+                targetProduct = new Product({
+                    tenantId: req.tenantId,
+                    name: selectedProduct.name,
+                    category: selectedProduct.category,
+                    unit: selectedProduct.unit,
+                    barcode: selectedProduct.barcode,
+                    pricePerUnit: selectedProduct.pricePerUnit,
+                    mrp: selectedProduct.mrp,
+                    purchasePrice: Number(purchasePrice),
+                    stock: 0,
+                    batchNumber: `Batch ${count + 1}`,
+                    minStockAlert: selectedProduct.minStockAlert
+                });
+                await targetProduct.save({ session });
+            }
+        }
+
+        // 3. Apply New Stock
+        targetProduct.stock += Number(quantity);
+        await targetProduct.save({ session });
+
+        // 4. Update Purchase Record
         oldPurchase.supplierName = supplierName;
-        oldPurchase.productId = productId;
-        oldPurchase.quantity = quantity;
-        oldPurchase.purchasePrice = purchasePrice;
-        oldPurchase.totalAmount = quantity * purchasePrice;
+        oldPurchase.productId = targetProduct._id; // Switch to the new target batch ID if changed
+        oldPurchase.quantity = Number(quantity);
+        oldPurchase.purchasePrice = Number(purchasePrice);
+        oldPurchase.totalAmount = Number(quantity) * Number(purchasePrice);
         oldPurchase.paymentStatus = paymentStatus;
         oldPurchase.date = date;
 

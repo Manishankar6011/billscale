@@ -262,7 +262,8 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
                 estimatedBalance,
                 lowStockCount: lowStockProducts.length,
                 presentToday: staffPresentToday,
-                totalStaff: allStaff.length
+                totalStaff: allStaff.length,
+                invoiceCount: recentSales.length
             },
             chartData,
             recentActivity: recentSales.map(s => ({

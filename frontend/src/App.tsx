@@ -1,6 +1,5 @@
 import React from "react";
 import {
-  BrowserRouter as Router,
   Routes,
   Route,
   Navigate,
@@ -18,6 +17,7 @@ import Attendance from "./pages/Attendance";
 import Salary from "./pages/Salary";
 import Ledger from "./pages/Ledger";
 import Settings from "./pages/Settings";
+import Customers from "./pages/Customers";
 import { useAuth } from "./context/AuthContext";
 import Landing from "./pages/Landing";
 import Layout from "./components/Layout";
@@ -51,6 +51,7 @@ const App: React.FC = () => {
           <Route path="salary" element={<Salary />} />
           <Route path="ledger" element={<Ledger />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="customers" element={<Customers />} />
           <Route path="pricing" element={<Pricing />} />
         </Route>
 

@@ -12,6 +12,7 @@ import {
   FileText,
   Settings,
   LogOut,
+  UserRound,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { clsx, type ClassValue } from "clsx";
@@ -32,6 +33,7 @@ const Layout = () => {
       icon: ShoppingCart,
     },
     { name: t("common.sales"), path: "/dashboard/sales", icon: Receipt },
+    { name: "Customers", path: "/dashboard/customers", icon: UserRound },
     { name: t("common.staff"), path: "/dashboard/staff", icon: Users },
     {
       name: t("common.attendance"),

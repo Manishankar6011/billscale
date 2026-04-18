@@ -59,6 +59,18 @@ const saleSchema: Schema = new mongoose.Schema({
         type: Number,
         required: true
     },
+    amountPaid: {
+        type: Number,
+        default: 0
+    },
+    balanceDue: {
+        type: Number,
+        default: 0
+    },
+    roundOffAmount: {
+        type: Number,
+        default: 0
+    },
     taxAmount: {
         type: Number,
         default: 0

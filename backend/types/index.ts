@@ -8,6 +8,10 @@ export interface ITenant extends Document {
   phone?: string;
   email: string;
   subscriptionStatus: "active" | "inactive" | "trial";
+  logoUrl?: string;
+  billingEmail?: string;
+  billingAddress?: string;
+  signature?: string;
   createdAt: Date;
 }
 
@@ -78,6 +82,9 @@ export interface ISale extends Document {
   }[];
   totalAmount: number;
   totalProfit: number;
+  amountPaid: number;
+  balanceDue: number;
+  roundOffAmount: number;
   taxAmount?: number;
   discount?: number;
   paymentMode: "cash" | "credit" | "upi" | "card" | "bank_transfer";
