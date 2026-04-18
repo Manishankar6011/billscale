@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Search, Box, AlertTriangle, Edit2, Trash2, Barcode, Scan } from 'lucide-react';
+import { Plus, Search, Box, AlertTriangle, Edit2, Trash2, Barcode, Scan, Loader2 } from 'lucide-react';
 import BarcodeScanner from '../components/BarcodeScanner';
 import axios from 'axios';
 import type { Product } from '../types';
@@ -27,6 +27,7 @@ const Inventory = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [formData, setFormData] = useState<{
         name: string;
         unit: string;
@@ -98,6 +99,7 @@ const Inventory = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setIsSubmitting(true);
         try {
             const data = {
                 ...formData,
@@ -128,6 +130,8 @@ const Inventory = () => {
             setFormData({ name: '', unit: 'bag', stock: '0', minStockAlert: '10', pricePerUnit: '', purchasePrice: '', mrp: '', barcode: '', batchNumber: '' });
         } catch (err: any) {
             showToast(err.response?.data?.message || 'Error saving product', 'error');
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -403,8 +407,21 @@ const Inventory = () => {
                                 </div>
                             </div>
 
-                            <button type="submit" className="btn-primary w-full py-5 text-lg shadow-xl shadow-primary-100 flex items-center justify-center gap-2 font-bold">
-                                <Plus size={20} /> {editingId ? 'Update Product' : 'Create Product'}
+                            <button 
+                                type="submit" 
+                                disabled={isSubmitting}
+                                className="btn-primary w-full py-5 text-lg shadow-xl shadow-primary-100 flex items-center justify-center gap-2 font-bold disabled:opacity-70 disabled:cursor-not-allowed"
+                            >
+                                {isSubmitting ? (
+                                    <>
+                                        <Loader2 size={24} className="animate-spin" />
+                                        Please wait...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Plus size={20} /> {editingId ? 'Update Product' : 'Create Product'}
+                                    </>
+                                )}
                             </button>
                         </form>
                     </div>

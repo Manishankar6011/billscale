@@ -14,7 +14,8 @@ import {
     Phone,
     MapPin,
     X,
-    User
+    User,
+    Loader2
 } from 'lucide-react';
 import BarcodeScanner from '../components/BarcodeScanner';
 import CustomerSearch from '../components/CustomerSearch';
@@ -48,6 +49,7 @@ const Sales = () => {
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Form State
     const [customerName, setCustomerName] = useState('');
@@ -157,6 +159,7 @@ const Sales = () => {
             return;
         }
 
+        setIsSubmitting(true);
         try {
             await axios.post('/api/transactions/sales', {
                 customerName,
@@ -188,6 +191,8 @@ const Sales = () => {
             setPaymentMode('cash');
         } catch (err: any) {
             showToast(err.response?.data?.message || 'Error processing sale', 'error');
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -496,8 +501,8 @@ const Sales = () => {
                                 </div>
 
                                 <div className="space-y-3 relative z-10">
-                                    <div className="grid grid-cols-12 gap-3">
-                                        <div className="col-span-5">
+                                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-3">
+                                        <div className="col-span-1 md:col-span-5">
                                             <p className="text-[8px] font-black uppercase text-slate-400 mb-1 ml-1">Product</p>
                                             <select 
                                                 className="w-full bg-white border-none rounded-xl p-3 text-slate-800 text-sm font-bold"
@@ -519,7 +524,7 @@ const Sales = () => {
                                                 ))}
                                             </select>
                                         </div>
-                                        <div className="col-span-3">
+                                        <div className="col-span-1 md:col-span-3">
                                             <p className="text-[8px] font-black uppercase text-slate-400 mb-1 ml-1">Sell Unit</p>
                                             <select 
                                                 className="w-full bg-white border-none rounded-xl p-3 text-slate-800 text-sm font-bold"
@@ -535,7 +540,7 @@ const Sales = () => {
                                                 )}
                                             </select>
                                         </div>
-                                        <div className="col-span-3">
+                                        <div className="col-span-1 md:col-span-3">
                                             <p className="text-[8px] font-black uppercase text-slate-400 mb-1 ml-1">Price / {currentItem.unit || 'Unit'}</p>
                                             <input 
                                                 type="number" 
@@ -546,19 +551,19 @@ const Sales = () => {
                                             />
                                         </div>
                                         <div className="col-span-1">
-                                            <div className="h-6"></div>
+                                            <div className="hidden md:block h-6"></div>
                                             <button 
                                                 type="button"
                                                 onClick={addToCart}
-                                                className="w-full aspect-square bg-primary-600 text-white rounded-xl flex items-center justify-center hover:bg-primary-700 transition-all font-bold text-xl"
+                                                className="w-full h-12 md:h-auto md:aspect-square bg-primary-600 text-white rounded-xl flex items-center justify-center hover:bg-primary-700 transition-all font-bold text-xl"
                                             >
                                                 +
                                             </button>
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-12 gap-3">
-                                        <div className="col-span-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                                        <div className="col-span-1 md:col-span-4">
                                             <p className="text-[8px] font-black uppercase text-slate-400 mb-1 ml-1">Quantity</p>
                                             <input 
                                                 type="number" 
@@ -569,7 +574,7 @@ const Sales = () => {
                                             />
                                         </div>
                                         {currentItem.productId && currentItem.unit && products.find(p => p._id === currentItem.productId)?.unit !== currentItem.unit && (
-                                            <div className="col-span-8 animate-in slide-in-from-left-2 duration-300">
+                                            <div className="col-span-1 md:col-span-8 animate-in slide-in-from-left-2 duration-300">
                                                 <p className="text-[8px] font-black uppercase text-slate-400 mb-1 ml-1">
                                                     Conversion: How many {currentItem.unit} in 1 {products.find(p => p._id === currentItem.productId)?.unit}?
                                                 </p>
@@ -587,20 +592,6 @@ const Sales = () => {
                                                         </span>
                                                     </div>
                                                 </div>
-                                                {Number(currentItem.conversionFactor) > 0 && products.find(p => p._id === currentItem.productId) && (
-                                                    <div className="mt-2 flex items-center gap-2">
-                                                        <div className="px-2 py-1 bg-amber-50 rounded-lg border border-amber-100">
-                                                            <p className="text-[9px] font-black text-amber-600 uppercase">
-                                                                Cost: ₹{(products.find(p => p._id === currentItem.productId)!.purchasePrice / Number(currentItem.conversionFactor)).toFixed(2)} / {currentItem.unit}
-                                                            </p>
-                                                        </div>
-                                                        <div className="px-2 py-1 bg-blue-50 rounded-lg border border-blue-100">
-                                                            <p className="text-[9px] font-black text-blue-600 uppercase">
-                                                                MRP: ₹{(products.find(p => p._id === currentItem.productId)!.mrp / Number(currentItem.conversionFactor)).toFixed(2)} / {currentItem.unit}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -677,8 +668,21 @@ const Sales = () => {
                                 </div>
                             </div>
 
-                            <button type="submit" className="btn-primary w-full py-5 text-lg shadow-xl shadow-primary-100 flex items-center justify-center gap-2 font-bold uppercase tracking-widest text-sm">
-                                <Receipt size={20} /> Generate Invoice
+                            <button 
+                                onClick={handleSubmit} 
+                                disabled={isSubmitting}
+                                className="w-full py-5 bg-primary-600 text-white rounded-[2rem] font-black uppercase tracking-widest text-sm shadow-xl shadow-primary-200 hover:bg-primary-700 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                            >
+                                {isSubmitting ? (
+                                    <>
+                                        <Loader2 size={24} className="animate-spin" />
+                                        Processing Sale...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Receipt size={20} /> Complete Sale (₹{grandTotal.toLocaleString()})
+                                    </>
+                                )}
                             </button>
                         </form>
                     </div>

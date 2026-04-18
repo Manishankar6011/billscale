@@ -136,7 +136,7 @@ const Salary = () => {
             {/* Salary Modal */}
             {isModalOpen && selectedStaff && (
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl p-10 animate-in fade-in zoom-in duration-200 overflow-hidden relative">
+                    <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl p-10 animate-in fade-in zoom-in duration-200 overflow-y-auto max-h-[90vh] relative custom-scrollbar">
                         <div className="absolute top-0 right-0 w-64 h-64 bg-primary-50 rounded-full blur-3xl -z-10 -mr-32 -mt-32"></div>
                         
                         <div className="flex justify-between items-center mb-10">

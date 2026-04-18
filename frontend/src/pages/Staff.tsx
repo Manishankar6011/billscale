@@ -235,7 +235,7 @@ const StaffPage = () => {
             {/* Staff Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-8 animate-in fade-in zoom-in duration-200">
+                    <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-8 animate-in fade-in zoom-in duration-200 overflow-y-auto max-h-[90vh] custom-scrollbar">
                         <div className="flex justify-between items-center mb-8">
                             <h2 className="text-2xl font-black text-slate-800 tracking-tighter">
                                 {editingId ? 'Edit Staff Member' : 'Add Staff Member'}
