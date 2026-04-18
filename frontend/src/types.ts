@@ -25,6 +25,17 @@ export interface Product {
     minStockAlert: number;
     pricePerUnit: number;
     purchasePrice: number;
+    mrp: number;
+    barcode?: string;
+    batchNumber?: string;
+}
+
+export interface Customer {
+    _id?: string;
+    name: string;
+    phone: string;
+    email?: string;
+    address?: string;
 }
 
 export interface Staff {
@@ -40,16 +51,23 @@ export interface Staff {
 export interface Sale {
     _id?: string;
     customerName: string;
+    customerPhone?: string;
+    customerAddress?: string;
     items: {
         productId: Product;
         quantity: number;
+        unit: string;
+        conversionFactor: number;
         sellingPrice: number;
         purchasePriceAtTime: number;
+        mrpAtTime: number;
     }[];
     totalAmount: number;
     totalProfit: number;
     paymentMode: 'cash' | 'credit';
     status: 'paid' | 'pending';
+    additionalItems?: { name: string, price: number }[];
+    invoiceNumber: string;
     date: string;
 }
 

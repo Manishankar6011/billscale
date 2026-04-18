@@ -3,6 +3,7 @@ import { AuthRequest } from '../middleware/auth';
 import Sale from '../models/Sale';
 import Purchase from '../models/Purchase';
 import Product from '../models/Product';
+import Customer from '../models/Customer';
 import mongoose from 'mongoose';
 
 // @desc    Get all sales
@@ -19,7 +20,17 @@ export const getSales = async (req: AuthRequest, res: Response) => {
 // @desc    Process a new sale (decreases stock)
 // @route   POST /api/transactions/sales
 export const processSale = async (req: AuthRequest, res: Response) => {
-    const { customerName, items, paymentMode, status, date } = req.body;
+    const { 
+        customerName, 
+        customerPhone, 
+        customerAddress,
+        items, 
+        additionalItems, 
+        paymentMode, 
+        status, 
+        date 
+    } = req.body;
+    
     const session = await mongoose.startSession();
     session.startTransaction();
 
@@ -28,13 +39,38 @@ export const processSale = async (req: AuthRequest, res: Response) => {
         let totalProfit = 0;
         const processedItems = [];
 
+        // 1. Handle Customer Auto-Creation/Linking
+        if (customerPhone) {
+            const existingCustomer = await Customer.findOne({ 
+                tenantId: req.tenantId, 
+                phone: customerPhone 
+            }).session(session);
+
+            if (!existingCustomer) {
+                const newCustomer = new Customer({
+                    tenantId: req.tenantId,
+                    name: customerName,
+                    phone: customerPhone,
+                    address: customerAddress
+                });
+                await newCustomer.save({ session });
+            }
+        }
+
         for (const item of items) {
+            if (Number(item.quantity) <= 0) throw new Error(`Invalid quantity for item`);
+            if (Number(item.sellingPrice) < 0) throw new Error(`Invalid selling price for item`);
+
             const product = await Product.findOne({ _id: item.productId, tenantId: req.tenantId }).session(session);
             if (!product) throw new Error(`Product ${item.productId} not found`);
-            if (product.stock < item.quantity) throw new Error(`Insufficient stock for ${product.name}`);
+            
+            const conversionFactor = Number(item.conversionFactor) || 1;
+            const baseQtyToDeduct = Number(item.quantity) / conversionFactor;
 
-            const itemTotal = item.quantity * item.sellingPrice;
-            const itemProfit = (item.sellingPrice - product.purchasePrice) * item.quantity;
+            if (product.stock < baseQtyToDeduct) throw new Error(`Insufficient stock for ${product.name}`);
+
+            const itemTotal = Number(item.quantity) * Number(item.sellingPrice);
+            const itemProfit = itemTotal - (product.purchasePrice * baseQtyToDeduct);
 
             totalAmount += itemTotal;
             totalProfit += itemProfit;
@@ -42,19 +78,36 @@ export const processSale = async (req: AuthRequest, res: Response) => {
             processedItems.push({
                 productId: item.productId,
                 quantity: Number(item.quantity),
+                unit: item.unit || product.unit,
+                conversionFactor: conversionFactor,
                 sellingPrice: Number(item.sellingPrice),
-                purchasePriceAtTime: product.purchasePrice
+                purchasePriceAtTime: product.purchasePrice,
+                mrpAtTime: product.mrp || 0
             });
 
             // Update Product Stock
-            product.stock -= Number(item.quantity);
+            product.stock -= baseQtyToDeduct;
             await product.save({ session });
         }
+
+        // Add additional items to totalAmount
+        if (additionalItems && Array.isArray(additionalItems)) {
+            for (const item of additionalItems) {
+                totalAmount += Number(item.price);
+                totalProfit += Number(item.price);
+            }
+        }
+
+        const invoiceNumber = `INV-${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 90 + 10)}`;
 
         const sale = new Sale({
             tenantId: req.tenantId,
             customerName,
+            customerPhone,
+            customerAddress,
+            invoiceNumber,
             items: processedItems,
+            additionalItems: additionalItems || [],
             totalAmount,
             totalProfit,
             paymentMode,
@@ -93,6 +146,9 @@ export const processPurchase = async (req: AuthRequest, res: Response) => {
     session.startTransaction();
 
     try {
+        if (Number(quantity) <= 0) throw new Error('Quantity must be greater than 0');
+        if (Number(purchasePrice) < 0) throw new Error('Purchase price cannot be negative');
+
         const totalAmount = quantity * purchasePrice;
 
         const purchase = new Purchase({
@@ -124,6 +180,7 @@ export const processPurchase = async (req: AuthRequest, res: Response) => {
         session.endSession();
     }
 };
+
 // @desc    Update a purchase (syncs stock)
 // @route   PUT /api/transactions/purchases/:id
 export const updatePurchase = async (req: AuthRequest, res: Response) => {

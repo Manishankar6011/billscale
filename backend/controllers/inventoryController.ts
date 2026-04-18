@@ -16,17 +16,10 @@ export const getProducts = async (req: AuthRequest, res: Response) => {
 // @desc    Add a new product
 // @route   POST /api/inventory
 export const addProduct = async (req: AuthRequest, res: Response) => {
-    const { name, unit, minStockAlert, pricePerUnit, purchasePrice, stock } = req.body;
-
     try {
         const product = new Product({
-            tenantId: req.tenantId,
-            name,
-            unit,
-            minStockAlert,
-            pricePerUnit,
-            purchasePrice,
-            stock
+            ...req.body,
+            tenantId: req.tenantId
         });
 
         const savedProduct = await product.save();
@@ -36,13 +29,11 @@ export const addProduct = async (req: AuthRequest, res: Response) => {
     }
 };
 
-// @desc    Update a product
-// @route   PUT /api/inventory/:id
 export const updateProduct = async (req: AuthRequest, res: Response) => {
     try {
         const product = await Product.findOneAndUpdate(
             { _id: req.params.id, tenantId: req.tenantId },
-            req.body,
+            { ...req.body },
             { new: true }
         );
 

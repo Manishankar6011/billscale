@@ -32,6 +32,18 @@ export interface IProduct extends Document {
   minStockAlert: number;
   pricePerUnit: number;
   purchasePrice: number;
+  mrp: number;
+  barcode?: string;
+  batchNumber?: string;
+  createdAt: Date;
+}
+
+export interface ICustomer extends Document {
+  tenantId: Types.ObjectId;
+  name: string;
+  phone: string;
+  email?: string;
+  address?: string;
   createdAt: Date;
 }
 
@@ -53,11 +65,16 @@ export interface IPurchase extends Document {
 export interface ISale extends Document {
   tenantId: Types.ObjectId;
   customerName: string;
+  customerPhone?: string;
+  customerAddress?: string;
   items: {
     productId: Types.ObjectId;
     quantity: number;
+    unit: string;
+    conversionFactor: number;
     sellingPrice: number;
     purchasePriceAtTime: number; // For historic profit tracking
+    mrpAtTime: number;
   }[];
   totalAmount: number;
   totalProfit: number;
@@ -65,6 +82,8 @@ export interface ISale extends Document {
   discount?: number;
   paymentMode: "cash" | "credit" | "upi" | "card" | "bank_transfer";
   status: "paid" | "pending";
+  additionalItems?: { name: string, price: number }[];
+  invoiceNumber: string;
   date: Date;
   createdAt: Date;
 }

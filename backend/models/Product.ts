@@ -38,6 +38,19 @@ const productSchema: Schema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    mrp: {
+        type: Number,
+        default: 0
+    },
+    barcode: {
+        type: String,
+        trim: true
+    },
+    batchNumber: {
+        type: String,
+        trim: true,
+        default: 'Default'
+    },
     createdAt: {
         type: Date,
         default: Date.now

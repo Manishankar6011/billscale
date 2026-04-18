@@ -1,11 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Search, Box, AlertTriangle, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Search, Box, AlertTriangle, Edit2, Trash2, Barcode, Scan } from 'lucide-react';
+import BarcodeScanner from '../components/BarcodeScanner';
 import axios from 'axios';
 import type { Product } from '../types';
 import { useAuth } from '../context/AuthContext';
 import Skeleton from '../components/Skeleton';
 import { useToast } from '../context/ToastContext';
+
+const UNIT_GROUPS = {
+    weight: ['kg', 'gm', 'ton', 'bag', 'bundle', 'pack'],
+    volume: ['litre', 'ml'],
+    count: ['nos', 'piece', 'box', 'dozen', 'unit'],
+    length: ['meter', 'ft', 'inch'],
+    area: ['sqft', 'sqmtr']
+};
+
+const ALL_UNITS = Object.values(UNIT_GROUPS).flat();
 
 const Inventory = () => {
     const { t } = useTranslation();
@@ -16,14 +27,28 @@ const Inventory = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<{
+        name: string;
+        unit: string;
+        stock: string;
+        minStockAlert: string;
+        pricePerUnit: string;
+        purchasePrice: string;
+        mrp: string;
+        barcode: string;
+        batchNumber: string;
+    }>({
         name: '',
         unit: 'bag',
         stock: '0',
         minStockAlert: '10',
         pricePerUnit: '',
-        purchasePrice: ''
+        purchasePrice: '',
+        mrp: '',
+        barcode: '',
+        batchNumber: ''
     });
+    const [isScannerOpen, setIsScannerOpen] = useState(false);
 
     useEffect(() => {
         fetchProducts();
@@ -50,7 +75,10 @@ const Inventory = () => {
             stock: product.stock.toString(),
             minStockAlert: product.minStockAlert.toString(),
             pricePerUnit: product.pricePerUnit.toString(),
-            purchasePrice: product.purchasePrice.toString()
+            purchasePrice: product.purchasePrice.toString(),
+            mrp: (product.mrp || 0).toString(),
+            barcode: product.barcode || '',
+            batchNumber: product.batchNumber || 'Default'
         });
         setIsModalOpen(true);
     };
@@ -76,7 +104,10 @@ const Inventory = () => {
                 stock: Number(formData.stock),
                 minStockAlert: Number(formData.minStockAlert),
                 pricePerUnit: Number(formData.pricePerUnit),
-                purchasePrice: Number(formData.purchasePrice)
+                purchasePrice: Number(formData.purchasePrice),
+                mrp: Number(formData.mrp),
+                barcode: formData.barcode,
+                batchNumber: formData.batchNumber
             };
 
             if (editingId) {
@@ -94,15 +125,22 @@ const Inventory = () => {
             setIsModalOpen(false);
             setEditingId(null);
             fetchProducts();
-            setFormData({ name: '', unit: 'bag', stock: '0', minStockAlert: '10', pricePerUnit: '', purchasePrice: '' });
+            setFormData({ name: '', unit: 'bag', stock: '0', minStockAlert: '10', pricePerUnit: '', purchasePrice: '', mrp: '', barcode: '', batchNumber: '' });
         } catch (err: any) {
             showToast(err.response?.data?.message || 'Error saving product', 'error');
         }
     };
 
     const filteredProducts = products.filter(p => 
-        p.name.toLowerCase().includes(searchTerm.toLowerCase())
+        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.barcode && p.barcode.includes(searchTerm))
     );
+
+    const handleScan = React.useCallback((code: string) => {
+        setFormData(prev => ({ ...prev, barcode: code }));
+        setIsScannerOpen(false);
+        showToast(`Barcode ${code} scanned!`, 'success');
+    }, [showToast]);
 
     if (loading) return <Skeleton count={5} />;
 
@@ -118,7 +156,7 @@ const Inventory = () => {
                     className="btn-primary flex items-center gap-2"
                 >
                     <Plus size={20} />
-                    {t('inventory.add_product')}
+                   {t('inventory.add_product')}
                 </button>
             </div>
 
@@ -159,20 +197,41 @@ const Inventory = () => {
                             </div>
                             
                             <h3 className="text-lg font-bold text-slate-800 mb-1">{product.name}</h3>
-                            <p className="text-sm text-slate-500 uppercase font-black tracking-widest">{product.unit}</p>
+                            <div className="flex items-center gap-2 mb-2">
+                                <span className="text-sm text-slate-500 uppercase font-black tracking-widest">{product.unit}</span>
+                                {product.barcode && (
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-1 px-2 py-0.5 bg-slate-100 rounded-md">
+                                            <Barcode size={12} className="text-slate-400" />
+                                            <span className="text-[10px] font-bold text-slate-500">{product.barcode}</span>
+                                        </div>
+                                        <div className="px-2 py-0.5 bg-primary-50 rounded-md">
+                                            <span className="text-[10px] font-black uppercase text-primary-600 tracking-tighter">Batch: {product.batchNumber || 'Default'}</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                             
                             <div className="mt-6 flex items-end justify-between">
                                 <div>
                                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Stock</p>
                                     <p className={`text-2xl font-black ${isLowStock ? 'text-rose-600' : 'text-slate-800'}`}>
-                                        {product.stock} <span className="text-sm font-medium text-slate-400">{product.unit}</span>
+                                        {Number(product.stock).toFixed(2)} <span className="text-sm font-medium text-slate-400">{product.unit}</span>
                                     </p>
                                 </div>
-                                <div className="text-right">
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Pricing (Cost/Sell)</p>
-                                    <p className="text-sm font-black text-slate-700">
-                                        ₹{product.purchasePrice} / ₹{product.pricePerUnit}
-                                    </p>
+                                <div className="text-right space-y-1">
+                                    <div className="flex items-center justify-end gap-2">
+                                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">MRP</span>
+                                        <span className="text-sm font-black text-slate-400 italic font-mono">₹{product.mrp || 0}</span>
+                                    </div>
+                                    <div className="flex items-center justify-end gap-2">
+                                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Sell</span>
+                                        <span className="text-sm font-black text-primary-600">₹{product.pricePerUnit}</span>
+                                    </div>
+                                    <div className="flex items-center justify-end gap-2">
+                                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Cost</span>
+                                        <span className="text-sm font-bold text-slate-500 font-mono">₹{product.purchasePrice}</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -195,14 +254,14 @@ const Inventory = () => {
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
                     <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-8 animate-in fade-in zoom-in duration-200">
                         <div className="flex justify-between items-center mb-8">
-                            <h2 className="text-2xl font-black text-slate-800 tracking-tighter">
-                                {editingId ? 'Edit Product' : 'Add New Product'}
-                            </h2>
+                            {/* <h2 className="text-2xl font-black text-slate-800 tracking-tighter">
+                                {editingId ? 'Edit Product' : 'Add New yyjtyfuuyg'}
+                            </h2> */}
                             <button 
                                 onClick={() => {
                                     setIsModalOpen(false);
                                     setEditingId(null);
-                                    setFormData({ name: '', unit: 'bag', stock: '0', minStockAlert: '10', pricePerUnit: '', purchasePrice: '' });
+                                    setFormData({ name: '', unit: 'bag', stock: '0', minStockAlert: '10', pricePerUnit: '', purchasePrice: '', mrp: '', barcode: '', batchNumber: '' });
                                 }} 
                                 className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 transition-all font-bold"
                             >
@@ -229,18 +288,31 @@ const Inventory = () => {
                                     <select 
                                         required
                                         className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold"
-                                        value={formData.unit}
-                                        onChange={(e) => setFormData({...formData, unit: e.target.value})}
+                                        value={ALL_UNITS.includes(formData.unit) ? formData.unit : 'custom'}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            if (val === 'custom') {
+                                                setFormData({...formData, unit: ''});
+                                            } else {
+                                                setFormData({...formData, unit: val});
+                                            }
+                                        }}
                                     >
-                                        <option value="nos">Nos (Number)</option>
-                                        <option value="box">Box</option>
-                                        <option value="kg">Kg</option>
-                                        <option value="litre">Litre / ml</option>
-                                        <option value="piece">Piece</option>
-                                        <option value="bag">Bag</option>
-                                        <option value="ton">Ton</option>
-                                        <option value="ft">Ft / Inch</option>
+                                        {ALL_UNITS.map(u => (
+                                            <option key={u} value={u}>{u.toUpperCase()}</option>
+                                        ))}
+                                        <option value="custom">+ Add Custom Unit</option>
                                     </select>
+                                    {!ALL_UNITS.includes(formData.unit) && (
+                                        <input 
+                                            type="text" 
+                                            className="mt-2 w-full bg-white border-2 border-primary-100 rounded-2xl p-3 text-sm font-bold animate-in fade-in slide-in-from-top-1 duration-200"
+                                            placeholder="Enter unit name (e.g. Bucket)"
+                                            value={formData.unit}
+                                            onChange={(e) => setFormData({...formData, unit: e.target.value})}
+                                            autoFocus
+                                        />
+                                    )}
                                 </div>
                                 <div>
                                     <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Initial Stock</label>
@@ -278,6 +350,17 @@ const Inventory = () => {
                                         onChange={(e) => setFormData({...formData, purchasePrice: e.target.value})}
                                     />
                                 </div>
+                                <div className="col-span-2">
+                                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">MRP (Maximum Retail Price)</label>
+                                    <input 
+                                        required
+                                        type="number" 
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold"
+                                        placeholder="0"
+                                        value={formData.mrp}
+                                        onChange={(e) => setFormData({...formData, mrp: e.target.value})}
+                                    />
+                                </div>
                                 <div>
                                     <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Low Stock Alert at</label>
                                     <input 
@@ -289,6 +372,35 @@ const Inventory = () => {
                                         onChange={(e) => setFormData({...formData, minStockAlert: e.target.value})}
                                     />
                                 </div>
+                                <div className="col-span-1">
+                                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Batch # / Name</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold"
+                                        placeholder="e.g. Batch 1"
+                                        value={formData.batchNumber}
+                                        onChange={(e) => setFormData({...formData, batchNumber: e.target.value})}
+                                    />
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Barcode (Optional)</label>
+                                    <div className="relative">
+                                        <input 
+                                            type="text" 
+                                            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 pr-14 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold"
+                                            placeholder="Scan or enter barcode"
+                                            value={formData.barcode}
+                                            onChange={(e) => setFormData({...formData, barcode: e.target.value})}
+                                        />
+                                        <button 
+                                            type="button"
+                                            onClick={() => setIsScannerOpen(true)}
+                                            className="absolute right-2 top-2 bottom-2 px-3 bg-white border border-slate-200 rounded-xl text-primary-600 hover:bg-primary-50 transition-all flex items-center justify-center"
+                                        >
+                                            <Scan size={20} />
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
 
                             <button type="submit" className="btn-primary w-full py-5 text-lg shadow-xl shadow-primary-100 flex items-center justify-center gap-2 font-bold">
@@ -297,6 +409,13 @@ const Inventory = () => {
                         </form>
                     </div>
                 </div>
+            )}
+
+            {isScannerOpen && (
+                <BarcodeScanner 
+                    onScan={handleScan}
+                    onClose={() => setIsScannerOpen(false)}
+                />
             )}
         </div>
     );

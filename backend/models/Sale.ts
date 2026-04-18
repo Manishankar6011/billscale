@@ -12,6 +12,14 @@ const saleSchema: Schema = new mongoose.Schema({
         required: true,
         trim: true
     },
+    customerPhone: {
+        type: String,
+        trim: true
+    },
+    customerAddress: {
+        type: String,
+        trim: true
+    },
     items: [{
         productId: {
             type: mongoose.Schema.Types.ObjectId,
@@ -22,11 +30,23 @@ const saleSchema: Schema = new mongoose.Schema({
             type: Number,
             required: true
         },
+        unit: {
+            type: String,
+            required: true
+        },
+        conversionFactor: {
+            type: Number,
+            default: 1
+        },
         sellingPrice: {
             type: Number,
             required: true
         },
         purchasePriceAtTime: {
+            type: Number,
+            required: true
+        },
+        mrpAtTime: {
             type: Number,
             required: true
         }
@@ -57,6 +77,13 @@ const saleSchema: Schema = new mongoose.Schema({
         enum: ['paid', 'pending'],
         default: 'paid'
     },
+    additionalItems: [{
+        name: { type: String, required: true },
+        price: { type: Number, required: true }
+    }],
+    invoiceNumber: {
+        type: String,
+    },
     date: {
         type: Date,
         default: Date.now
@@ -66,5 +93,9 @@ const saleSchema: Schema = new mongoose.Schema({
         default: Date.now
     }
 });
+
+// Indices for performance and uniqueness
+saleSchema.index({ tenantId: 1, invoiceNumber: 1 }, { unique: true });
+saleSchema.index({ tenantId: 1, date: -1 });
 
 export default mongoose.model<ISale>('Sale', saleSchema);

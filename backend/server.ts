@@ -24,6 +24,7 @@ import attendanceRoutes from './routes/attendanceRoutes';
 import staffRoutes from './routes/staffRoutes';
 import dashboardRoutes from './routes/dashboardRoutes';
 import subscriptionRoutes from './routes/subscriptionRoutes';
+import customerRoutes from './routes/customerRoutes';
 
 // Use API Routes
 app.use('/api/auth', authRoutes);
@@ -33,6 +34,7 @@ app.use('/api/attendance', attendanceRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/subscription', subscriptionRoutes);
+app.use('/api/customers', customerRoutes);
 
 // Keep-Alive & Health Check
 app.get('/api/health', (req: Request, res: Response) => {

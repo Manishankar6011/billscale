@@ -48,6 +48,17 @@ export const generateInvoice = (sale: any, businessName: string = 'BuildMate ERP
             tableRows.push(itemData);
         });
 
+        if (sale.additionalItems && sale.additionalItems.length > 0) {
+            sale.additionalItems.forEach((item: any) => {
+                tableRows.push([
+                    item.name,
+                    "1 Unit",
+                    `INR ${(item.price || 0).toLocaleString()}`,
+                    `INR ${(item.price || 0).toLocaleString()}`
+                ]);
+            });
+        }
+
         autoTable(doc, {
             head: [tableColumn],
             body: tableRows,
