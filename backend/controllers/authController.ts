@@ -143,13 +143,15 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
             .update(resetToken)
             .digest('hex');
 
-        // Set expire (1 hour)
-        user.resetPasswordExpire = new Date(Date.now() + 3600000);
+        // Set expire (10 minutes)
+        user.resetPasswordExpire = new Date(Date.now() + 600000);
 
         await user.save();
 
-        // Create reset URL
-        const resetUrl = `${req.protocol}://${req.get('host')}/reset-password/${resetToken}`;
+        // Create reset URL (Point to Frontend)
+        const host = req.get('host') || 'localhost:5000';
+        const frontendUrl = process.env.FRONTEND_URL || `${req.protocol}://${host.replace(':5000', ':5173')}`;
+        const resetUrl = `${frontendUrl}/reset-password/${resetToken}`;
 
         const message = `You are receiving this email because you (or someone else) has requested the reset of a password. Please make a put request to: \n\n ${resetUrl}`;
 
