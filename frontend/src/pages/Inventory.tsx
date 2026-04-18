@@ -53,8 +53,10 @@ const Inventory = () => {
     });
     const [isScannerOpen, setIsScannerOpen] = useState(false);
     const [showLeaveWarning, setShowLeaveWarning] = useState(false);
+    const [isContinuousMode, setIsContinuousMode] = useState(false);
     const [printLabelData, setPrintLabelData] = useState<Product | null>(null);
     const barcodePreviewRef = useRef<SVGSVGElement>(null);
+    const nameInputRef = useRef<HTMLInputElement>(null);
     
     const isFormDirty = !!(formData.name || formData.barcode || formData.pricePerUnit);
 
@@ -149,11 +151,16 @@ const Inventory = () => {
                 });
                 showToast('Product added successfully!', 'success');
             }
-            
-            setIsModalOpen(false);
-            setEditingId(null);
+
+            if (isContinuousMode && !editingId) {
+                setFormData({ name: '', unit: 'bag', stock: '0', minStockAlert: '10', pricePerUnit: '', purchasePrice: '', mrp: '', barcode: '', batchNumber: '' });
+                setTimeout(() => nameInputRef.current?.focus(), 100);
+            } else {
+                setIsModalOpen(false);
+                setEditingId(null);
+                setFormData({ name: '', unit: 'bag', stock: '0', minStockAlert: '10', pricePerUnit: '', purchasePrice: '', mrp: '', barcode: '', batchNumber: '' });
+            }
             fetchProducts();
-            setFormData({ name: '', unit: 'bag', stock: '0', minStockAlert: '10', pricePerUnit: '', purchasePrice: '', mrp: '', barcode: '', batchNumber: '' });
         } catch (err: any) {
             showToast(err.response?.data?.message || 'Error saving product', 'error');
         } finally {
@@ -322,6 +329,7 @@ const Inventory = () => {
                                 <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Product Name</label>
                                 <input 
                                     required
+                                    ref={nameInputRef}
                                     type="text" 
                                     className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold placeholder:font-medium"
                                     placeholder="e.g. Item Name, Stock Item"
@@ -492,19 +500,35 @@ const Inventory = () => {
                                 </div>
                             </div>
 
+                            {/* Continuous Mode Toggle */}
+                            {!editingId && (
+                                <div className="flex items-center justify-between p-4 bg-primary-50 rounded-2xl border border-primary-100 mt-2 mb-4">
+                                    <div className="flex items-center gap-3">
+                                        <div 
+                                            onClick={() => setIsContinuousMode(!isContinuousMode)}
+                                            className={`w-12 h-6 rounded-full transition-all cursor-pointer relative ${isContinuousMode ? 'bg-primary-600' : 'bg-slate-300'}`}
+                                        >
+                                            <div className={`absolute top-1 bottom-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${isContinuousMode ? 'right-1' : 'left-1'}`}></div>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Keep open to add another</p>
+                                            <p className="text-[8px] text-slate-400 font-medium">Auto-focuses for rapid entry</p>
+                                        </div>
+                                    </div>
+                                    {isContinuousMode && <div className="text-[9px] font-black text-primary-600 uppercase animate-bounce">Fast Mode ON</div>}
+                                </div>
+                            )}
+
                             <button 
                                 type="submit" 
                                 disabled={isSubmitting}
-                                className="btn-primary w-full py-5 text-lg shadow-xl shadow-primary-100 flex items-center justify-center gap-2 font-bold disabled:opacity-70 disabled:cursor-not-allowed"
+                                className="w-full py-5 bg-primary-600 text-white rounded-[2rem] font-black uppercase tracking-widest text-xs shadow-xl shadow-primary-200 hover:bg-primary-700 transition-all disabled:bg-slate-300 flex items-center justify-center gap-2 active:scale-[0.98]"
                             >
                                 {isSubmitting ? (
-                                    <>
-                                        <Loader2 size={24} className="animate-spin" />
-                                        Please wait...
-                                    </>
+                                    <Loader2 size={24} className="animate-spin" />
                                 ) : (
                                     <>
-                                        <Plus size={20} /> {editingId ? 'Update Product' : 'Create Product'}
+                                        {editingId ? 'Update Product' : (isContinuousMode ? 'Save & Add Next Product' : 'Create Product')}
                                     </>
                                 )}
                             </button>
