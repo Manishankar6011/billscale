@@ -5,6 +5,7 @@ import Tenant from '../models/Tenant';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import sendEmail from '../utils/sendEmail';
+import { uploadImage } from '../utils/cloudinary';
 
 const generateToken = (id: string) => {
     return jwt.sign({ id }, process.env.JWT_SECRET as string, {
@@ -45,7 +46,10 @@ export const registerContractor = async (req: Request, res: Response, next: Next
                 role: user.role,
                 tenantId: user.tenantId,
                 companyName: tenant.companyName,
-                subscriptionStatus: tenant.subscriptionStatus,
+                subscriptionStatus: (tenant as any).subscriptionStatus,
+                planType: (tenant as any).planType,
+                subscriptionExpiryDate: tenant.subscriptionExpiryDate,
+                aiUsageCount: (tenant as any).aiUsageCount || 0,
                 token: generateToken(user._id.toString()),
             });
         }
@@ -72,7 +76,10 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
                 role: user.role,
                 tenantId: user.tenantId,
                 companyName: tenant?.companyName,
-                subscriptionStatus: tenant?.subscriptionStatus,
+                subscriptionStatus: (tenant as any)?.subscriptionStatus,
+                planType: (tenant as any)?.planType,
+                subscriptionExpiryDate: (tenant as any)?.subscriptionExpiryDate,
+                aiUsageCount: (tenant as any)?.aiUsageCount || 0,
                 token: generateToken(user._id.toString()),
             });
         } else {
@@ -115,8 +122,49 @@ export const updateProfile = async (req: AuthRequest, res: Response, next: NextF
                 if (phone) tenant.phone = phone;
                 if (billingEmail !== undefined) tenant.billingEmail = billingEmail;
                 if (billingAddress !== undefined) tenant.billingAddress = billingAddress;
-                if (logoUrl !== undefined) tenant.logoUrl = logoUrl;
-                if (signature !== undefined) tenant.signature = signature;
+                
+                // Handle Logo Update & Cleanup
+                if (logoUrl !== undefined && logoUrl !== tenant.logoUrl) {
+                    // Delete old logo if it exists on Cloudinary
+                    if (tenant.logoUrl) {
+                        try {
+                            const { deleteImageFromCloudinary } = require('../utils/cloudinary');
+                            await deleteImageFromCloudinary(tenant.logoUrl);
+                        } catch (err) {
+                            console.error('Failed to delete old logo:', err);
+                        }
+                    }
+
+                    // If it's Base64, upload it (Fallback/Direct)
+                    if (logoUrl.startsWith('data:image')) {
+                        const { uploadImage } = require('../utils/cloudinary');
+                        tenant.logoUrl = await uploadImage(logoUrl, `tenants/${tenant._id}/logos`);
+                    } else {
+                        tenant.logoUrl = logoUrl;
+                    }
+                }
+
+                // Handle Signature Update & Cleanup
+                if (signature !== undefined && signature !== tenant.signature) {
+                    // Delete old signature if it exists on Cloudinary
+                    if (tenant.signature) {
+                        try {
+                            const { deleteImageFromCloudinary } = require('../utils/cloudinary');
+                            await deleteImageFromCloudinary(tenant.signature);
+                        } catch (err) {
+                            console.error('Failed to delete old signature:', err);
+                        }
+                    }
+
+                    // If it's Base64, upload it
+                    if (signature.startsWith('data:image')) {
+                        const { uploadImage } = require('../utils/cloudinary');
+                        tenant.signature = await uploadImage(signature, `tenants/${tenant._id}/signatures`);
+                    } else {
+                        tenant.signature = signature;
+                    }
+                }
+
                 await tenant.save();
             }
         }

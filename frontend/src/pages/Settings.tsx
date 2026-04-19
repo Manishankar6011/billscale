@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 import { NavLink } from 'react-router-dom';
-import { User, Building2, Phone, MapPin, Save, ShieldCheck, Crown, ArrowRight, Upload, Image, Mail, Pen, X, AlertCircle } from 'lucide-react';
+import { User, Building2, Phone, MapPin, Save, ShieldCheck, Crown, ArrowRight, Upload, Image, Mail, Pen, X, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
@@ -12,6 +12,7 @@ const Settings = () => {
     const { showToast } = useToast();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [uploading, setUploading] = useState<'logo' | 'signature' | null>(null);
     const [formData, setFormData] = useState({
         name: '',
         companyName: '',
@@ -50,13 +51,39 @@ const Settings = () => {
         fetchProfile();
     }, []);
 
-    const handleFileToBase64 = (file: File, field: 'logoUrl' | 'signature') => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const base64 = e.target?.result as string;
-            setFormData(prev => ({ ...prev, [field]: base64 }));
-        };
-        reader.readAsDataURL(file);
+    const uploadToCloudinary = async (file: File, field: 'logoUrl' | 'signature') => {
+        const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+        const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+
+        if (!cloudName || !uploadPreset) {
+            showToast('Cloudinary is not configured on the frontend. Please add VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET to .env', 'error');
+            return;
+        }
+
+        setUploading(field === 'logoUrl' ? 'logo' : 'signature');
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', uploadPreset);
+
+        try {
+            const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            
+            if (data.secure_url) {
+                setFormData(prev => ({ ...prev, [field]: data.secure_url }));
+                showToast(`${field === 'logoUrl' ? 'Logo' : 'Signature'} uploaded to cloud`, 'success');
+            } else {
+                throw new Error(data.error?.message || 'Upload failed');
+            }
+        } catch (error: any) {
+            showToast(error.message || 'Upload failed', 'error');
+        } finally {
+            setUploading(null);
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -148,13 +175,22 @@ const Settings = () => {
                                         </div>
                                     )}
                                     <div>
-                                        <button type="button" onClick={() => logoInputRef.current?.click()} className="flex items-center gap-2 px-5 py-3 bg-primary-50 text-primary-600 rounded-2xl font-black uppercase tracking-widest text-xs border border-primary-200 hover:bg-primary-100 transition-all">
-                                            <Upload size={14} /> Upload Logo
+                                        <button 
+                                            type="button" 
+                                            onClick={() => logoInputRef.current?.click()} 
+                                            disabled={!!uploading}
+                                            className="flex items-center gap-2 px-5 py-3 bg-primary-50 text-primary-600 rounded-2xl font-black uppercase tracking-widest text-xs border border-primary-200 hover:bg-primary-100 transition-all disabled:opacity-50"
+                                        >
+                                            {uploading === 'logo' ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} 
+                                            {uploading === 'logo' ? 'Uploading...' : 'Upload Logo'}
                                         </button>
-                                        <p className="text-[10px] text-slate-400 mt-2 ml-1">PNG, JPG — Max 1MB. Shown on printed invoice.</p>
+                                        <p className="text-[10px] text-slate-400 mt-2 ml-1">Powered by Cloudinary. Instant URL generation.</p>
                                         <input ref={logoInputRef} type="file" className="hidden" accept="image/*" onChange={(e) => {
                                             const file = e.target.files?.[0];
-                                            if (file) { if (file.size > 1 * 1024 * 1024) { showToast('Logo must be under 1MB', 'error'); return; } handleFileToBase64(file, 'logoUrl'); }
+                                            if (file) { 
+                                                if (file.size > 5 * 1024 * 1024) { showToast('Image must be under 5MB', 'error'); return; } 
+                                                uploadToCloudinary(file, 'logoUrl'); 
+                                            }
                                         }} />
                                     </div>
                                 </div>
@@ -219,13 +255,22 @@ const Settings = () => {
                                         </div>
                                     )}
                                     <div>
-                                        <button type="button" onClick={() => sigInputRef.current?.click()} className="flex items-center gap-2 px-5 py-3 bg-emerald-50 text-emerald-600 rounded-2xl font-black uppercase tracking-widest text-xs border border-emerald-200 hover:bg-emerald-100 transition-all">
-                                            <Upload size={14} /> Upload Signature
+                                        <button 
+                                            type="button" 
+                                            onClick={() => sigInputRef.current?.click()} 
+                                            disabled={!!uploading}
+                                            className="flex items-center gap-2 px-5 py-3 bg-emerald-50 text-emerald-600 rounded-2xl font-black uppercase tracking-widest text-xs border border-emerald-200 hover:bg-emerald-100 transition-all disabled:opacity-50"
+                                        >
+                                            {uploading === 'signature' ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                                            {uploading === 'signature' ? 'Uploading...' : 'Upload Signature'}
                                         </button>
                                         <p className="text-[10px] text-slate-400 mt-2 ml-1">PNG with transparent background recommended.</p>
                                         <input ref={sigInputRef} type="file" className="hidden" accept="image/*" onChange={(e) => {
                                             const file = e.target.files?.[0];
-                                            if (file) { if (file.size > 500 * 1024) { showToast('Signature must be under 500KB', 'error'); return; } handleFileToBase64(file, 'signature'); }
+                                            if (file) { 
+                                                if (file.size > 2 * 1024 * 1024) { showToast('Signature must be under 2MB', 'error'); return; } 
+                                                uploadToCloudinary(file, 'signature'); 
+                                            }
                                         }} />
                                     </div>
                                 </div>

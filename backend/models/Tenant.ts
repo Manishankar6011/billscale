@@ -21,7 +21,7 @@ const tenantSchema: Schema = new mongoose.Schema({
     },
     planType: {
         type: String,
-        enum: ['free', 'business', 'enterprise'],
+        enum: ['free', 'basic', 'business', 'premium'],
         default: 'free'
     },
     subscriptionStatus: {
@@ -29,10 +29,17 @@ const tenantSchema: Schema = new mongoose.Schema({
         enum: ['active', 'inactive', 'trial'],
         default: 'trial'
     },
+    subscriptionExpiryDate: {
+        type: Date,
+        default: () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days trial
+    },
+    razorpayOrderId: String,
+    razorpayPaymentId: String,
     logoUrl: { type: String, default: '' },
     billingEmail: { type: String, default: '' },
     billingAddress: { type: String, default: '' },
     signature: { type: String, default: '' },
+    aiUsageCount: { type: Number, default: 0 },
     createdAt: {
         type: Date,
         default: Date.now

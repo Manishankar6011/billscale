@@ -21,9 +21,13 @@ import Customers from "./pages/Customers";
 import { useAuth } from "./context/AuthContext";
 import Landing from "./pages/Landing";
 import Layout from "./components/Layout";
-import { Pricing } from "./pages/Pricing";
+import Pricing from "./pages/Pricing";
+import Success from "./pages/Success";
 import { ResetPassword } from "./pages/ResetPassword";
 import PublicInvoice from "./pages/PublicInvoice";
+import Contact from "./pages/Contact";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
 
 const App: React.FC = () => {
   const { user } = useAuth();
@@ -53,6 +57,10 @@ const App: React.FC = () => {
           <Route path="settings" element={<Settings />} />
           <Route path="customers" element={<Customers />} />
           <Route path="pricing" element={<Pricing />} />
+          <Route path="success" element={<Success />} />
+          <Route path="contact" element={<Contact />} />
+          <Route path="privacy" element={<Privacy />} />
+          <Route path="terms" element={<Terms />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

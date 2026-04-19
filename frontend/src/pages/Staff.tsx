@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, Users, Search, Trash2, Edit2, Phone, Briefcase } from 'lucide-react';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 import type { Staff } from '../types';
 import { useAuth } from '../context/AuthContext';
 import Skeleton from '../components/Skeleton';
@@ -12,6 +13,7 @@ const StaffPage = () => {
     const { t } = useTranslation();
     const { user } = useAuth();
     const { showToast } = useToast();
+    const navigate = useNavigate();
     const [staffList, setStaffList] = useState<Staff[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -118,6 +120,26 @@ const StaffPage = () => {
                 </div>
                 <button 
                     onClick={() => {
+                        const currentCount = staffList.length;
+                        const plan = user?.planType || 'free';
+
+                        if (plan === 'free') {
+                            showToast('Staff Management is only available in Basic & Business plans.', 'error');
+                            navigate('/dashboard/pricing');
+                            return;
+                        }
+
+                        if (plan === 'basic' && currentCount >= 1) {
+                            showToast('Basic Plan is limited to 1 staff member. Upgrade to Business for more.', 'error');
+                            navigate('/dashboard/pricing');
+                            return;
+                        }
+
+                        if (plan === 'business' && currentCount >= 5) {
+                            showToast('Business Pro Plan is limited to 5 staff members.', 'error');
+                            return;
+                        }
+
                         setEditingId(null);
                         setFormData({
                             name: '',

@@ -1,10 +1,20 @@
 import express from 'express';
-const router = express.Router();
-import { getSubscriptionStatus, upgradePlan } from '../controllers/subscriptionController';
-import { protect, authorize } from '../middleware/auth';
+import { createOrder, verifyPayment, getSubscriptionStatus, incrementAIUsage } from '../controllers/subscriptionController';
+import { handleRazorpayWebhook } from '../controllers/subscriptionWebhook';
+import { protect } from '../middleware/auth';
+import tenant from '../middleware/tenant';
 
-// Only owners should be able to see/change subscription details
-router.get('/current', protect as any, getSubscriptionStatus as any);
-router.patch('/upgrade', protect as any, authorize('owner') as any, upgradePlan as any);
+const router = express.Router();
+
+router.use(protect);
+router.use(tenant);
+
+router.get('/status', getSubscriptionStatus);
+router.post('/order', createOrder);
+router.post('/verify', verifyPayment);
+router.post('/ai-usage', protect, incrementAIUsage);
+
+// Public Webhook (No Auth)
+router.post('/webhook', handleRazorpayWebhook);
 
 export default router;

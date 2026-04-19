@@ -3,15 +3,19 @@ import { Document, Types } from "mongoose";
 export interface ITenant extends Document {
   companyName: string;
   businessType?: string;
-  planType?: "free" | "business" | "enterprise";
+  planType: "free" | "basic" | "business" | "premium";
   address?: string;
   phone?: string;
   email: string;
   subscriptionStatus: "active" | "inactive" | "trial";
+  subscriptionExpiryDate: Date;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
   logoUrl?: string;
   billingEmail?: string;
   billingAddress?: string;
   signature?: string;
+  aiUsageCount: number;
   createdAt: Date;
 }
 

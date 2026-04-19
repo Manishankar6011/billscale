@@ -9,6 +9,7 @@ export interface AuthRequest extends Request {
     user?: IUser;
     tenantId?: string;
     subscriptionStatus?: string;
+    planType?: 'free' | 'basic' | 'business' | 'premium';
     companyName?: string;
 }
 
@@ -50,6 +51,14 @@ export const checkSubscription = async (req: AuthRequest, res: Response, next: N
             return res.status(404).json({ message: 'Tenant not found' });
         }
 
+        // Auto-expire check
+        if (tenant.subscriptionExpiryDate && new Date(tenant.subscriptionExpiryDate) < new Date()) {
+            if (tenant.subscriptionStatus !== 'inactive') {
+                tenant.subscriptionStatus = 'inactive';
+                await tenant.save();
+            }
+        }
+
         if (tenant.subscriptionStatus === 'inactive') {
             return res.status(403).json({ 
                 message: 'Subscription expired. Please renew your subscription to perform this action.',
@@ -58,6 +67,7 @@ export const checkSubscription = async (req: AuthRequest, res: Response, next: N
         }
 
         req.subscriptionStatus = tenant.subscriptionStatus;
+        req.planType = tenant.planType as any;
         req.companyName = tenant.companyName;
         next();
     } catch (error: any) {

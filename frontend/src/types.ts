@@ -8,6 +8,10 @@ export interface Tenant {
   billingEmail?: string;
   billingAddress?: string;
   signature?: string;
+  planType: 'free' | 'basic' | 'business' | 'premium';
+  subscriptionStatus: 'active' | 'inactive' | 'trial';
+  subscriptionExpiryDate?: string;
+  aiUsageCount: number;
 }
 
 export interface User {
@@ -18,8 +22,10 @@ export interface User {
   tenantId: Tenant | string | null;
   companyName: string;
   businessType: string;
-  planType?: 'free' | 'business' | 'enterprise';
+  planType?: 'free' | 'basic' | 'business' | 'premium';
   subscriptionStatus: 'active' | 'inactive' | 'trial';
+  subscriptionExpiryDate?: string;
+  aiUsageCount: number;
   token: string;
 }
 

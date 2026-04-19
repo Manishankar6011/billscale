@@ -613,33 +613,35 @@ const Sales = () => {
                             {/* Additional Charges Section (New) */}
                             <div className="p-5 bg-amber-50 rounded-[2rem] border border-amber-100 space-y-3">
                                 <p className="text-[10px] font-black uppercase tracking-widest text-amber-600">Additional Charges (Service/Delivery)</p>
-                                <div className="flex gap-2">
+                                <div className="flex flex-col sm:flex-row gap-2">
                                     <input 
                                         type="text" 
                                         placeholder="Charge Name (e.g. Labour)" 
-                                        className="flex-1 bg-white border border-amber-200 rounded-xl p-3 text-xs font-bold"
+                                        className="flex-1 bg-white border border-amber-200 rounded-xl p-3 text-xs font-bold min-w-0"
                                         value={newChargeName}
                                         onChange={e => setNewChargeName(e.target.value)}
                                     />
-                                    <input 
-                                        type="number" 
-                                        placeholder="Amount" 
-                                        className="w-24 bg-white border border-amber-200 rounded-xl p-3 text-xs font-bold"
-                                        value={newChargePrice}
-                                        onChange={e => setNewChargePrice(e.target.value)}
-                                    />
-                                    <button 
-                                        type="button" 
-                                        onClick={() => {
-                                            if (newChargeName && newChargePrice) {
-                                                setAdditionalItems(prev => [...prev, { name: newChargeName, price: newChargePrice }]);
-                                                setNewChargeName(''); setNewChargePrice('');
-                                            }
-                                        }}
-                                        className="p-3 bg-amber-500 text-white rounded-xl hover:bg-amber-600"
-                                    >
-                                        <Plus size={16} />
-                                    </button>
+                                    <div className="flex gap-2 sm:w-auto w-full">
+                                        <input 
+                                            type="number" 
+                                            placeholder="Amount" 
+                                            className="flex-1 sm:w-24 bg-white border border-amber-200 rounded-xl p-3 text-xs font-bold"
+                                            value={newChargePrice}
+                                            onChange={e => setNewChargePrice(e.target.value)}
+                                        />
+                                        <button 
+                                            type="button" 
+                                            onClick={() => {
+                                                if (newChargeName && newChargePrice) {
+                                                    setAdditionalItems(prev => [...prev, { name: newChargeName, price: newChargePrice }]);
+                                                    setNewChargeName(''); setNewChargePrice('');
+                                                }
+                                            }}
+                                            className="p-3 bg-amber-500 text-white rounded-xl hover:bg-amber-600 shrink-0"
+                                        >
+                                            <Plus size={16} />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -713,16 +715,16 @@ const Sales = () => {
                                 {/* Amount Received / Change Calculator */}
                                 <div className="space-y-2">
                                     <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Amount Received from Customer</label>
-                                    <div className="flex gap-2">
+                                    <div className="flex flex-col sm:flex-row gap-2">
                                         <input
                                             type="number"
                                             placeholder="e.g. 500"
-                                            className="flex-1 bg-white border border-slate-200 rounded-2xl p-3 text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all"
+                                            className="flex-1 bg-white border border-slate-200 rounded-2xl p-3 text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all min-w-0"
                                             value={amountReceived}
                                             onChange={e => setAmountReceived(e.target.value)}
                                         />
-                                        <button type="button" onClick={() => setAmountReceived(grandTotal.toString())} className="px-4 py-3 bg-primary-50 text-primary-600 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-primary-100 transition-all border border-primary-200">
-                                            Exact
+                                        <button type="button" onClick={() => setAmountReceived(grandTotal.toString())} className="px-4 py-3 bg-primary-50 text-primary-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-primary-100 transition-all border border-primary-200 whitespace-nowrap">
+                                            Exact Amount
                                         </button>
                                     </div>
                                     {changeAmount !== null && (

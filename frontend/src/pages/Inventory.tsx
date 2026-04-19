@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Search, Box, AlertTriangle, Edit2, Trash2, Barcode, Scan, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, Search, Box, AlertTriangle, Edit2, Trash2, Barcode, Scan, Loader2, RefreshCw, AlertCircle, FileSpreadsheet } from 'lucide-react';
 import BarcodeScanner from '../components/BarcodeScanner';
 import JsBarcode from 'jsbarcode';
 import axios from 'axios';
@@ -9,6 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import Skeleton from '../components/Skeleton';
 import { useToast } from '../context/ToastContext';
 import BarcodeLabel from '../components/BarcodeLabel';
+import BulkUploadModal from '../components/BulkUploadModal';
 
 const UNIT_GROUPS = {
     weight: ['kg', 'gm', 'ton', 'bag', 'bundle', 'pack'],
@@ -22,6 +24,7 @@ const ALL_UNITS = Object.values(UNIT_GROUPS).flat();
 
 const Inventory = () => {
     const { t } = useTranslation();
+    const navigate = useNavigate();
     const { user } = useAuth();
     const { showToast } = useToast();
     const [products, setProducts] = useState<Product[]>([]);
@@ -54,6 +57,7 @@ const Inventory = () => {
     const [isScannerOpen, setIsScannerOpen] = useState(false);
     const [showLeaveWarning, setShowLeaveWarning] = useState(false);
     const [isContinuousMode, setIsContinuousMode] = useState(false);
+    const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
     const [printLabelData, setPrintLabelData] = useState<Product | null>(null);
     const barcodePreviewRef = useRef<SVGSVGElement>(null);
     const nameInputRef = useRef<HTMLInputElement>(null);
@@ -206,13 +210,28 @@ const Inventory = () => {
                     <h1 className="text-2xl font-bold text-slate-800">{t('inventory.title')}</h1>
                     <p className="text-slate-500">{t('inventory.subtitle')}</p>
                 </div>
-                <button 
-                    onClick={() => setIsModalOpen(true)}
-                    className="btn-primary flex items-center gap-2"
-                >
-                    <Plus size={20} />
-                   {t('inventory.add_product')}
-                </button>
+                <div className="flex items-center gap-3">
+                    <button 
+                        onClick={() => {
+                            if (user?.planType === 'free' || user?.planType === 'basic') {
+                                showToast('Bulk Upload is only available in Business Pro plan.', 'error');
+                                navigate('/dashboard/pricing');
+                            } else {
+                                setIsBulkModalOpen(true);
+                            }
+                        }}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-600 hover:bg-primary-50 hover:border-primary-200 hover:text-primary-600 transition-all shadow-sm"
+                    >
+                        <FileSpreadsheet size={18} /> Bulk Upload
+                    </button>
+                    <button 
+                        onClick={() => setIsModalOpen(true)}
+                        className="btn-primary flex items-center gap-2"
+                    >
+                        <Plus size={20} />
+                       {t('inventory.add_product')}
+                    </button>
+                </div>
             </div>
 
             <div className="flex items-center relative bg-white rounded-2xl border border-slate-100 shadow-sm focus-within:ring-2 focus-within:ring-primary-500 transition-all">
@@ -284,6 +303,11 @@ const Inventory = () => {
                                     <p className={`text-2xl font-black ${isLowStock ? 'text-rose-600' : 'text-slate-800'}`}>
                                         {Number(product.stock).toFixed(2)} <span className="text-sm font-medium text-slate-400">{product.unit}</span>
                                     </p>
+                                    <div className="mt-1 flex items-center gap-1.5 grayscale opacity-70 group-hover:grayscale-0 group-hover:opacity-100 transition-all">
+                                        <div className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-md text-[9px] font-black uppercase tracking-tighter">
+                                            Value: ₹{(Number(product.stock) * Number(product.pricePerUnit)).toLocaleString()}
+                                        </div>
+                                    </div>
                                 </div>
                                 <div className="text-right space-y-1">
                                     <div className="flex items-center justify-end gap-2">
@@ -556,6 +580,13 @@ const Inventory = () => {
                         }
                     `}</style>
                 </div>
+            )}
+            {isBulkModalOpen && (
+                <BulkUploadModal 
+                    isOpen={isBulkModalOpen} 
+                    onClose={() => setIsBulkModalOpen(false)} 
+                    onSuccess={fetchProducts} 
+                />
             )}
         </div>
     );

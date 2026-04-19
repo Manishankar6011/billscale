@@ -38,6 +38,25 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     session.startTransaction();
 
     try {
+        // 0. Check Subscription Limits for Free Plan
+        const tenant = await Tenant.findById(req.tenantId);
+        if (tenant && (tenant as any).planType === 'free') {
+            const startOfMonth = new Date();
+            startOfMonth.setHours(0, 0, 0, 0);
+            startOfMonth.setDate(1);
+
+            const billsCount = await Sale.countDocuments({ 
+                tenantId: req.tenantId, 
+                date: { $gte: startOfMonth } 
+            });
+
+            if (billsCount >= 50) {
+                return res.status(403).json({ 
+                    message: 'Monthly bill limit (50) reached for Free Starter plan. Please upgrade to create more bills.' 
+                });
+            }
+        }
+
         let totalAmount = 0;
         let totalProfit = 0;
         const processedItems = [];

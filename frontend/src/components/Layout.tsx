@@ -1,5 +1,5 @@
 import React from "react";
-import { Outlet, NavLink } from "react-router-dom";
+import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   LayoutDashboard,
@@ -15,14 +15,20 @@ import {
   UserRound,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
-
-const cn = (...inputs: ClassValue[]) => twMerge(clsx(inputs));
+import { cn } from "../lib/utils";
+import AIAssistant from "./AIAssistant";
 
 const Layout = () => {
   const { logout, user } = useAuth();
   const { t } = useTranslation();
+  const navigate = useNavigate();
+
+  const isExpired = user?.subscriptionStatus === 'inactive';
+  const isTrial = user?.subscriptionStatus === 'trial';
+  const daysLeft = user?.subscriptionExpiryDate 
+    ? Math.ceil((new Date(user.subscriptionExpiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) 
+    : 0;
+  const isAboutToExpire = daysLeft >= 0 && daysLeft <= 7;
 
   const navItems = [
     { name: t("common.dashboard"), path: "/dashboard", icon: LayoutDashboard },
@@ -88,7 +94,14 @@ const Layout = () => {
                 {user.name}
               </p>
               <div className="flex items-center gap-1.5 overflow-hidden">
-                <p className="text-[10px] text-slate-400 truncate max-w-[80px]">{user.companyName}</p>
+                <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-black uppercase tracking-widest ${
+                  user.planType === 'business' ? 'bg-amber-50 text-amber-600 border border-amber-100' : 
+                  user.planType === 'basic' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 
+                  'bg-slate-100 text-slate-500'
+                }`}>
+                  {user.planType === 'business' ? 'Business Pro' : 
+                   user.planType === 'basic' ? 'Basic Plan' : 'Free Starter'}
+                </span>
                 <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-black uppercase tracking-widest ${
                   user.subscriptionStatus === 'active' ? 'bg-emerald-50 text-emerald-600' : 
                   user.subscriptionStatus === 'trial' ? 'bg-blue-50 text-blue-600' : 'bg-rose-50 text-rose-600'
@@ -130,7 +143,38 @@ const Layout = () => {
       </nav>
 
       {/* Main Content */}
-      <main className="flex-1 lg:ml-64 p-4 lg:p-10 pb-24 lg:pb-10">
+      <main className="flex-1 lg:ml-64 p-4 lg:p-10 pb-24 lg:pb-10 min-h-screen flex flex-col">
+        {/* Subscription Alert Banner */}
+        {(isExpired || (isAboutToExpire && !isExpired)) && (
+          <div className={cn(
+            "mb-6 p-4 rounded-2xl flex items-center justify-between gap-4 animate-in slide-in-from-top-4 duration-500",
+            isExpired ? "bg-rose-600 text-white shadow-lg shadow-rose-100" : "bg-amber-50 border border-amber-100 text-amber-800 shadow-sm"
+          )}>
+            <div className="flex items-center gap-3">
+              <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", isExpired ? "bg-white/20" : "bg-amber-100")}>
+                <CalendarCheck size={20} />
+              </div>
+              <div>
+                <p className="text-sm font-black uppercase tracking-widest">
+                  {isExpired ? "Subscription Expired" : `Subscription Expiring in ${daysLeft} Days`}
+                </p>
+                <p className="text-[10px] font-medium opacity-80">
+                  {isExpired ? "Access to premium features is currently blocked." : "Renew now to avoid service interruption."}
+                </p>
+              </div>
+            </div>
+            <button 
+              onClick={() => navigate('/dashboard/pricing')}
+              className={cn(
+                "px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95",
+                isExpired ? "bg-white text-rose-600 hover:bg-slate-50" : "bg-amber-600 text-white hover:bg-amber-700"
+              )}
+            >
+              Renew Now
+            </button>
+          </div>
+        )}
+
         {/* Mobile Header */}
         <header className="lg:hidden flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
@@ -145,6 +189,7 @@ const Layout = () => {
         </header>
 
         <Outlet />
+        <AIAssistant />
       </main>
     </div>
   );
