@@ -18,7 +18,10 @@ export const getProducts = async (req: AuthRequest, res: Response) => {
 // @route   POST /api/inventory
 export const addProduct = async (req: AuthRequest, res: Response) => {
     try {
-        const { name, purchasePrice, stock } = req.body;
+        const { name, purchasePrice, stock, batchNumber } = req.body;
+        const normalizedName = name.trim();
+        const numPurchasePrice = Number(purchasePrice);
+        const numStock = Number(stock);
 
         // 0. Check Product Limit for Free Plan
         const tenant = await Tenant.findById(req.tenantId);
@@ -31,40 +34,56 @@ export const addProduct = async (req: AuthRequest, res: Response) => {
             }
         }
         
-        // 1. Check if a product with exact name and purchasePrice exists for this tenant
-        const query = {
-            tenantId: req.tenantId,
-            name: { $regex: new RegExp(`^${name.trim()}$`, 'i') }, 
-            purchasePrice: Number(purchasePrice)
-        };
+        // 1. Precise Check: If user provided a specific batch, check that batch first
+        const escapedName = normalizedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (batchNumber && batchNumber !== 'Default' && batchNumber !== '') {
+            const batchMatch = await Product.findOne({
+                tenantId: req.tenantId,
+                name: { $regex: new RegExp(`^${escapedName}$`, 'i') },
+                batchNumber: batchNumber.trim()
+            });
 
-        const existingProduct = await Product.findOne(query);
-
-        if (existingProduct) {
-            // If exists, just increment the stock
-            existingProduct.stock += Number(stock);
-            
-            // Optionally sync other fields if they were provided in the request
-            if (req.body.pricePerUnit) existingProduct.pricePerUnit = Number(req.body.pricePerUnit);
-            if (req.body.mrp) existingProduct.mrp = Number(req.body.mrp);
-            if (req.body.barcode) existingProduct.barcode = req.body.barcode;
-            
-            const savedProduct = await existingProduct.save();
-            return res.status(200).json(savedProduct);
+            if (batchMatch) {
+                if (batchMatch.purchasePrice === numPurchasePrice) {
+                    // Match found! Merge stock
+                    batchMatch.stock += numStock;
+                    const saved = await batchMatch.save();
+                    return res.status(200).json({ ...saved.toObject(), message_type: 'updated' });
+                } else {
+                    // CONFLICT: Batch exists but price is different
+                    return res.status(400).json({ 
+                        message: `Batch "${batchNumber}" already exists for this product with a different price (₹${batchMatch.purchasePrice}). Please use a different batch name or update the existing batch.` 
+                    });
+                }
+            }
         }
 
-        console.log(`[addProduct] No matching product found. Creating new document.`);
-        // 2. If name exists but price differs, or name doesn't exist at all, create new product/batch
+        // 2. Auto-merge check: If Name + Price match ANY existing batch, merge stock there
+        const priceMatch = await Product.findOne({
+            tenantId: req.tenantId,
+            name: { $regex: new RegExp(`^${escapedName}$`, 'i') },
+            purchasePrice: numPurchasePrice
+        });
+
+        if (priceMatch) {
+            priceMatch.stock += numStock;
+            const saved = await priceMatch.save();
+            return res.status(200).json({ ...saved.toObject(), message_type: 'updated' });
+        }
+
+        // 3. New Batch: Name exists but price differs, or name is completely new
+        console.log(`[addProduct] Creating new batch/product for ${normalizedName}`);
         const productData = { ...req.body, tenantId: req.tenantId };
         
-        // Generate a batch number if "Default" or empty is provided and other batches exist
+        // Auto-generate batch number if missing or colliding
         if (!productData.batchNumber || productData.batchNumber === 'Default' || productData.batchNumber === '') {
-            const count = await Product.countDocuments({ 
+            const existingBatchesCount = await Product.countDocuments({ 
                 tenantId: req.tenantId, 
-                name: { $regex: new RegExp(`^${name.trim()}$`, 'i') } 
+                name: { $regex: new RegExp(`^${normalizedName}$`, 'i') } 
             });
-            if (count > 0) {
-                productData.batchNumber = `Batch ${count + 1}`;
+            
+            if (existingBatchesCount > 0) {
+                productData.batchNumber = `Batch ${existingBatchesCount + 1}`;
             } else {
                 productData.batchNumber = 'Default';
             }
@@ -72,7 +91,7 @@ export const addProduct = async (req: AuthRequest, res: Response) => {
 
         const product = new Product(productData);
         const savedProduct = await product.save();
-        res.status(201).json(savedProduct);
+        res.status(201).json({ ...savedProduct.toObject(), message_type: 'created' });
     } catch (err: any) {
         res.status(400).json({ message: err.message });
     }
@@ -87,66 +106,151 @@ export const bulkAddProducts = async (req: AuthRequest, res: Response) => {
             return res.status(400).json({ message: 'Data must be an array' });
         }
 
-        const stats = { created: 0, updated: 0, errors: 0 };
-        const results = [];
+        // 1. Fetch current status & constraints in parallel
+        const [tenant, existingProducts] = await Promise.all([
+            Tenant.findById(req.tenantId),
+            Product.find({ tenantId: req.tenantId })
+        ]);
 
-        // Check Product Limit for Free Plan
-        const tenant = await Tenant.findById(req.tenantId);
         const isFree = tenant && (tenant as any).planType === 'free';
-        let currentProductCount = isFree ? await Product.countDocuments({ tenantId: req.tenantId }) : 0;
+        const maxLimit = 100;
+        let currentCount = existingProducts.length;
 
+        // 2. Dual-Level Indexing for fast O(1) lookup
+        // Priority 1: name_batchNumber (Normalized for conflict/merge detection)
+        const batchMap = new Map();
+        // Priority 2: name_purchasePrice (To merge stock even if batch name was missing)
+        const priceMap = new Map();
+        // Tracking: current batch counts for auto-naming
+        const nameCountMap = new Map();
+
+        existingProducts.forEach(p => {
+            const normalizedName = p.name.trim().toLowerCase();
+            const normalizedBatch = (p.batchNumber || 'Default').trim().toLowerCase();
+            
+            batchMap.set(`${normalizedName}_${normalizedBatch}`, p);
+            priceMap.set(`${normalizedName}_${p.purchasePrice}`, p);
+            
+            nameCountMap.set(normalizedName, (nameCountMap.get(normalizedName) || 0) + 1);
+        });
+
+        const ops: any[] = [];
+        const stats = { created: 0, updated: 0, errors: 0, limitReached: 0, priceConflicts: 0 };
+
+        // 3. Process incoming data into bulk operations
         for (const data of productsData) {
             try {
-                const { name, purchasePrice, stock } = data;
-                
-                const query = {
-                    tenantId: req.tenantId,
-                    name: { $regex: new RegExp(`^${name.trim()}$`, 'i') }, 
-                    purchasePrice: Number(purchasePrice)
-                };
+                const { name, purchasePrice, stock, pricePerUnit, barcode, unit, batchNumber, mrp, category } = data;
+                if (!name) { stats.errors++; continue; }
 
-                const existingProduct = await Product.findOne(query);
+                const normalizedName = name.trim().toLowerCase();
+                const normalizedReqBatch = (batchNumber && batchNumber !== 'Default' && batchNumber !== '') 
+                    ? batchNumber.trim().toLowerCase() 
+                    : null;
+                const numPurchasePrice = Number(purchasePrice) || 0;
+                const numStock = Number(stock) || 0;
 
-                if (existingProduct) {
-                    existingProduct.stock += Number(stock);
-                    if (data.pricePerUnit) existingProduct.pricePerUnit = Number(data.pricePerUnit);
-                    if (data.mrp) existingProduct.mrp = Number(data.mrp);
-                    if (data.barcode) existingProduct.barcode = data.barcode;
-                    
-                    await existingProduct.save();
+                let targetProduct = null;
+
+                // Step A: Check if SPECIFIC BATCH provided and if it matches
+                if (normalizedReqBatch) {
+                    const existingBatchMode = batchMap.get(`${normalizedName}_${normalizedReqBatch}`);
+                    if (existingBatchMode) {
+                        if (existingBatchMode.purchasePrice === numPurchasePrice) {
+                            targetProduct = existingBatchMode;
+                        } else {
+                            // PRICE CONFLICT: This batch name is already taken by a different price
+                            stats.priceConflicts++;
+                            stats.errors++;
+                            continue; 
+                        }
+                    }
+                }
+
+                // Step B: Check if Name + Price matches ANY existing batch (Auto-merge)
+                if (!targetProduct) {
+                    const existingPriceMode = priceMap.get(`${normalizedName}_${numPurchasePrice}`);
+                    if (existingPriceMode) {
+                        targetProduct = existingPriceMode;
+                    }
+                }
+
+                if (targetProduct) {
+                    // Update Existing Record (Merge Stock)
+                    ops.push({
+                        updateOne: {
+                            filter: { _id: targetProduct._id },
+                            update: {
+                                $inc: { stock: numStock },
+                                $set: {
+                                    pricePerUnit: Number(pricePerUnit) || targetProduct.pricePerUnit,
+                                    barcode: barcode || targetProduct.barcode,
+                                    unit: unit || targetProduct.unit,
+                                    mrp: Number(mrp) || targetProduct.mrp,
+                                    category: category || targetProduct.category || 'General'
+                                }
+                            }
+                        }
+                    });
                     stats.updated++;
                 } else {
-                    // Check limit before creating new product
-                    if (isFree && currentProductCount >= 100) {
-                        stats.errors++;
-                        continue; // Skip this one
+                    // Create NEW Batch/Record
+                    if (isFree && currentCount >= maxLimit) {
+                        stats.limitReached++;
+                        continue;
                     }
 
-                    const productData = { ...data, tenantId: req.tenantId };
+                    const batchCount = nameCountMap.get(normalizedName) || 0;
+                    const finalBatch = (batchNumber && batchNumber !== 'Default') 
+                        ? batchNumber.trim() 
+                        : (batchCount > 0 ? `Batch ${batchCount + 1}` : 'Default');
+
+                    const newDoc = {
+                        tenantId: req.tenantId,
+                        name: name.trim(),
+                        purchasePrice: numPurchasePrice,
+                        pricePerUnit: Number(pricePerUnit) || 0,
+                        stock: numStock,
+                        unit: unit || 'pc',
+                        barcode: barcode || '',
+                        batchNumber: finalBatch,
+                        mrp: Number(mrp) || 0,
+                        category: category || 'General',
+                        createdAt: new Date()
+                    };
+
+                    ops.push({
+                        insertOne: {
+                            document: newDoc
+                        }
+                    });
+
+                    // Update local maps for intra-batch merge handling within the SAME bulk array
+                    const normalizedFinalBatch = finalBatch.toLowerCase();
+                    batchMap.set(`${normalizedName}_${normalizedFinalBatch}`, { ...newDoc, _id: `temp_${stats.created}` });
+                    priceMap.set(`${normalizedName}_${numPurchasePrice}`, { ...newDoc, _id: `temp_${stats.created}` });
+                    nameCountMap.set(normalizedName, batchCount + 1);
                     
-                    if (!productData.batchNumber || productData.batchNumber === 'Default' || productData.batchNumber === '') {
-                        const count = await Product.countDocuments({ 
-                            tenantId: req.tenantId, 
-                            name: { $regex: new RegExp(`^${name.trim()}$`, 'i') } 
-                        });
-                        productData.batchNumber = count > 0 ? `Batch ${count + 1}` : 'Default';
-                    }
-
-                    const product = new Product(productData);
-                    await product.save();
                     stats.created++;
-                    currentProductCount++;
+                    currentCount++;
                 }
             } catch (err) {
                 stats.errors++;
             }
         }
 
+        // 4. Finalize Bulk Execution
+        if (ops.length > 0) {
+            await Product.bulkWrite(ops, { ordered: false });
+        }
+
         res.status(200).json({ 
-            message: `Bulk processing complete. Created: ${stats.created}, Updated: ${stats.updated}, Errors: ${stats.errors}`,
+            message: `Bulk processing complete. Created: ${stats.created}, Updated: ${stats.updated}${stats.limitReached > 0 ? `, Limit reached: ${stats.limitReached} skipped` : ''}`,
             stats 
         });
+
     } catch (err: any) {
+        console.error('[BulkAdd] Error:', err);
         res.status(500).json({ message: err.message });
     }
 };

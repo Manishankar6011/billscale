@@ -12,6 +12,7 @@ export interface Tenant {
   subscriptionStatus: 'active' | 'inactive' | 'trial';
   subscriptionExpiryDate?: string;
   aiUsageCount: number;
+  referralCode?: string;
 }
 
 export interface User {
@@ -27,12 +28,18 @@ export interface User {
   subscriptionExpiryDate?: string;
   aiUsageCount: number;
   token: string;
+  referralCode?: string;
+  logoUrl?: string;
+  billingEmail?: string;
+  billingAddress?: string;
+  phone?: string;
+  signature?: string;
 }
 
 export interface Product {
     _id?: string;
     name: string;
-    unit: 'ton' | 'bag' | 'piece' | 'kg' | 'ft';
+    unit: string;
     stock: number;
     minStockAlert: number;
     pricePerUnit: number;

@@ -8,7 +8,7 @@ interface AuthContextType {
     setUser: (user: User | null) => void;
     loading: boolean;
     login: (email: string, password: string) => Promise<void>;
-    register: (name: string, email: string, password: string, companyName: string, businessType: string) => Promise<void>;
+    register: (name: string, email: string, password: string, companyName: string, businessType: string, referralCode?: string) => Promise<void>;
     logout: () => void;
 }
 
@@ -19,14 +19,46 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
 
+    const flattenUser = (data: any, token?: string): User => {
+        const t = data.tenantId || {};
+        return {
+            ...data,
+            tenantId: t._id || t,
+            companyName: t.companyName || data.companyName,
+            subscriptionStatus: t.subscriptionStatus || data.subscriptionStatus,
+            planType: t.planType || data.planType,
+            subscriptionExpiryDate: t.subscriptionExpiryDate || data.subscriptionExpiryDate,
+            aiUsageCount: t.aiUsageCount !== undefined ? t.aiUsageCount : (data.aiUsageCount || 0),
+            referralCode: t.referralCode || data.referralCode,
+            logoUrl: t.logoUrl || data.logoUrl,
+            billingEmail: t.billingEmail || data.billingEmail,
+            billingAddress: t.billingAddress || data.billingAddress,
+            phone: t.phone || data.phone,
+            signature: t.signature || data.signature,
+            token: token || data.token
+        };
+    };
+
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
         const lastActiveAt = localStorage.getItem('last_active_at');
         
+        const syncProfile = async (token: string) => {
+            try {
+                axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+                const { data } = await axios.get('/api/auth/profile');
+                const flattened = flattenUser(data, token);
+                setUser(flattened);
+                localStorage.setItem('user', JSON.stringify(flattened));
+            } catch (err) {
+                console.error('Failed to sync profile:', err);
+            }
+        };
+
         if (storedUser) {
             const userData = JSON.parse(storedUser);
             
-            // Inactivity Check: 5 Days (432,000,000 ms)
+            // Inactivity Check: 5 Days
             const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
             const now = Date.now();
             
@@ -36,8 +68,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             } else {
                 setUser(userData);
                 axios.defaults.headers.common['Authorization'] = `Bearer ${userData.token}`;
-                // Update activity on successful session resumption
                 localStorage.setItem('last_active_at', now.toString());
+                
+                // Sync profile fresh from DB
+                syncProfile(userData.token);
             }
         }
         setLoading(false);
@@ -64,33 +98,41 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         };
     }, []);
 
+    const updateStateAndStorage = (userData: User | null) => {
+        if (!userData) {
+            setUser(null);
+            localStorage.removeItem('user');
+            return;
+        }
+        const flattened = flattenUser(userData);
+        setUser(flattened);
+        localStorage.setItem('user', JSON.stringify(flattened));
+    };
+
     const login = async (email: string, password: string) => {
         const { data } = await axios.post('/api/auth/login', { email, password });
-        setUser(data);
-        localStorage.setItem('user', JSON.stringify(data));
+        updateStateAndStorage(data);
         localStorage.setItem('last_active_at', Date.now().toString());
         axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`;
         navigate('/dashboard');
     };
 
-    const register = async (name: string, email: string, password: string, companyName: string, businessType: string) => {
-        const { data } = await axios.post('/api/auth/register', { name, email, password, companyName, businessType });
-        setUser(data);
-        localStorage.setItem('user', JSON.stringify(data));
+    const register = async (name: string, email: string, password: string, companyName: string, businessType: string, referralCode?: string) => {
+        const { data } = await axios.post('/api/auth/register', { name, email, password, companyName, businessType, referralCode });
+        updateStateAndStorage(data);
         localStorage.setItem('last_active_at', Date.now().toString());
         axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`;
         navigate('/dashboard');
     };
 
     const logout = () => {
-        setUser(null);
-        localStorage.removeItem('user');
+        updateStateAndStorage(null);
         delete axios.defaults.headers.common['Authorization'];
         navigate('/login');
     };
 
     return (
-        <AuthContext.Provider value={{ user, setUser, loading, login, register, logout }}>
+        <AuthContext.Provider value={{ user, setUser: updateStateAndStorage, loading, login, register, logout }}>
             {!loading && children}
         </AuthContext.Provider>
     );

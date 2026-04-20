@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Building2 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
@@ -13,16 +13,26 @@ const Register: React.FC = () => {
         email: '',
         password: '',
         companyName: '',
-        businessType: 'Retail'
+        businessType: 'Retail',
+        referralCode: ''
     });
     const { register } = useAuth();
     const [loading, setLoading] = useState(false);
+    const [searchParams] = useSearchParams();
+
+    // Auto-fill referral code from URL
+    React.useEffect(() => {
+        const refCode = searchParams.get('ref');
+        if (refCode) {
+            setFormData(prev => ({ ...prev, referralCode: refCode.toUpperCase() }));
+        }
+    }, [searchParams]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         try {
-            await register(formData.name, formData.email, formData.password, formData.companyName, formData.businessType);
+            await register(formData.name, formData.email, formData.password, formData.companyName, formData.businessType, formData.referralCode);
             showToast('Account created successfully!', 'success');
         } catch (error: any) {
             showToast(error.response?.data?.message || 'Registration failed', 'error');
@@ -102,6 +112,16 @@ const Register: React.FC = () => {
                                 value={formData.password}
                                 onChange={(e) => setFormData({...formData, password: e.target.value})}
                                 required
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Referral Code (Optional)</label>
+                            <input 
+                                type="text" 
+                                className="input py-4 font-bold bg-slate-50 border-none rounded-2xl" 
+                                placeholder="Enter code if you were referred" 
+                                value={formData.referralCode}
+                                onChange={(e) => setFormData({...formData, referralCode: e.target.value.toUpperCase()})}
                             />
                         </div>
                         <button 

@@ -10,6 +10,7 @@ interface A4InvoiceProps {
     companyAddress?: string | undefined;
     companyEmail?: string | undefined;
     signature?: string | undefined;
+    isPreview?: boolean;
 }
 
 const A4Invoice: React.FC<A4InvoiceProps> = ({
@@ -20,14 +21,15 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
     companyPhone,
     companyAddress,
     companyEmail,
-    signature
+    signature,
+    isPreview = false
 }) => {
     if (!sale) return null;
 
     const totalItems = (sale.items?.length || 0) + (sale.additionalItems?.length || 0);
 
     return (
-        <div id="a4-invoice" className="hidden print:block bg-white text-slate-800 p-12 w-[210mm] min-h-[297mm] mx-auto font-sans text-sm">
+        <div id="a4-invoice" className={`${isPreview ? 'block shadow-2xl' : 'hidden print:block'} bg-white text-slate-800 p-12 w-[210mm] min-h-[297mm] mx-auto font-sans text-sm`}>
             {/* Top Toolbar Info (Optional/Design) */}
             <div className="flex justify-between items-start mb-12">
                 <div className="space-y-2">
@@ -77,6 +79,7 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                         <tr className="border-b-2 border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-widest">
                             <th className="py-4 px-2">#</th>
                             <th className="py-4 px-2">Description</th>
+                            <th className="py-4 px-2 text-right">MRP</th>
                             <th className="py-4 px-2 text-center">Quantity</th>
                             <th className="py-4 px-2 text-right">Unit Price</th>
                             <th className="py-4 px-2 text-right">Total</th>
@@ -90,18 +93,20 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                                     <p className="font-black text-slate-800">{item.productId?.name || 'Item Name'}</p>
                                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{item.unit || 'Units'}</p>
                                 </td>
+                                <td className="py-5 px-2 text-right font-medium text-slate-400">₹{(item.mrpAtTime || 0).toFixed(2)}</td>
                                 <td className="py-5 px-2 text-center font-bold">{item.quantity}</td>
                                 <td className="py-5 px-2 text-right font-medium">₹{(item.sellingPrice || 0).toFixed(2)}</td>
                                 <td className="py-5 px-2 text-right font-black text-slate-900">₹{((item.quantity || 0) * (item.sellingPrice || 0)).toFixed(2)}</td>
                             </tr>
                         ))}
                         {(sale.additionalItems || []).map((item: any, i: number) => (
-                            <tr key={`add-${i}`} className="text-slate-700">
+                            <tr key={`add-${i}`} className="text-slate-700 bg-slate-50/50 italic">
                                 <td className="py-5 px-2 font-bold text-slate-300">{String((sale.items?.length || 0) + i + 1).padStart(2, '0')}</td>
                                 <td className="py-5 px-2">
                                     <p className="font-black text-slate-800">{item.name}</p>
-                                    <p className="text-[10px] text-primary-400 font-bold uppercase tracking-widest italic">Service / Charge</p>
+                                    <p className="text-[10px] text-primary-400 font-bold uppercase tracking-widest">Service / Additional Charge</p>
                                 </td>
+                                <td className="py-5 px-2 text-right text-slate-300">—</td>
                                 <td className="py-5 px-2 text-center font-bold">1</td>
                                 <td className="py-5 px-2 text-right font-medium">₹{(item.price || 0).toFixed(2)}</td>
                                 <td className="py-5 px-2 text-right font-black text-slate-900">₹{(item.price || 0).toFixed(2)}</td>
@@ -112,30 +117,36 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
             </div>
 
             <div className="flex justify-end pt-8 border-t-2 border-slate-100">
-                <div className="w-full max-w-xs space-y-3">
+                <div className="w-full max-w-sm space-y-3">
                     <div className="flex justify-between text-slate-500 font-bold">
-                        <span>Subtotal</span>
-                        <span>₹{(sale.totalAmount - (sale.roundOffAmount || 0)).toFixed(2)}</span>
+                        <span>Items Subtotal</span>
+                        <span>₹{((sale.items || []).reduce((acc: number, item: any) => acc + (item.quantity * item.sellingPrice), 0)).toFixed(2)}</span>
                     </div>
+                    {(sale.additionalItems || []).length > 0 && (
+                        <div className="flex justify-between text-slate-500 font-bold">
+                            <span>Service & Other Charges</span>
+                            <span>₹{((sale.additionalItems || []).reduce((acc: number, item: any) => acc + Number(item.price), 0)).toFixed(2)}</span>
+                        </div>
+                    )}
                     {sale.roundOffAmount !== 0 && (
                         <div className="flex justify-between text-slate-500 font-bold italic">
                             <span>Round Off</span>
                             <span>{sale.roundOffAmount > 0 ? '+' : ''}{sale.roundOffAmount.toFixed(2)}</span>
                         </div>
                     )}
-                    <div className="flex justify-between text-2xl font-black text-slate-900 pt-3 border-t border-slate-200">
-                        <span>Total</span>
+                    <div className="flex justify-between text-3xl font-black text-slate-900 pt-5 border-t-2 border-slate-900">
+                        <span>GRAND TOTAL</span>
                         <span>₹{(sale.totalAmount || 0).toFixed(2)}</span>
                     </div>
 
                     {/* Partial Payment Section */}
                     {sale.amountPaid < sale.totalAmount && (
-                        <div className="mt-4 p-4 bg-rose-50 rounded-2xl border border-rose-100 space-y-2">
+                        <div className="mt-6 p-6 bg-rose-50 rounded-[2rem] border border-rose-100 space-y-3">
                             <div className="flex justify-between text-sm font-bold text-slate-600">
-                                <span>Amount Paid</span>
+                                <span>Total Paid</span>
                                 <span>₹{(sale.amountPaid || 0).toFixed(2)}</span>
                             </div>
-                            <div className="flex justify-between text-sm font-black text-rose-600">
+                            <div className="flex justify-between text-lg font-black text-rose-600 border-t border-rose-200 pt-2">
                                 <span>Balance Remaining</span>
                                 <span>₹{(sale.balanceDue || 0).toFixed(2)}</span>
                             </div>

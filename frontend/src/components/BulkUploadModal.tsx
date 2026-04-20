@@ -18,8 +18,9 @@ interface BulkItem {
     purchasePrice: string | number;
     pricePerUnit: string | number;
     stock: string | number;
+    stockValue?: string | number | undefined;
     unit: string;
-    errors?: Record<string, string>;
+    errors?: Record<string, string> | undefined;
 }
 
 const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSuccess }) => {
@@ -30,14 +31,59 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
     const [isSaving, setIsSaving] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const validateData = (items: BulkItem[]) => {
+    const downloadTemplate = () => {
+        const headers = [['Product Name', 'Batch Number', 'Item Code', 'Purchase Price', 'Selling Price', 'Stock Quantity', 'Unit']];
+        const sampleData = [
+            ['Example Cement', 'B-101', 'CX-1002', 400, 450, 100, 'bag'],
+            ['Steel Rod 12mm', 'ST-22', 'BAR-12', 60, 75, 500, 'kg']
+        ];
+        const rows = [...headers, ...sampleData];
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        XLSX.utils.book_append_sheet(wb, ws, "Inventory Template");
+        XLSX.writeFile(wb, "Inventory_Template.xlsx");
+    };
+
+    const validateData = (items: BulkItem[]): BulkItem[] => {
         return items.map(item => {
             const errors: Record<string, string> = {};
-            if (!item.name) errors.name = 'Name is required';
-            if (!item.pricePerUnit || Number(item.pricePerUnit) <= 0) errors.pricePerUnit = 'Price required';
-            if (!item.unit) errors.unit = 'Unit required';
+            if (!item.name || item.name.trim() === '') errors.name = 'Name is required';
+            
+            const sp = parseFloat(String(item.pricePerUnit)) || 0;
+            const pp = parseFloat(String(item.purchasePrice)) || 0;
+            
+            if (sp <= 0) errors.pricePerUnit = 'Price required';
+            if (sp < pp) errors.pricePerUnit = 'Below Cost'; // Accuracy check: Selling below Purchase
+            
+            if (!item.unit || item.unit.trim() === '') errors.unit = 'Unit required';
             return { ...item, errors };
         });
+    };
+
+    const jumpToNextError = (currentRow: number, currentField: string) => {
+        // Find the next error starting from the current cell
+        const fields: (keyof BulkItem)[] = ['name', 'batchNumber', 'barcode', 'purchasePrice', 'pricePerUnit', 'stock', 'unit'];
+        const startFieldIndex = fields.indexOf(currentField as keyof BulkItem);
+
+        for (let r = currentRow; r < data.length; r++) {
+            const startF = (r === currentRow) ? startFieldIndex + 1 : 0;
+            const item = data[r];
+            if (!item) continue;
+
+            for (let f = startF; f < fields.length; f++) {
+                const field = fields[f];
+                if (!field) continue;
+                
+                if (item.errors && item.errors[field as string]) {
+                    const nextInput = document.getElementById(`cell-${r}-${field}`);
+                    if (nextInput) {
+                        nextInput.focus();
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     };
 
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -48,39 +94,131 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
         const reader = new FileReader();
         reader.onload = (event) => {
             try {
-                const bstr = event.target?.result;
-                const wb = XLSX.read(bstr, { type: 'binary' });
+                const arrayBuffer = event.target?.result;
+                const wb = XLSX.read(arrayBuffer, { type: 'array' });
                 const wsname = wb.SheetNames[0];
                 if (!wsname) throw new Error('No sheets found in file');
                 const ws = wb.Sheets[wsname];
                 if (!ws) throw new Error('Sheet not found');
-                const rawData = XLSX.utils.sheet_to_json(ws);
+                const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
+                if (rows.length === 0) {
+                    showToast('The selected sheet is empty.', 'error');
+                    return;
+                }
 
-                const mappedData: BulkItem[] = rawData.map((row: any) => ({
-                    name: (row['Product Name'] || row['name'] || '').toString(),
-                    batchNumber: (row['Batch Number'] || row['batch'] || 'Default').toString(),
-                    barcode: (row['Item Code'] || row['barcode'] || '').toString(),
-                    purchasePrice: row['Purchase Price'] || row['cost_price'] || 0,
-                    pricePerUnit: row['Selling Price'] || row['price'] || 0,
-                    stock: row['Stock Quantity'] || row['stock'] || 0,
-                    unit: row['Unit'] || row['unit'] || 'pc',
-                }));
+                // 1. Find the real header row (skip company metadata/logos/summary lines)
+                let headerRowIndex = -1;
+                const headerKeywords = ['name', 'product', 'item', 'price', 'rate', 'stock', 'quantity', 'code', 'unit', 'batch'];
+                
+                // Scan first 25 rows to find headers with confidence
+                for (let i = 0; i < Math.min(rows.length, 25); i++) {
+                    const row = rows[i];
+                    if (!Array.isArray(row)) continue;
+                    
+                    // Calculate how many keywords are in this row
+                    const matchCount = row.filter(cell => 
+                        typeof cell === 'string' && 
+                        headerKeywords.some(kw => cell.toLowerCase().replace(/[\s_.]/g, '').includes(kw))
+                    ).length;
+                    
+                    // Confidence Threshold: Row must have at least 2 header keywords
+                    if (matchCount >= 2) {
+                        headerRowIndex = i;
+                        console.log(`Header Detection: Found at row ${i} with ${matchCount} matches. Row data:`, row);
+                        break;
+                    }
+                }
+
+                if (headerRowIndex === -1) {
+                    console.warn('Could not detect header row clearly, falling back to first row');
+                    headerRowIndex = 0;
+                }
+
+                const headers = Array.from(rows[headerRowIndex] || []).map(h => String(h || '').trim());
+                const dataRows = rows.slice(headerRowIndex + 1);
+
+                // 2. Map data using detected headers
+                const mappedData = dataRows.map((rowArr: any[]): BulkItem | null => {
+                    if (!Array.isArray(rowArr) || rowArr.length === 0) return null;
+
+                    const findValue = (keys: string[]) => {
+                        const colIndex = headers.findIndex(h => {
+                            if (!h || typeof h !== 'string') return false;
+                            const normalizedH = h.toLowerCase().replace(/[\s_.]/g, '');
+                            return keys.some(k => k.trim().toLowerCase().replace(/[\s_.]/g, '') === normalizedH);
+                        });
+                        const rawVal = colIndex !== -1 ? rowArr[colIndex] : null;
+                        return (rawVal === null || rawVal === undefined) ? '' : rawVal;
+                    };
+
+                    const nameVal = String(findValue(['Product Name', 'name', 'product', 'item'])).trim();
+                    
+                    // Skip if name is empty, null, or looks like a header repetition
+                    if (!nameVal || nameVal === '' || nameVal.toLowerCase() === 'name' || nameVal.toLowerCase() === 'product name') return null;
+
+                    return {
+                        name: nameVal,
+                        batchNumber: String(findValue(['Batch Number', 'batch', 'batchno', 'Batch No', 'batch_no', 'batch_no.']) || 'Default'),
+                        barcode: String(findValue(['Item Code', 'barcode', 'sku', 'code', 'itemcode']) || ''),
+                        purchasePrice: findValue(['Purchase Price', 'purchaseprice', 'costprice', 'cost', 'buy']),
+                        pricePerUnit: findValue(['Selling Price', 'sellingprice', 'price', 'rate', 'sell']),
+                        stock: String(findValue(['Stock Quantity', 'stock', 'qty', 'quantity', 'initialstock']) || '0'),
+                        stockValue: String(findValue(['Stock Value', 'stock_value', 'total_value', 'value']) || ''),
+                        unit: String(findValue(['Unit', 'unit', 'uom']) || 'pc').toLowerCase(),
+                    };
+                }).filter((item): item is BulkItem => item !== null);
 
                 setData(validateData(mappedData));
-                showToast(`Loaded ${mappedData.length} items. Please verify and edit if needed.`, 'success');
+                showToast(`Successfully detected headers and loaded ${mappedData.length} items.`, 'success');
             } catch (err) {
-                showToast('Error parsing file. Please use a valid Excel or CSV.', 'error');
+                console.error('XLSX High Confidence Parsing Error:', err);
+                showToast('Error parsing file. Please use the provided template.', 'error');
             } finally {
                 setIsProcessing(false);
             }
         };
-        reader.readAsBinaryString(file);
+        reader.readAsArrayBuffer(file);
     };
 
     const handleCellChange = (index: number, field: keyof BulkItem, value: any) => {
-        const newData = [...data];
-        (newData[index] as any)[field] = value;
-        setData(validateData(newData));
+        setData(prev => {
+            const newData = [...prev];
+            const item = newData[index];
+            if (!item) return prev;
+            
+            const updatedItem = { ...item, [field]: value };
+            
+            // Re-validate only the affected row for performance
+            const validated = validateData([updatedItem])[0];
+            if (!validated) return prev;
+            
+            newData[index] = validated;
+            return newData;
+        });
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent, rowIdx: number, field: keyof BulkItem) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const item = data[rowIdx];
+            if (!item) return;
+
+            // Short delay to allow state update to finish
+            setTimeout(() => {
+                const updatedItem = data[rowIdx];
+                if (!updatedItem || !updatedItem.errors) return;
+                
+                const isStillError = !!updatedItem.errors[field as string];
+                if (!isStillError) {
+                    const jumped = jumpToNextError(rowIdx, field as string);
+                    if (!jumped) {
+                        // If no more errors, try to go to next row name
+                        const nextRowName = document.getElementById(`cell-${rowIdx + 1}-name`);
+                        nextRowName?.focus();
+                    }
+                }
+            }, 50);
+        }
     };
 
     const removeRow = (index: number) => {
@@ -113,8 +251,15 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
         }
 
         setIsSaving(true);
+        const payload = data.map(item => ({
+            ...item,
+            purchasePrice: Number(item.purchasePrice) || 0,
+            pricePerUnit: Number(item.pricePerUnit) || 0,
+            stock: parseFloat(String(item.stock).replace(/[^\d.]/g, '')) || 0 // Extract numeric part for DB
+        }));
+
         try {
-            await axios.post('/api/inventory/bulk', data, {
+            await axios.post('/api/inventory/bulk', payload, {
                 headers: { Authorization: `Bearer ${user?.token}` }
             });
             showToast('Bulk upload successful!', 'success');
@@ -165,6 +310,17 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
                                 {isProcessing ? <Loader2 className="animate-spin" size={18} /> : <Upload size={18} />}
                                 Browse Files
                             </button>
+
+                            <div className="mt-8 pt-8 border-t border-slate-100 flex flex-col items-center">
+                                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-4">New to bulk upload?</p>
+                                <button 
+                                    onClick={downloadTemplate}
+                                    className="flex items-center gap-2 text-primary-600 hover:text-primary-700 font-bold transition-all group"
+                                >
+                                    <FileSpreadsheet size={18} className="group-hover:scale-110 transition-transform" />
+                                    Download Sample Template
+                                </button>
+                            </div>
                         </div>
                     ) : (
                         <div className="flex-1 flex flex-col min-h-0">
@@ -196,71 +352,93 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
                                             <th className="px-4 py-4 text-left">SellingPrice*</th>
                                             <th className="px-4 py-4 text-left">Stock</th>
                                             <th className="px-4 py-4 text-left">Unit*</th>
-                                            <th className="px-4 py-4 text-left">Stock Value</th>
+                                            <th className="px-4 py-4 text-left text-blue-600">Total Cost</th>
+                                            <th className="px-4 py-4 text-left text-emerald-600">Total Sale</th>
                                             <th className="px-4 py-4 text-center w-12"></th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
-                                        {data.map((item, idx) => {
-                                            const stockValue = Number(item.stock) * Number(item.pricePerUnit);
+                                         {data.map((item, idx) => {
+                                            const numericStock = parseFloat(String(item.stock).replace(/[^\d.]/g, '')) || 0;
+                                            const totalCost = numericStock * Number(item.purchasePrice);
+                                            // Prefer raw stock value from excel if present, otherwise calc
+                                            const displayStockValue = item.stockValue || (numericStock * Number(item.pricePerUnit)).toLocaleString();
+                                            
                                             return (
                                                 <tr key={idx} className="bg-white hover:bg-blue-50/30 transition-colors group">
                                                     <td className="p-1">
                                                         <input 
-                                                            className={`w-full p-3 bg-transparent border-0 focus:ring-2 rounded-lg font-bold ${item.errors?.name ? 'bg-rose-50 text-rose-600 ring-rose-300' : 'text-slate-700 focus:ring-primary-500'}`}
+                                                            id={`cell-${idx}-name`}
+                                                            className={`w-full p-2.5 bg-transparent border-0 ring-1 focus:ring-2 rounded-xl font-bold transition-all ${item.errors?.name ? 'bg-rose-50/50 text-rose-600 ring-rose-400/50 focus:ring-rose-500' : 'text-slate-700 ring-transparent focus:ring-primary-500'}`}
                                                             value={item.name}
                                                             onChange={e => handleCellChange(idx, 'name', e.target.value)}
+                                                            onKeyDown={e => handleKeyDown(e, idx, 'name')}
                                                             placeholder="Product Name"
                                                         />
                                                     </td>
                                                     <td className="p-1">
                                                         <input 
-                                                            className="w-full p-3 bg-transparent border-0 focus:ring-2 focus:ring-primary-500 rounded-lg text-slate-500"
+                                                            id={`cell-${idx}-batchNumber`}
+                                                            className={`w-full p-2.5 bg-transparent border-0 ring-1 focus:ring-2 rounded-xl text-slate-500 transition-all ${item.errors?.batchNumber ? 'bg-rose-50/50 ring-rose-400/50 focus:ring-rose-500' : 'ring-transparent focus:ring-primary-500'}`}
                                                             value={item.batchNumber}
                                                             onChange={e => handleCellChange(idx, 'batchNumber', e.target.value)}
+                                                            onKeyDown={e => handleKeyDown(e, idx, 'batchNumber')}
                                                         />
                                                     </td>
                                                     <td className="p-1">
                                                         <input 
-                                                            className="w-full p-3 bg-transparent border-0 focus:ring-2 focus:ring-primary-500 rounded-lg text-slate-500 font-mono"
+                                                            id={`cell-${idx}-barcode`}
+                                                            className={`w-full p-2.5 bg-transparent border-0 ring-1 focus:ring-2 rounded-xl text-slate-500 font-mono transition-all ${item.errors?.barcode ? 'bg-rose-50/50 ring-rose-400/50 focus:ring-rose-500' : 'ring-transparent focus:ring-primary-500'}`}
                                                             value={item.barcode}
                                                             onChange={e => handleCellChange(idx, 'barcode', e.target.value)}
+                                                            onKeyDown={e => handleKeyDown(e, idx, 'barcode')}
                                                             placeholder="SKU/Barcode"
                                                         />
                                                     </td>
                                                     <td className="p-1">
                                                         <input 
+                                                            id={`cell-${idx}-purchasePrice`}
                                                             type="number"
-                                                            className="w-full p-3 bg-transparent border-0 focus:ring-2 focus:ring-primary-500 rounded-lg text-slate-700 font-bold"
+                                                            className={`w-full p-2.5 bg-transparent border-0 ring-1 focus:ring-2 rounded-xl text-slate-700 font-bold transition-all ${item.errors?.purchasePrice ? 'bg-rose-50/50 ring-rose-400/50 focus:ring-rose-500' : 'ring-transparent focus:ring-primary-500'}`}
                                                             value={item.purchasePrice}
                                                             onChange={e => handleCellChange(idx, 'purchasePrice', e.target.value)}
+                                                            onKeyDown={e => handleKeyDown(e, idx, 'purchasePrice')}
                                                         />
                                                     </td>
                                                     <td className="p-1">
                                                         <input 
+                                                            id={`cell-${idx}-pricePerUnit`}
                                                             type="number"
-                                                            className={`w-full p-3 bg-transparent border-0 focus:ring-2 rounded-lg font-black ${item.errors?.pricePerUnit ? 'bg-rose-50 text-rose-600 ring-rose-300' : 'text-primary-600 focus:ring-primary-500'}`}
+                                                            className={`w-full p-2.5 bg-transparent border-0 ring-1 focus:ring-2 rounded-xl font-black transition-all ${item.errors?.pricePerUnit ? 'bg-rose-50/50 text-rose-600 ring-rose-400 focus:ring-rose-500' : 'text-primary-600 ring-transparent focus:ring-primary-500'}`}
                                                             value={item.pricePerUnit}
                                                             onChange={e => handleCellChange(idx, 'pricePerUnit', e.target.value)}
+                                                            onKeyDown={e => handleKeyDown(e, idx, 'pricePerUnit')}
                                                         />
                                                     </td>
                                                     <td className="p-1">
                                                         <input 
-                                                            type="number"
-                                                            className="w-full p-3 bg-transparent border-0 focus:ring-2 focus:ring-primary-500 rounded-lg text-slate-700 font-bold"
+                                                            id={`cell-${idx}-stock`}
+                                                            className={`w-full p-2.5 bg-transparent border-0 ring-1 focus:ring-2 rounded-xl text-slate-700 font-bold transition-all ${item.errors?.stock ? 'bg-rose-50/50 ring-rose-400/50 focus:ring-rose-500' : 'ring-transparent focus:ring-primary-500'}`}
                                                             value={item.stock}
                                                             onChange={e => handleCellChange(idx, 'stock', e.target.value)}
+                                                            onKeyDown={e => handleKeyDown(e, idx, 'stock')}
+                                                            placeholder="Qty"
                                                         />
                                                     </td>
                                                     <td className="p-1">
                                                         <input 
-                                                            className={`w-full p-3 bg-transparent border-0 focus:ring-2 rounded-lg font-bold uppercase tracking-widest ${item.errors?.unit ? 'bg-rose-50 text-rose-600 ring-rose-300' : 'text-slate-400 focus:ring-primary-500'}`}
+                                                            id={`cell-${idx}-unit`}
+                                                            className={`w-full p-2.5 bg-transparent border-0 ring-1 focus:ring-2 rounded-xl font-bold uppercase tracking-widest transition-all ${item.errors?.unit ? 'bg-rose-50/50 text-rose-600 ring-rose-400/50 focus:ring-rose-500' : 'text-slate-400 ring-transparent focus:ring-primary-500'}`}
                                                             value={item.unit}
                                                             onChange={e => handleCellChange(idx, 'unit', e.target.value)}
+                                                            onKeyDown={e => handleKeyDown(e, idx, 'unit')}
                                                         />
                                                     </td>
-                                                    <td className="px-4 py-3 text-slate-800 font-black bg-slate-50/50">
-                                                        ₹{stockValue.toLocaleString()}
+                                                    <td className="px-4 py-3 text-blue-700 font-black bg-blue-50/20">
+                                                        ₹{totalCost.toLocaleString()}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-emerald-700 font-black bg-emerald-50/20">
+                                                        ₹{displayStockValue}
                                                     </td>
                                                     <td className="px-2 py-3 text-center">
                                                         <button 

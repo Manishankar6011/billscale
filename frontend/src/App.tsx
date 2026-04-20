@@ -18,6 +18,7 @@ import Salary from "./pages/Salary";
 import Ledger from "./pages/Ledger";
 import Settings from "./pages/Settings";
 import Customers from "./pages/Customers";
+import ReferAndEarn from "./pages/ReferAndEarn";
 import { useAuth } from "./context/AuthContext";
 import Landing from "./pages/Landing";
 import Layout from "./components/Layout";
@@ -56,6 +57,7 @@ const App: React.FC = () => {
           <Route path="ledger" element={<Ledger />} />
           <Route path="settings" element={<Settings />} />
           <Route path="customers" element={<Customers />} />
+          <Route path="referral" element={<ReferAndEarn />} />
           <Route path="pricing" element={<Pricing />} />
           <Route path="success" element={<Success />} />
           <Route path="contact" element={<Contact />} />

@@ -16,6 +16,10 @@ export interface ITenant extends Document {
   billingAddress?: string;
   signature?: string;
   aiUsageCount: number;
+  referralCode: string;
+  referredBy?: Types.ObjectId;
+  referralRewardClaimed: boolean;
+  nextInvoiceNumber: number;
   createdAt: Date;
 }
 

@@ -11,7 +11,9 @@ import mongoose from 'mongoose';
 // @route   GET /api/transactions/sales
 export const getSales = async (req: AuthRequest, res: Response) => {
     try {
-        const sales = await Sale.find({ tenantId: req.tenantId }).populate('items.productId', 'name unit');
+        const sales = await Sale.find({ tenantId: req.tenantId })
+            .populate('items.productId', 'name unit')
+            .sort({ createdAt: -1 });
         res.status(200).json(sales);
     } catch (err: any) {
         res.status(500).json({ message: err.message });
@@ -39,8 +41,10 @@ export const processSale = async (req: AuthRequest, res: Response) => {
 
     try {
         // 0. Check Subscription Limits for Free Plan
-        const tenant = await Tenant.findById(req.tenantId);
-        if (tenant && (tenant as any).planType === 'free') {
+        const tenant = await Tenant.findById(req.tenantId).session(session);
+        if (!tenant) throw new Error('Unauthorized or Business not found');
+
+        if (tenant.planType === 'free') {
             const startOfMonth = new Date();
             startOfMonth.setHours(0, 0, 0, 0);
             startOfMonth.setDate(1);
@@ -127,7 +131,8 @@ export const processSale = async (req: AuthRequest, res: Response) => {
         const finalAmountPaid = Number(amountPaid) || 0;
         const balanceDue = totalAmount - finalAmountPaid;
 
-        const invoiceNumber = `INV-${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 90 + 10)}`;
+        const currentInvoiceNum = tenant.nextInvoiceNumber || 1;
+        const invoiceNumber = `INV-${currentInvoiceNum}`;
 
         const sale = new Sale({
             tenantId: req.tenantId,
@@ -148,6 +153,10 @@ export const processSale = async (req: AuthRequest, res: Response) => {
         });
 
         await sale.save({ session });
+
+        // Increment Invoice Number
+        tenant.nextInvoiceNumber = currentInvoiceNum + 1;
+        await tenant.save({ session });
 
         await session.commitTransaction();
         res.status(201).json(sale);

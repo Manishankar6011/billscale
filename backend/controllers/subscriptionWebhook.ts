@@ -58,6 +58,24 @@ export const handleRazorpayWebhook = async (req: any, res: Response) => {
             (tenant as any).subscriptionStatus = 'active';
             (tenant as any).subscriptionExpiryDate = expiryDate;
             (tenant as any).razorpayPaymentId = payment.id;
+            
+            // Handle Referral Reward (1 month extension for referrer)
+            if ((tenant as any).referredBy && !(tenant as any).referralRewardClaimed) {
+                const referrer = await Tenant.findById((tenant as any).referredBy);
+                if (referrer) {
+                    const currentRefExpiry = referrer.subscriptionExpiryDate ? new Date(referrer.subscriptionExpiryDate) : new Date();
+                    // Add 30 days to referrer's expiry
+                    currentRefExpiry.setDate(currentRefExpiry.getDate() + 30);
+                    referrer.subscriptionExpiryDate = currentRefExpiry;
+                    referrer.subscriptionStatus = 'active'; // Reactivate if it was expired
+                    await referrer.save();
+                    
+                    // Mark reward as claimed for this referee
+                    (tenant as any).referralRewardClaimed = true;
+                    console.log(`[Referral Reward] Extended subscription for ${referrer.companyName} by 30 days due to ${tenant.companyName}'s upgrade.`);
+                }
+            }
+
             await tenant.save();
 
             // Send Email

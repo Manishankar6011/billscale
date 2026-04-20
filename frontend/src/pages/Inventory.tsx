@@ -150,10 +150,14 @@ const Inventory = () => {
                 });
                 showToast('Product updated!', 'success');
             } else {
-                await axios.post('/api/inventory', data, {
+                const res = await axios.post('/api/inventory', data, {
                     headers: { Authorization: `Bearer ${user?.token}` }
                 });
-                showToast('Product added successfully!', 'success');
+                if (res.data.message_type === 'updated') {
+                    showToast('Stock successfully merged into existing batch!', 'success');
+                } else {
+                    showToast('New product batch added successfully!', 'success');
+                }
             }
 
             if (isContinuousMode && !editingId) {

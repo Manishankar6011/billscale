@@ -13,6 +13,7 @@ import {
   Settings,
   LogOut,
   UserRound,
+  Gift
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/utils";
@@ -49,6 +50,7 @@ const Layout = () => {
     { name: t("common.salary"), path: "/dashboard/salary", icon: Wallet },
     { name: t("common.ledger"), path: "/dashboard/ledger", icon: FileText },
     { name: t("common.settings"), path: "/dashboard/settings", icon: Settings },
+    { name: "Refer & Earn", path: "/dashboard/referral", icon: Gift },
   ];
 
   if (!user) return null;
@@ -88,11 +90,23 @@ const Layout = () => {
 
         <div className="mt-auto pt-6 border-t border-slate-100">
           <div className="flex items-center gap-3 mb-4 px-2">
-            <div className="w-8 h-8 rounded-full bg-slate-200" />
+            {user.logoUrl ? (
+                <img src={user.logoUrl} alt="Logo" className="w-8 h-8 rounded-lg object-contain bg-slate-50 border border-slate-100" />
+            ) : (
+                <div className="w-8 h-8 rounded-lg bg-primary-50 text-primary-600 flex items-center justify-center font-black text-xs">
+                    {user.companyName?.charAt(0) || user.name.charAt(0)}
+                </div>
+            )}
             <div className="overflow-hidden">
               <p className="text-sm font-semibold text-slate-800 truncate">
                 {user.name}
               </p>
+              {user.referralCode && (
+                <p className="text-[10px] font-bold text-slate-400 -mt-0.5 mb-1 flex items-center gap-1">
+                  <span className="uppercase tracking-tighter">Code:</span>
+                  <span className="text-primary-600 tracking-widest">{user.referralCode}</span>
+                </p>
+              )}
               <div className="flex items-center gap-1.5 overflow-hidden">
                 <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-black uppercase tracking-widest ${
                   user.planType === 'business' ? 'bg-amber-50 text-amber-600 border border-amber-100' : 

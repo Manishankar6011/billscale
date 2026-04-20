@@ -14,11 +14,13 @@ const app = express();
 app.use(compression());
 app.use(
   express.json({
+    limit: "10mb",
     verify: (req: any, res, buf) => {
       req.rawBody = buf.toString();
     },
   }),
 );
+app.use(express.urlencoded({ limit: "10mb", extended: true }));
 app.use(cors());
 app.use(morgan("dev"));
 

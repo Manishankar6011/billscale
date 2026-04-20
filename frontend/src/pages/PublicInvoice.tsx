@@ -53,6 +53,11 @@ const PublicInvoice = () => {
 
     const businessName = sale.tenantId?.companyName || 'BuildMate ERP';
     const ownerName = sale.tenantId?.name;
+    const companyLogo = sale.tenantId?.logoUrl;
+    const companyPhone = sale.tenantId?.phone;
+    const companyAddress = sale.tenantId?.billingAddress;
+    const companyEmail = sale.tenantId?.billingEmail;
+    const signature = sale.tenantId?.signature;
 
     return (
         <div className="min-h-screen bg-slate-50 pt-20 pb-10 px-4 md:px-0">
@@ -64,7 +69,7 @@ const PublicInvoice = () => {
                         <h1 className="font-bold text-slate-800 truncate">{businessName}</h1>
                     </div>
                     <button 
-                        onClick={() => generateInvoice(sale, businessName, ownerName)}
+                        onClick={() => generateInvoice(sale, businessName, ownerName, companyLogo, companyAddress, companyPhone, companyEmail, signature)}
                         className="flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"
                     >
                         <Download size={14} /> Download PDF
@@ -83,6 +88,11 @@ const PublicInvoice = () => {
                                 sale={sale} 
                                 businessName={businessName} 
                                 ownerName={ownerName} 
+                                companyLogo={companyLogo}
+                                companyPhone={companyPhone}
+                                companyAddress={companyAddress}
+                                companyEmail={companyEmail}
+                                signature={signature}
                             />
                         </div>
                     </div>

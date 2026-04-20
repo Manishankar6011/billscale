@@ -40,6 +40,24 @@ const tenantSchema: Schema = new mongoose.Schema({
     billingAddress: { type: String, default: '' },
     signature: { type: String, default: '' },
     aiUsageCount: { type: Number, default: 0 },
+    referralCode: {
+        type: String,
+        unique: true,
+        immutable: true,
+        default: () => Math.random().toString(36).substring(2, 8).toUpperCase()
+    },
+    referredBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Tenant'
+    },
+    referralRewardClaimed: {
+        type: Boolean,
+        default: false
+    },
+    nextInvoiceNumber: {
+        type: Number,
+        default: 1
+    },
     createdAt: {
         type: Date,
         default: Date.now

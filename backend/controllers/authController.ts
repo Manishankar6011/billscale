@@ -14,7 +14,7 @@ const generateToken = (id: string) => {
 };
 
 export const registerContractor = async (req: Request, res: Response, next: NextFunction) => {
-    const { name, email, password, companyName, businessType } = req.body;
+    const { name, email, password, companyName, businessType, referralCode } = req.body;
 
     try {
         const userExists = await User.findOne({ email });
@@ -23,11 +23,20 @@ export const registerContractor = async (req: Request, res: Response, next: Next
             return res.status(400).json({ message: 'User already exists' });
         }
 
+        let referredBy = undefined;
+        if (referralCode) {
+            const referrer = await Tenant.findOne({ referralCode: referralCode.trim().toUpperCase() });
+            if (referrer) {
+                referredBy = referrer._id;
+            }
+        }
+
         const tenant = await Tenant.create({
             companyName,
             email,
             businessType: businessType || 'Retail',
-            planType: 'free'
+            planType: 'free',
+            referredBy
         });
 
         const user = await User.create({
@@ -39,18 +48,11 @@ export const registerContractor = async (req: Request, res: Response, next: Next
         });
 
         if (user) {
+            const populatedUser = await User.findById(user._id).select('-password').populate('tenantId');
+            const token = generateToken(user._id.toString());
             res.status(201).json({
-                _id: user._id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-                tenantId: user.tenantId,
-                companyName: tenant.companyName,
-                subscriptionStatus: (tenant as any).subscriptionStatus,
-                planType: (tenant as any).planType,
-                subscriptionExpiryDate: tenant.subscriptionExpiryDate,
-                aiUsageCount: (tenant as any).aiUsageCount || 0,
-                token: generateToken(user._id.toString()),
+                ...populatedUser?.toObject(),
+                token
             });
         }
     } catch (error: any) {
@@ -68,19 +70,11 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
         const user = await User.findOne({ email });
 
         if (user && (await user.comparePassword(password))) {
-            const tenant = await Tenant.findById(user.tenantId);
+            const populatedUser = await User.findById(user._id).select('-password').populate('tenantId');
+            const token = generateToken(user._id.toString());
             res.json({
-                _id: user._id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-                tenantId: user.tenantId,
-                companyName: tenant?.companyName,
-                subscriptionStatus: (tenant as any)?.subscriptionStatus,
-                planType: (tenant as any)?.planType,
-                subscriptionExpiryDate: (tenant as any)?.subscriptionExpiryDate,
-                aiUsageCount: (tenant as any)?.aiUsageCount || 0,
-                token: generateToken(user._id.toString()),
+                ...populatedUser?.toObject(),
+                token
             });
         } else {
             res.status(401).json({ message: 'Invalid email or password' });
@@ -171,6 +165,18 @@ export const updateProfile = async (req: AuthRequest, res: Response, next: NextF
 
         const updatedUser = await User.findById(req.user?._id).select('-password').populate('tenantId');
         res.json(updatedUser);
+    } catch (error: any) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+export const getReferralStats = async (req: AuthRequest, res: Response) => {
+    try {
+        const referrals = await Tenant.find({ referredBy: req.tenantId })
+            .select('companyName planType createdAt referralRewardClaimed email')
+            .sort({ createdAt: -1 });
+
+        res.json(referrals);
     } catch (error: any) {
         res.status(500).json({ message: error.message });
     }
