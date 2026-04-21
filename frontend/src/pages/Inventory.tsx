@@ -45,9 +45,9 @@ const Inventory = () => {
         batchNumber: string;
     }>({
         name: '',
-        unit: 'bag',
+        unit: 'piece',
         stock: '0',
-        minStockAlert: '10',
+        minStockAlert: '1',
         pricePerUnit: '',
         purchasePrice: '',
         mrp: '',
@@ -75,7 +75,7 @@ const Inventory = () => {
     const closeModal = () => {
         setIsModalOpen(false);
         setEditingId(null);
-        setFormData({ name: '', unit: 'bag', stock: '0', minStockAlert: '10', pricePerUnit: '', purchasePrice: '', mrp: '', barcode: '', batchNumber: '' });
+        setFormData({ name: '', unit: 'piece', stock: '0', minStockAlert: '1', pricePerUnit: '', purchasePrice: '', mrp: '', barcode: '', batchNumber: '' });
     };
 
     const generateBarcode = () => {
@@ -161,12 +161,12 @@ const Inventory = () => {
             }
 
             if (isContinuousMode && !editingId) {
-                setFormData({ name: '', unit: 'bag', stock: '0', minStockAlert: '10', pricePerUnit: '', purchasePrice: '', mrp: '', barcode: '', batchNumber: '' });
+                setFormData({ name: '', unit: 'piece', stock: '0', minStockAlert: '1', pricePerUnit: '', purchasePrice: '', mrp: '', barcode: '', batchNumber: '' });
                 setTimeout(() => nameInputRef.current?.focus(), 100);
             } else {
                 setIsModalOpen(false);
                 setEditingId(null);
-                setFormData({ name: '', unit: 'bag', stock: '0', minStockAlert: '10', pricePerUnit: '', purchasePrice: '', mrp: '', barcode: '', batchNumber: '' });
+                setFormData({ name: '', unit: 'piece', stock: '0', minStockAlert: '1', pricePerUnit: '', purchasePrice: '', mrp: '', barcode: '', batchNumber: '' });
             }
             fetchProducts();
         } catch (err: any) {
@@ -478,7 +478,7 @@ const Inventory = () => {
                                         required
                                         type="number" 
                                         className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold"
-                                        placeholder="10"
+                                        placeholder="1"
                                         value={formData.minStockAlert}
                                         onChange={(e) => setFormData({...formData, minStockAlert: e.target.value})}
                                     />

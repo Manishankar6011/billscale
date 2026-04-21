@@ -211,7 +211,7 @@ export const bulkAddProducts = async (req: AuthRequest, res: Response) => {
                         purchasePrice: numPurchasePrice,
                         pricePerUnit: Number(pricePerUnit) || 0,
                         stock: numStock,
-                        unit: unit || 'pc',
+                        unit: unit || 'piece',
                         barcode: barcode || '',
                         batchNumber: finalBatch,
                         mrp: Number(mrp) || 0,

@@ -18,6 +18,7 @@ interface BulkItem {
     purchasePrice: string | number;
     pricePerUnit: string | number;
     stock: string | number;
+    mrp: string | number;
     stockValue?: string | number | undefined;
     unit: string;
     errors?: Record<string, string> | undefined;
@@ -32,9 +33,9 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const downloadTemplate = () => {
-        const headers = [['Product Name', 'Batch Number', 'Item Code', 'Purchase Price', 'Selling Price', 'Stock Quantity', 'Unit']];
+        const headers = [['Product Name', 'Batch Number', 'Item Code', 'Purchase Price', 'Selling Price', 'MRP', 'Stock Quantity', 'Unit']];
         const sampleData = [
-            ['Example Cement', 'B-101', 'CX-1002', 400, 450, 100, 'bag'],
+            ['Example Cement', 'B-101', 'CX-1002', 400, 450, 500, 100, 'piece'],
             ['Steel Rod 12mm', 'ST-22', 'BAR-12', 60, 75, 500, 'kg']
         ];
         const rows = [...headers, ...sampleData];
@@ -162,9 +163,10 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
                         barcode: String(findValue(['Item Code', 'barcode', 'sku', 'code', 'itemcode']) || ''),
                         purchasePrice: findValue(['Purchase Price', 'purchaseprice', 'costprice', 'cost', 'buy']),
                         pricePerUnit: findValue(['Selling Price', 'sellingprice', 'price', 'rate', 'sell']),
+                        mrp: findValue(['MRP', 'mrp', 'markedprice', 'maxprice']),
                         stock: String(findValue(['Stock Quantity', 'stock', 'qty', 'quantity', 'initialstock']) || '0'),
                         stockValue: String(findValue(['Stock Value', 'stock_value', 'total_value', 'value']) || ''),
-                        unit: String(findValue(['Unit', 'unit', 'uom']) || 'pc').toLowerCase(),
+                        unit: String(findValue(['Unit', 'unit', 'uom']) || 'piece').toLowerCase(),
                     };
                 }).filter((item): item is BulkItem => item !== null);
 
@@ -232,8 +234,9 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
             barcode: '',
             purchasePrice: 0,
             pricePerUnit: 0,
+            mrp: 0,
             stock: 0,
-            unit: 'pc'
+            unit: 'piece'
         };
         setData(validateData([...data, newItem]));
     };
@@ -255,6 +258,7 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
             ...item,
             purchasePrice: Number(item.purchasePrice) || 0,
             pricePerUnit: Number(item.pricePerUnit) || 0,
+            mrp: Number(item.mrp) || 0,
             stock: parseFloat(String(item.stock).replace(/[^\d.]/g, '')) || 0 // Extract numeric part for DB
         }));
 
@@ -350,6 +354,7 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
                                             <th className="px-4 py-4 text-left">Item Code</th>
                                             <th className="px-4 py-4 text-left">PurchasePrice</th>
                                             <th className="px-4 py-4 text-left">SellingPrice*</th>
+                                            <th className="px-4 py-4 text-left">MRP</th>
                                             <th className="px-4 py-4 text-left">Stock</th>
                                             <th className="px-4 py-4 text-left">Unit*</th>
                                             <th className="px-4 py-4 text-left text-blue-600">Total Cost</th>
@@ -413,6 +418,16 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
                                                             value={item.pricePerUnit}
                                                             onChange={e => handleCellChange(idx, 'pricePerUnit', e.target.value)}
                                                             onKeyDown={e => handleKeyDown(e, idx, 'pricePerUnit')}
+                                                        />
+                                                    </td>
+                                                    <td className="p-1">
+                                                        <input 
+                                                            id={`cell-${idx}-mrp`}
+                                                            type="number"
+                                                            className={`w-full p-2.5 bg-transparent border-0 ring-1 focus:ring-2 rounded-xl text-slate-500 transition-all ${item.errors?.mrp ? 'bg-rose-50/50 ring-rose-400/50 focus:ring-rose-500' : 'ring-transparent focus:ring-primary-500'}`}
+                                                            value={item.mrp}
+                                                            onChange={e => handleCellChange(idx, 'mrp', e.target.value)}
+                                                            onKeyDown={e => handleKeyDown(e, idx, 'mrp')}
                                                         />
                                                     </td>
                                                     <td className="p-1">

@@ -28,7 +28,7 @@ const productSchema: Schema = new mongoose.Schema({
     },
     minStockAlert: {
         type: Number,
-        default: 10
+        default: 1
     },
     pricePerUnit: {
         type: Number,

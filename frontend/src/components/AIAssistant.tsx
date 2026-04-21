@@ -81,7 +81,7 @@ const AIAssistant = () => {
     };
 
     return (
-        <div className="fixed bottom-6 right-6 z-[100] font-sans">
+        <div className="fixed bottom-24 lg:bottom-10 right-6 z-[100] font-sans">
             {/* Chat Bubble Button */}
             <button
                 onClick={() => setIsOpen(!isOpen)}
