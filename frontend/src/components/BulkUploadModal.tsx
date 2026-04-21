@@ -109,30 +109,30 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
 
                 // 1. Find the real header row (skip company metadata/logos/summary lines)
                 let headerRowIndex = -1;
-                const headerKeywords = ['name', 'product', 'item', 'price', 'rate', 'stock', 'quantity', 'code', 'unit', 'batch'];
+                let maxMatches = 0;
+                const headerKeywords = ['name', 'product', 'item', 'price', 'rate', 'stock', 'quantity', 'code', 'unit', 'batch', 'mrp', 'cost', 'value'];
                 
-                // Scan first 25 rows to find headers with confidence
+                // Scan first 25 rows and pick the one with most keyword matches
                 for (let i = 0; i < Math.min(rows.length, 25); i++) {
                     const row = rows[i];
                     if (!Array.isArray(row)) continue;
                     
-                    // Calculate how many keywords are in this row
                     const matchCount = row.filter(cell => 
                         typeof cell === 'string' && 
-                        headerKeywords.some(kw => cell.toLowerCase().replace(/[\s_.]/g, '').includes(kw))
+                        headerKeywords.some(kw => cell.toLowerCase().replace(/[^a-z0-9]/g, '').includes(kw))
                     ).length;
                     
-                    // Confidence Threshold: Row must have at least 2 header keywords
-                    if (matchCount >= 2) {
+                    if (matchCount > maxMatches && matchCount >= 2) {
+                        maxMatches = matchCount;
                         headerRowIndex = i;
-                        console.log(`Header Detection: Found at row ${i} with ${matchCount} matches. Row data:`, row);
-                        break;
                     }
                 }
 
                 if (headerRowIndex === -1) {
                     console.warn('Could not detect header row clearly, falling back to first row');
                     headerRowIndex = 0;
+                } else {
+                    console.log(`Header Detection: Selected row ${headerRowIndex} with ${maxMatches} matches.`);
                 }
 
                 const headers = Array.from(rows[headerRowIndex] || []).map(h => String(h || '').trim());
@@ -143,10 +143,15 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
                     if (!Array.isArray(rowArr) || rowArr.length === 0) return null;
 
                     const findValue = (keys: string[]) => {
+                        const normalizedKeys = keys.map(k => k.toLowerCase().replace(/[^a-z0-9]/g, ''));
                         const colIndex = headers.findIndex(h => {
                             if (!h || typeof h !== 'string') return false;
-                            const normalizedH = h.toLowerCase().replace(/[\s_.]/g, '');
-                            return keys.some(k => k.trim().toLowerCase().replace(/[\s_.]/g, '') === normalizedH);
+                            const normalizedH = h.toLowerCase().replace(/[^a-z0-9]/g, '');
+                            return normalizedKeys.some(nk => 
+                                normalizedH === nk || 
+                                normalizedH.includes(nk) || 
+                                nk.includes(normalizedH)
+                            );
                         });
                         const rawVal = colIndex !== -1 ? rowArr[colIndex] : null;
                         return (rawVal === null || rawVal === undefined) ? '' : rawVal;

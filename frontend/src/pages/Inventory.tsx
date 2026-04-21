@@ -11,6 +11,11 @@ import Skeleton from '../components/Skeleton';
 import { useToast } from '../context/ToastContext';
 import BarcodeLabel from '../components/BarcodeLabel';
 import BulkUploadModal from '../components/BulkUploadModal';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
+import { ChevronDown, Download, FileText, Table as TableIcon } from 'lucide-react';
+import { format } from 'date-fns';
 
 const UNIT_GROUPS = {
     weight: ['kg', 'gm', 'ton', 'bag', 'bundle', 'pack'],
@@ -58,6 +63,7 @@ const Inventory = () => {
     const [showLeaveWarning, setShowLeaveWarning] = useState(false);
     const [isContinuousMode, setIsContinuousMode] = useState(false);
     const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+    const [isExportOpen, setIsExportOpen] = useState(false);
     const [printLabelData, setPrintLabelData] = useState<Product | null>(null);
     const barcodePreviewRef = useRef<SVGSVGElement>(null);
     const nameInputRef = useRef<HTMLInputElement>(null);
@@ -187,6 +193,155 @@ const Inventory = () => {
         showToast(`Barcode ${code} scanned!`, 'success');
     }, [showToast]);
 
+    // Summary Calculations
+    const totalItems = products.length;
+    const totalStockValue = products.reduce((sum, p) => sum + (Number(p.stock) * Number(p.pricePerUnit)), 0);
+
+    const exportToCSV = () => {
+        const headers = ["Product Name", "Item Code", "MRP", "Purchase Price", "Selling Price", "Stock Qty", "Stock Value"];
+        
+        const escapeCSV = (val: any) => {
+            const str = String(val === null || val === undefined ? '' : val);
+            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                return `"${str.replace(/"/g, '""')}"`;
+            }
+            return str;
+        };
+
+        const rows = products.map(p => [
+            p.name,
+            p.barcode || '',
+            p.mrp || 0,
+            p.purchasePrice,
+            p.pricePerUnit,
+            p.stock,
+            (Number(p.stock) * Number(p.pricePerUnit)).toFixed(2)
+        ]);
+        
+        const csvContent = [
+            `Company: ${escapeCSV(user?.companyName || 'BuildMate ERP')}`,
+            `Date: ${format(new Date(), 'dd-MMM-yyyy')}`,
+            `Total Items: ${totalItems}`,
+            `Total Stock Value: Rs. ${totalStockValue.toLocaleString()}`,
+            "",
+            headers.map(escapeCSV).join(","),
+            ...rows.map(r => r.map(escapeCSV).join(","))
+        ].join("\n");
+
+        // Add BOM for Excel UTF-8 compatibility
+        const blob = new Blob(["\uFEFF", csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Inventory_Report_${format(new Date(), 'yyyy-MM-dd')}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setIsExportOpen(false);
+    };
+
+    const exportToExcel = () => {
+        const wb = XLSX.utils.book_new();
+        
+        // 1. Create worksheet starting with Summary Info
+        const ws = XLSX.utils.aoa_to_sheet([
+            ["Company:", user?.companyName || 'BuildMate ERP'],
+            ["Report Date:", format(new Date(), 'dd-MMM-yyyy HH:mm')],
+            ["Total Items:", totalItems],
+            ["Total Stock Value:", `Rs. ${totalStockValue.toLocaleString()}`],
+            [] // Empty spacing row
+        ]);
+
+        // 2. Prepare Table Data
+        const tableData = products.map(p => ({
+            "Product Name": p.name,
+            "Item Code": p.barcode || '',
+            "MRP": p.mrp || 0,
+            "Purchase Price": p.purchasePrice,
+            "Selling Price": p.pricePerUnit,
+            "Stock Qty": p.stock,
+            "Stock Value": Number((Number(p.stock) * Number(p.pricePerUnit)).toFixed(2))
+        }));
+
+        // 3. Add Table JSON starting from A6
+        XLSX.utils.sheet_add_json(ws, tableData, { origin: "A6" });
+
+        // 4. Adjust Column Widths
+        const wscols = [
+            { wch: 35 }, // Product Name
+            { wch: 20 }, // Item Code
+            { wch: 10 }, // MRP
+            { wch: 15 }, // Purchase Price
+            { wch: 15 }, // Selling Price
+            { wch: 12 }, // Stock Qty
+            { wch: 18 }  // Stock Value
+        ];
+        ws['!cols'] = wscols;
+
+        XLSX.utils.book_append_sheet(wb, ws, "Inventory");
+        XLSX.writeFile(wb, `Inventory_Report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+        setIsExportOpen(false);
+    };
+
+    const exportToPDF = () => {
+        const doc = new jsPDF();
+        
+        // Header
+        doc.setFontSize(22);
+        doc.setTextColor(30, 41, 59); // slate-800
+        doc.text(user?.companyName || 'BuildMate ERP', 14, 20);
+        
+        doc.setFontSize(10);
+        doc.setTextColor(100, 116, 139); // slate-400
+        doc.text(`Inventory Status Report | Generated: ${format(new Date(), 'dd-MMM-yyyy HH:mm')}`, 14, 28);
+        
+        // Summary Cards
+        doc.setFillColor(248, 250, 252); // slate-50
+        doc.setDrawColor(241, 245, 249); // slate-100
+        doc.roundedRect(14, 35, 80, 25, 3, 3, 'FD');
+        doc.roundedRect(105, 35, 91, 25, 3, 3, 'FD');
+        
+        doc.setFontSize(8);
+        doc.setTextColor(100, 116, 139);
+        doc.text('TOTAL ITEMS', 20, 42);
+        doc.setFontSize(14);
+        doc.setTextColor(30, 41, 59);
+        doc.text(totalItems.toString(), 20, 52);
+        
+        doc.setFontSize(8);
+        doc.setTextColor(100, 116, 139);
+        doc.text('TOTAL STOCK VALUE', 111, 42);
+        doc.setFontSize(14);
+        doc.setTextColor(5, 150, 105); // emerald-600
+        doc.text(`Rs. ${totalStockValue.toLocaleString()}`, 111, 52);
+
+        // Table
+        autoTable(doc, {
+            startY: 70,
+            head: [["Product Name", "Item Code", "MRP", "Cost", "Price", "Qty", "Value"]],
+            body: products.map(p => [
+                p.name,
+                p.barcode || '-',
+                (p.mrp || 0).toFixed(2),
+                p.purchasePrice.toFixed(2),
+                p.pricePerUnit.toFixed(2),
+                p.stock.toString(),
+                (Number(p.stock) * Number(p.pricePerUnit)).toFixed(2)
+            ]),
+            theme: 'striped',
+            headStyles: { fillColor: [59, 130, 246], fontSize: 9, fontStyle: 'bold' }, 
+            styles: { fontSize: 8, cellPadding: 3 },
+            columnStyles: {
+                0: { cellWidth: 'auto' }, 
+                6: { halign: 'right', fontStyle: 'bold' } 
+            }
+        });
+
+        doc.save(`Inventory_Report_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+        setIsExportOpen(false);
+    };
+
     if (loading) return <Skeleton count={5} />;
 
     return (
@@ -215,6 +370,30 @@ const Inventory = () => {
                     <p className="text-slate-500">{t('inventory.subtitle')}</p>
                 </div>
                 <div className="flex items-center gap-3">
+                    {/* Export Dropdown */}
+                    <div className="relative">
+                        <button 
+                            onClick={() => setIsExportOpen(!isExportOpen)}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+                        >
+                            <Download size={18} /> Export <ChevronDown size={14} />
+                        </button>
+                        
+                        {isExportOpen && (
+                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2">
+                                <button onClick={exportToPDF} className="w-full px-4 py-3 text-left text-sm font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-3">
+                                    <FileText size={16} className="text-rose-500" /> Download PDF
+                                </button>
+                                <button onClick={exportToExcel} className="w-full px-4 py-3 text-left text-sm font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-3">
+                                    <TableIcon size={16} className="text-emerald-500" /> Download Excel
+                                </button>
+                                <button onClick={exportToCSV} className="w-full px-4 py-3 text-left text-sm font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-3">
+                                    <FileSpreadsheet size={16} className="text-blue-500" /> Download CSV
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
                     <button 
                         onClick={() => {
                             if (user?.planType === 'free' || user?.planType === 'basic') {
@@ -235,6 +414,28 @@ const Inventory = () => {
                         <Plus size={20} />
                        {t('inventory.add_product')}
                     </button>
+                </div>
+            </div>
+
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
+                    <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
+                        <Box size={28} />
+                    </div>
+                    <div>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Items</p>
+                        <h4 className="text-2xl font-black text-slate-800">{totalItems} <span className="text-sm font-medium text-slate-400">Products</span></h4>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
+                    <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
+                        <div className="text-xl font-black italic">₹</div>
+                    </div>
+                    <div>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Stock Value</p>
+                        <h4 className="text-2xl font-black text-emerald-600">₹{totalStockValue.toLocaleString()}</h4>
+                    </div>
                 </div>
             </div>
 
