@@ -58,11 +58,13 @@ export const addProduct = async (req: AuthRequest, res: Response) => {
             }
         }
 
-        // 2. Auto-merge check: If Name + Price match ANY existing batch, merge stock there
+        // 2. Auto-merge check: If Name + All Prices match ANY existing batch, merge stock there
         const priceMatch = await Product.findOne({
             tenantId: req.tenantId,
             name: { $regex: new RegExp(`^${escapedName}$`, 'i') },
-            purchasePrice: numPurchasePrice
+            purchasePrice: numPurchasePrice,
+            pricePerUnit: Number(req.body.pricePerUnit),
+            mrp: Number(req.body.mrp)
         });
 
         if (priceMatch) {
@@ -129,7 +131,8 @@ export const bulkAddProducts = async (req: AuthRequest, res: Response) => {
             const normalizedBatch = (p.batchNumber || 'Default').trim().toLowerCase();
             
             batchMap.set(`${normalizedName}_${normalizedBatch}`, p);
-            priceMap.set(`${normalizedName}_${p.purchasePrice}`, p);
+            // Use a composite key for price matching: name_purchasePrice_sellingPrice_mrp
+            priceMap.set(`${normalizedName}_${p.purchasePrice}_${p.pricePerUnit}_${p.mrp}`, p);
             
             nameCountMap.set(normalizedName, (nameCountMap.get(normalizedName) || 0) + 1);
         });
@@ -167,9 +170,10 @@ export const bulkAddProducts = async (req: AuthRequest, res: Response) => {
                     }
                 }
 
-                // Step B: Check if Name + Price matches ANY existing batch (Auto-merge)
+                // Step B: Check if Name + All Prices match ANY existing batch (Auto-merge)
                 if (!targetProduct) {
-                    const existingPriceMode = priceMap.get(`${normalizedName}_${numPurchasePrice}`);
+                    const priceKey = `${normalizedName}_${numPurchasePrice}_${Number(pricePerUnit) || 0}_${Number(mrp) || 0}`;
+                    const existingPriceMode = priceMap.get(priceKey);
                     if (existingPriceMode) {
                         targetProduct = existingPriceMode;
                     }
@@ -228,7 +232,8 @@ export const bulkAddProducts = async (req: AuthRequest, res: Response) => {
                     // Update local maps for intra-batch merge handling within the SAME bulk array
                     const normalizedFinalBatch = finalBatch.toLowerCase();
                     batchMap.set(`${normalizedName}_${normalizedFinalBatch}`, { ...newDoc, _id: `temp_${stats.created}` });
-                    priceMap.set(`${normalizedName}_${numPurchasePrice}`, { ...newDoc, _id: `temp_${stats.created}` });
+                    const newPriceKey = `${normalizedName}_${numPurchasePrice}_${Number(pricePerUnit) || 0}_${Number(mrp) || 0}`;
+                    priceMap.set(newPriceKey, { ...newDoc, _id: `temp_${stats.created}` });
                     nameCountMap.set(normalizedName, batchCount + 1);
                     
                     stats.created++;
