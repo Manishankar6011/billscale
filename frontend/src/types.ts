@@ -87,7 +87,7 @@ export interface Sale {
     balanceDue: number;
     roundOffAmount: number;
     paymentMode: 'cash' | 'credit';
-    status: 'paid' | 'pending';
+    status: 'paid' | 'pending' | 'partial';
     additionalItems?: { name: string, price: number }[];
     invoiceNumber: string;
     date: string;
@@ -96,9 +96,11 @@ export interface Sale {
 export interface Purchase {
     _id?: string;
     supplierName: string;
-    productId: Product;
+    productId: Product | string;
     quantity: number;
     purchasePrice: number;
+    sellingPrice?: number;
+    mrp?: number;
     totalAmount: number;
     paymentStatus: 'paid' | 'pending';
     date: string;

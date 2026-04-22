@@ -1,21 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Plus, Users, Search, Trash2, Edit2, Phone, Briefcase } from 'lucide-react';
+import { Plus, Search, Trash2, Edit2, Phone, Briefcase, Loader2 } from 'lucide-react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import type { Staff } from '../types';
 import { useAuth } from '../context/AuthContext';
-import Skeleton from '../components/Skeleton';
+import { TableSkeleton } from '../components/Skeleton';
 import { useToast } from '../context/ToastContext';
-import { format } from 'date-fns';
 
 const StaffPage = () => {
     const { t } = useTranslation();
     const { user } = useAuth();
     const { showToast } = useToast();
     const navigate = useNavigate();
-    const [staffList, setStaffList] = useState<Staff[]>([]);
-    const [loading, setLoading] = useState(true);
+    const queryClient = useQueryClient();
+
+    const { data: staffList = [], isLoading: loading } = useQuery<Staff[]>({
+        queryKey: ['staff'],
+        queryFn: async () => {
+            const res = await axios.get('/api/staff', { 
+                headers: { Authorization: `Bearer ${user?.token}` } 
+            });
+            return res.data;
+        },
+        enabled: !!user?.token
+    });
+
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -30,22 +41,45 @@ const StaffPage = () => {
         status: 'active'
     });
 
-    useEffect(() => {
-        fetchData();
-    }, []);
-
-    const fetchData = async () => {
-        try {
-            const res = await axios.get('/api/staff', { 
-                headers: { Authorization: `Bearer ${user?.token}` } 
-            });
-            setStaffList(res.data);
-        } catch (err) {
-            showToast('Error loading staff data', 'error');
-        } finally {
-            setLoading(false);
+    // Mutations
+    const saveMutation = useMutation({
+        mutationFn: async (data: any) => {
+            if (editingId) {
+                return axios.put(`/api/staff/${editingId}`, data, {
+                    headers: { Authorization: `Bearer ${user?.token}` }
+                });
+            } else {
+                return axios.post('/api/staff', data, {
+                    headers: { Authorization: `Bearer ${user?.token}` }
+                });
+            }
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['staff'] });
+            showToast(editingId ? t('staff.update_staff') : t('staff.add_staff'), 'success');
+            setIsModalOpen(false);
+            setEditingId(null);
+            setFormData({ name: '', phone: '', role: 'Worker', salaryType: 'daily', salaryAmount: '', status: 'active' });
+        },
+        onError: (err: any) => {
+            showToast(err.response?.data?.message || 'Error saving staff member', 'error');
         }
-    };
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: async (id: string) => {
+            return axios.delete(`/api/staff/${id}`, {
+                headers: { Authorization: `Bearer ${user?.token}` }
+            });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['staff'] });
+            showToast('Staff member deleted successfully', 'success');
+        },
+        onError: () => {
+            showToast('Error deleting staff', 'error');
+        }
+    });
 
     const handleEdit = (staff: Staff) => {
         setEditingId(staff._id!);
@@ -61,46 +95,13 @@ const StaffPage = () => {
     };
 
     const handleDelete = async (id: string) => {
-        if (!window.confirm('Are you sure you want to delete this staff member?')) return;
-        try {
-            await axios.delete(`/api/staff/${id}`, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
-            showToast('Staff member deleted successfully', 'success');
-            fetchData();
-        } catch (err) {
-            showToast('Error deleting staff', 'error');
-        }
+        if (!window.confirm(t('common.confirm_delete_staff'))) return;
+        deleteMutation.mutate(id);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        try {
-            if (editingId) {
-                await axios.put(`/api/staff/${editingId}`, formData, {
-                    headers: { Authorization: `Bearer ${user?.token}` }
-                });
-                showToast('Staff mapped updated successfully!', 'success');
-            } else {
-                await axios.post('/api/staff', formData, {
-                    headers: { Authorization: `Bearer ${user?.token}` }
-                });
-                showToast('Staff member added successfully!', 'success');
-            }
-            setIsModalOpen(false);
-            setEditingId(null);
-            fetchData();
-            setFormData({
-                name: '',
-                phone: '',
-                role: 'Worker',
-                salaryType: 'daily',
-                salaryAmount: '',
-                status: 'active'
-            });
-        } catch (err: any) {
-            showToast(err.response?.data?.message || 'Error saving staff member', 'error');
-        }
+        saveMutation.mutate(formData);
     };
 
     const filteredStaff = staffList.filter(staff => 
@@ -109,14 +110,14 @@ const StaffPage = () => {
         staff.phone.includes(searchTerm)
     );
 
-    if (loading) return <Skeleton count={5} />;
+    if (loading) return <TableSkeleton rows={10} />;
 
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-800">Staff Management</h1>
-                    <p className="text-slate-500">Manage your workforce, roles, and compensation structure</p>
+                    <h1 className="text-2xl font-bold text-slate-800">{t('staff.management')}</h1>
+                    <p className="text-slate-500">{t('staff.subtitle')}</p>
                 </div>
                 <button 
                     onClick={() => {
@@ -154,7 +155,7 @@ const StaffPage = () => {
                     className="btn-primary flex items-center gap-2"
                 >
                     <Plus size={20} />
-                    Add Staff Member
+                    {t('staff.add_staff')}
                 </button>
             </div>
 
@@ -163,7 +164,7 @@ const StaffPage = () => {
                 <Search className="text-slate-400 ml-3 mr-2" size={20} />
                 <input 
                     type="text" 
-                    placeholder="Search by name, role, or phone..." 
+                    placeholder={t('staff.search_placeholder')} 
                     className="w-full bg-transparent border-none py-2 pl-2 pr-4 focus:ring-0 text-slate-800 font-medium placeholder:text-slate-400"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
@@ -175,12 +176,12 @@ const StaffPage = () => {
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-slate-50/50">
-                                <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">Employee</th>
-                                <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">Contact</th>
-                                <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">Role</th>
-                                <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">Salary Details</th>
-                                <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">Status</th>
-                                <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest text-right">Actions</th>
+                                <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">{t('staff.employee')}</th>
+                                <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">{t('staff.contact')}</th>
+                                <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">{t('common.role')}</th>
+                                <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">{t('staff.salary_details')}</th>
+                                <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">{t('dashboard.status')}</th>
+                                <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest text-right">{t('common.actions')}</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
@@ -214,7 +215,7 @@ const StaffPage = () => {
                                                 ₹{staff.salaryAmount.toLocaleString()}
                                             </span>
                                             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                                                per {staff.salaryType === 'monthly' ? 'month' : 'day'}
+                                                {staff.salaryType === 'monthly' ? t('staff.per_month') : t('staff.per_day')}
                                             </span>
                                         </div>
                                     </td>
@@ -248,7 +249,7 @@ const StaffPage = () => {
                     
                     {filteredStaff.length === 0 && (
                         <div className="p-8 text-center text-slate-500">
-                            No staff members found matching your search.
+                            {t('dashboard.no_transactions')}
                         </div>
                     )}
                 </div>
@@ -270,12 +271,12 @@ const StaffPage = () => {
 
                         <form onSubmit={handleSubmit} className="space-y-5">
                             <div>
-                                <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Full Name</label>
+                                <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">{t('staff.full_name')}</label>
                                 <input 
                                     required
                                     type="text" 
                                     className="w-full bg-slate-50 border-none rounded-2xl p-4 text-slate-800 focus:ring-2 transition-all font-bold placeholder:font-medium"
-                                    placeholder="Enter full name..."
+                                    placeholder={t('common.name')}
                                     value={formData.name}
                                     onChange={(e) => setFormData({...formData, name: e.target.value})}
                                 />
@@ -283,7 +284,7 @@ const StaffPage = () => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Phone Number</label>
+                                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">{t('staff.contact')}</label>
                                     <input 
                                         required
                                         type="tel" 
@@ -294,7 +295,7 @@ const StaffPage = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Role/Position</label>
+                                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">{t('staff.role_position')}</label>
                                     <input 
                                         required
                                         type="text" 
@@ -308,7 +309,7 @@ const StaffPage = () => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Salary Amount</label>
+                                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">{t('staff.salary_details')}</label>
                                     <input 
                                         required
                                         type="number" 
@@ -319,20 +320,20 @@ const StaffPage = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Salary Type</label>
+                                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">{t('staff.salary_type')}</label>
                                     <select 
                                         className="w-full bg-slate-50 border-none rounded-2xl p-4 text-slate-800 focus:ring-2 transition-all font-bold"
                                         value={formData.salaryType}
                                         onChange={(e) => setFormData({...formData, salaryType: e.target.value})}
                                     >
-                                        <option value="daily">Daily Wage</option>
-                                        <option value="monthly">Monthly Fixed</option>
+                                        <option value="daily">{t('staff.daily_wage')}</option>
+                                        <option value="monthly">{t('staff.monthly_fixed')}</option>
                                     </select>
                                 </div>
                             </div>
                             
                             <div>
-                                <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Status</label>
+                                <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">{t('dashboard.status')}</label>
                                 <select 
                                     className="w-full bg-slate-50 border-none rounded-2xl p-4 text-slate-800 focus:ring-2 transition-all font-bold"
                                     value={formData.status}
@@ -343,8 +344,8 @@ const StaffPage = () => {
                                 </select>
                             </div>
 
-                            <button type="submit" className="btn-primary w-full py-5 text-lg shadow-xl shadow-indigo-100 flex items-center justify-center gap-2 font-bold bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-200">
-                                {editingId ? 'Update Staff Member' : 'Add Staff Member'}
+                            <button type="submit" disabled={saveMutation.isPending} className="btn-primary w-full py-5 text-lg shadow-xl shadow-indigo-100 flex items-center justify-center gap-2 font-bold bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-200">
+                                {saveMutation.isPending ? <Loader2 className="animate-spin" /> : (editingId ? t('staff.update_staff') : t('staff.add_staff'))}
                             </button>
                         </form>
                     </div>

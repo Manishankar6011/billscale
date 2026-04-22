@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Gift, Copy, Check, Users, Sparkles, TrendingUp, Calendar } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useTranslation } from 'react-i18next';
 
 interface Referral {
     _id: string;
@@ -13,6 +14,7 @@ interface Referral {
 }
 
 const ReferAndEarn: React.FC = () => {
+    const { t } = useTranslation();
     const { user } = useAuth();
     const { showToast } = useToast();
     const [referrals, setReferrals] = useState<Referral[]>([]);
@@ -36,7 +38,7 @@ const ReferAndEarn: React.FC = () => {
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text);
         setCopied(true);
-        showToast('Referral link copied!', 'success');
+        showToast(t('referral.copied'), 'success');
         setTimeout(() => setCopied(false), 2000);
     };
 
@@ -49,19 +51,19 @@ const ReferAndEarn: React.FC = () => {
                 <div className="relative z-10 max-w-2xl">
                     <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-md rounded-full text-xs font-black uppercase tracking-widest mb-6">
                         <Sparkles size={14} className="text-amber-300" />
-                        Exclusive Invitation Program
+                        {t('referral.title')}
                     </div>
                     <h1 className="text-5xl font-black tracking-tighter mb-4 leading-none">
-                        Get 1 Month <span className="text-amber-300">Free</span> for every Referral
+                        {t('referral.title')}
                     </h1>
                     <p className="text-lg text-primary-50 font-medium mb-8 leading-relaxed">
-                        Refer a business friend to BuildMate ERP. When they upgrade to any paid plan, we'll extend your subscription by **30 days** automatically.
+                        {t('referral.subtitle')}
                     </p>
                     
                     <div className="flex flex-col sm:flex-row gap-4">
                         <div className="flex-1 bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-4 flex items-center justify-between">
                             <div className="overflow-hidden">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-primary-200 mb-1">Your Unique Code</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-primary-200 mb-1">{t('referral.share_link')}</p>
                                 <p className="text-2xl font-black tracking-widest">{user?.referralCode}</p>
                             </div>
                             <button 
@@ -76,7 +78,7 @@ const ReferAndEarn: React.FC = () => {
                             className="px-8 py-4 bg-amber-400 text-amber-900 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-amber-300 transition-all shadow-xl shadow-amber-900/20 flex items-center gap-2 active:scale-95"
                         >
                             <Gift size={18} />
-                            Share Link
+                            {t('referral.copy_link')}
                         </button>
                     </div>
                 </div>
@@ -91,26 +93,26 @@ const ReferAndEarn: React.FC = () => {
                 <div className="lg:col-span-2 space-y-6">
                     <h2 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-3 uppercase">
                         <TrendingUp className="text-primary-600" />
-                        Referral History
+                        {t('referral.referral_history')}
                     </h2>
                     
                     <div className="bg-white rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-100/50 overflow-hidden">
                         {loading ? (
-                            <div className="p-20 text-center text-slate-400">Loading your stats...</div>
+                            <div className="p-20 text-center text-slate-400">{t('common.loading')}</div>
                         ) : referrals.length === 0 ? (
                             <div className="p-20 text-center space-y-4">
                                 <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto text-slate-300">
                                     <Users size={40} />
                                 </div>
-                                <p className="text-slate-500 font-bold tracking-tight">No referrals yet. Start sharing to earn rewards!</p>
+                                <p className="text-slate-500 font-bold tracking-tight">{t('referral.no_referrals')}</p>
                             </div>
                         ) : (
                             <table className="w-full border-collapse">
                                 <thead className="bg-slate-50/50 border-b border-slate-100">
                                     <tr className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                        <th className="px-8 py-6 text-left font-black">Business Name</th>
-                                        <th className="px-6 py-6 text-left">Joined On</th>
-                                        <th className="px-6 py-6 text-left">Status</th>
+                                        <th className="px-8 py-6 text-left font-black">{t('billing.customer')}</th>
+                                        <th className="px-6 py-6 text-left">{t('common.date')}</th>
+                                        <th className="px-6 py-6 text-left">{t('dashboard.status')}</th>
                                         <th className="px-8 py-6 text-right font-black">Reward</th>
                                     </tr>
                                 </thead>
@@ -120,7 +122,7 @@ const ReferAndEarn: React.FC = () => {
                                             <td className="px-8 py-5">
                                                 <p className="font-bold text-slate-700">{ref.companyName}</p>
                                                 <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
-                                                    {ref.planType === 'free' ? 'Free User' : `${ref.planType} Plan`}
+                                                    {ref.planType === 'free' ? t('referral.free_user') : t('referral.plan_type', { type: ref.planType.toUpperCase() })}
                                                 </p>
                                             </td>
                                             <td className="px-6 py-5 text-xs text-slate-500 font-medium">
@@ -129,19 +131,19 @@ const ReferAndEarn: React.FC = () => {
                                             <td className="px-6 py-5">
                                                 {ref.referralRewardClaimed ? (
                                                     <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-600 rounded-full text-[10px] font-black uppercase tracking-widest">
-                                                        <Check size={10} /> Active
+                                                        <Check size={10} /> {t('billing.paid')}
                                                     </span>
                                                 ) : (
                                                     <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-400 rounded-full text-[10px] font-black uppercase tracking-widest">
-                                                        Pending
+                                                        {t('billing.pending')}
                                                     </span>
                                                 )}
                                             </td>
                                             <td className="px-8 py-5 text-right font-black text-xs">
                                                 {ref.referralRewardClaimed ? (
-                                                    <span className="text-emerald-500">+30 Days Added</span>
+                                                    <span className="text-emerald-500">{t('referral.reward_added')}</span>
                                                 ) : (
-                                                    <span className="text-slate-300">Wait for Upgrade</span>
+                                                    <span className="text-slate-300">{t('referral.wait_upgrade')}</span>
                                                 )}
                                             </td>
                                         </tr>
@@ -154,27 +156,27 @@ const ReferAndEarn: React.FC = () => {
 
                 {/* How it Works Section */}
                 <div className="space-y-6">
-                    <h2 className="text-2xl font-black text-slate-800 tracking-tight uppercase">How it works</h2>
+                    <h2 className="text-2xl font-black text-slate-800 tracking-tight uppercase">{t('referral.how_it_works')}</h2>
                     <div className="bg-white rounded-[2rem] border border-slate-100 shadow-xl p-8 space-y-8">
                         <div className="flex gap-4">
                             <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex-shrink-0 flex items-center justify-center font-black">1</div>
                             <div>
                                 <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-1">Share Code</h3>
-                                <p className="text-xs text-slate-500 leading-relaxed font-medium">Send your link or unique referral code to other business owners you know.</p>
+                                <p className="text-xs text-slate-500 leading-relaxed font-medium">{t('referral.step1')}</p>
                             </div>
                         </div>
                         <div className="flex gap-4">
                             <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex-shrink-0 flex items-center justify-center font-black">2</div>
                             <div>
                                 <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-1">They Upgrade</h3>
-                                <p className="text-xs text-slate-500 leading-relaxed font-medium">Once they signup and upgrade to any paid plan (Basic or Pro), the reward triggers.</p>
+                                <p className="text-xs text-slate-500 leading-relaxed font-medium">{t('referral.step2')}</p>
                             </div>
                         </div>
                         <div className="flex gap-4">
                             <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex-shrink-0 flex items-center justify-center font-black">3</div>
                             <div>
                                 <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-1">Get 30 Days Free</h3>
-                                <p className="text-xs text-slate-500 leading-relaxed font-medium">We'll instantly add 30 days to your current subscription. No limits on referrals!</p>
+                                <p className="text-xs text-slate-500 leading-relaxed font-medium">{t('referral.step3')}</p>
                             </div>
                         </div>
 
@@ -185,7 +187,7 @@ const ReferAndEarn: React.FC = () => {
                                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Pro Tip</span>
                                 </div>
                                 <p className="text-xs text-slate-600 font-medium leading-relaxed italic">
-                                    "Refer 12 businesses who upgrade, and you essentially get the entire year of BuildMate ERP for free!"
+                                    "{t('referral.referral_bonus_msg')}"
                                 </p>
                             </div>
                         </div>

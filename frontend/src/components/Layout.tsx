@@ -1,4 +1,3 @@
-import React from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -73,6 +72,7 @@ const Layout = () => {
             <NavLink
               key={item.path}
               to={item.path}
+              end={item.path === "/dashboard"}
               className={({ isActive }) =>
                 cn(
                   "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all",
@@ -141,6 +141,7 @@ const Layout = () => {
           <NavLink
             key={item.path}
             to={item.path}
+            end={item.path === "/dashboard"}
             className={({ isActive }) =>
               cn(
                 "flex flex-col items-center gap-1 min-w-[64px] py-1 transition-all",
