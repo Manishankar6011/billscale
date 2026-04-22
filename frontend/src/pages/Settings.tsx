@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 import { NavLink } from 'react-router-dom';
@@ -10,7 +11,17 @@ const Settings = () => {
     const { t, i18n } = useTranslation();
     const { user, setUser } = useAuth();
     const { showToast } = useToast();
-    const [loading, setLoading] = useState(true);
+    const queryClient = useQueryClient();
+
+    const { data: profile, isLoading: loading } = useQuery({
+        queryKey: ['profile'],
+        queryFn: async () => {
+            const res = await axios.get('/api/auth/profile');
+            return res.data;
+        },
+        enabled: !!user
+    });
+
     const [saving, setSaving] = useState(false);
     const [uploading, setUploading] = useState<'logo' | 'signature' | null>(null);
     const [formData, setFormData] = useState({
@@ -28,28 +39,19 @@ const Settings = () => {
     const sigInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        const fetchProfile = async () => {
-            try {
-                const res = await axios.get('/api/auth/profile');
-                const data = res.data;
-                setFormData({
-                    name: data.name || '',
-                    companyName: data.tenantId?.companyName || '',
-                    address: data.tenantId?.address || '',
-                    phone: data.tenantId?.phone || '',
-                    billingEmail: data.tenantId?.billingEmail || '',
-                    billingAddress: data.tenantId?.billingAddress || '',
-                    logoUrl: data.tenantId?.logoUrl || '',
-                    signature: data.tenantId?.signature || '',
-                });
-            } catch (error) {
-                console.error('Error fetching profile', error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchProfile();
-    }, []);
+        if (profile) {
+            setFormData({
+                name: profile.name || '',
+                companyName: profile.tenantId?.companyName || '',
+                address: profile.tenantId?.address || '',
+                phone: profile.tenantId?.phone || '',
+                billingEmail: profile.tenantId?.billingEmail || '',
+                billingAddress: profile.tenantId?.billingAddress || '',
+                logoUrl: profile.tenantId?.logoUrl || '',
+                signature: profile.tenantId?.signature || '',
+            });
+        }
+    }, [profile]);
 
     const uploadToCloudinary = async (file: File, field: 'logoUrl' | 'signature') => {
         const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
@@ -86,18 +88,27 @@ const Settings = () => {
         }
     };
 
+    const updateMutation = useMutation({
+        mutationFn: async (data: any) => {
+            return axios.put('/api/auth/profile', data);
+        },
+        onSuccess: (res) => {
+            queryClient.invalidateQueries({ queryKey: ['profile'] });
+            setUser(res.data);
+            showToast('Settings updated successfully!', 'success');
+        },
+        onError: (err: any) => {
+            showToast(err.response?.data?.message || 'Failed to update settings', 'error');
+        },
+        onSettled: () => {
+            setSaving(false);
+        }
+    });
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setSaving(true);
-        try {
-            const res = await axios.put('/api/auth/profile', formData);
-            setUser(res.data);
-            showToast('Settings updated successfully!', 'success');
-        } catch (error: any) {
-            showToast(error.response?.data?.message || 'Failed to update settings', 'error');
-        } finally {
-            setSaving(false);
-        }
+        updateMutation.mutate(formData);
     };
 
     if (loading) return (
@@ -111,7 +122,7 @@ const Settings = () => {
         <div className="max-w-4xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
             <div>
                 <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase">{t('settings.title')}</h1>
-                <p className="text-slate-500 font-bold uppercase tracking-widest text-xs mt-2 opacity-60">Identity & Organization Management</p>
+                <p className="text-slate-500 font-bold uppercase tracking-widest text-xs mt-2 opacity-60">{t('settings.identity_org_management')}</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-8">
@@ -138,7 +149,7 @@ const Settings = () => {
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('common.email')}</label>
                                 <input type="email" className="input py-4 font-bold bg-slate-100 border-none text-slate-400 cursor-not-allowed rounded-2xl" value={user?.email} disabled />
-                                <p className="text-[9px] text-slate-400 font-bold ml-1 italic">Email cannot be changed for security</p>
+                                <p className="text-[9px] text-slate-400 font-bold ml-1 italic">{t('settings.email_security_msg')}</p>
                             </div>
                         </div>
                     </div>
@@ -160,7 +171,7 @@ const Settings = () => {
                         <div className="space-y-8">
                             {/* Logo Upload */}
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Company Logo (shown on invoice)</label>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('settings.company_logo')}</label>
                                 <div className="flex items-center gap-6">
                                     {formData.logoUrl ? (
                                         <div className="relative">
@@ -182,9 +193,9 @@ const Settings = () => {
                                             className="flex items-center gap-2 px-5 py-3 bg-primary-50 text-primary-600 rounded-2xl font-black uppercase tracking-widest text-xs border border-primary-200 hover:bg-primary-100 transition-all disabled:opacity-50"
                                         >
                                             {uploading === 'logo' ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} 
-                                            {uploading === 'logo' ? 'Uploading...' : 'Upload Logo'}
+                                            {uploading === 'logo' ? t('settings.uploading') : t('settings.upload_logo')}
                                         </button>
-                                        <p className="text-[10px] text-slate-400 mt-2 ml-1">Powered by Cloudinary. Instant URL generation.</p>
+                                        <p className="text-[10px] text-slate-400 mt-2 ml-1">{t('settings.cloudinary_msg')}</p>
                                         <input ref={logoInputRef} type="file" className="hidden" accept="image/*" onChange={(e) => {
                                             const file = e.target.files?.[0];
                                             if (file) { 
@@ -197,7 +208,7 @@ const Settings = () => {
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Company Registered Name</label>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('settings.company_reg_name')}</label>
                                 <div className="relative">
                                     <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                                     <input type="text" className="input pl-11 py-4 font-bold bg-slate-50 border-none rounded-2xl" value={formData.companyName} onChange={(e) => setFormData({...formData, companyName: e.target.value})} required />
@@ -206,7 +217,7 @@ const Settings = () => {
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Billing Address (On Invoice)</label>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('settings.billing_address_label')}</label>
                                     <div className="relative">
                                         <MapPin className="absolute left-4 top-4 text-slate-400 w-4 h-4" />
                                         <textarea className="input pl-11 py-4 font-bold bg-slate-50 border-none min-h-[120px] rounded-2xl" value={formData.billingAddress} onChange={(e) => setFormData({...formData, billingAddress: e.target.value})} placeholder="Ground Floor, Sector 15, New Delhi..." />
@@ -221,7 +232,7 @@ const Settings = () => {
                                         </div>
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Billing Email (On Invoice)</label>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('settings.billing_email_label')}</label>
                                         <div className="relative">
                                             <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                                             <input type="email" className="input pl-11 py-4 font-bold bg-slate-50 border-none rounded-2xl" value={formData.billingEmail} onChange={(e) => setFormData({...formData, billingEmail: e.target.value})} placeholder="billing@yourcompany.com" />
@@ -231,7 +242,7 @@ const Settings = () => {
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Office Address (GST / Registration)</label>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('settings.office_address_label')}</label>
                                 <div className="relative">
                                     <MapPin className="absolute left-4 top-4 text-slate-400 w-4 h-4" />
                                     <textarea className="input pl-11 py-4 font-bold bg-slate-50 border-none min-h-[100px] rounded-2xl" value={formData.address} onChange={(e) => setFormData({...formData, address: e.target.value})} placeholder={t('placeholders.address')} />
@@ -240,7 +251,7 @@ const Settings = () => {
 
                             {/* Signature Upload */}
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Digital Signature (shown on invoice)</label>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('settings.digital_signature')}</label>
                                 <div className="flex items-center gap-6">
                                     {formData.signature ? (
                                         <div className="relative">
@@ -262,9 +273,9 @@ const Settings = () => {
                                             className="flex items-center gap-2 px-5 py-3 bg-emerald-50 text-emerald-600 rounded-2xl font-black uppercase tracking-widest text-xs border border-emerald-200 hover:bg-emerald-100 transition-all disabled:opacity-50"
                                         >
                                             {uploading === 'signature' ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-                                            {uploading === 'signature' ? 'Uploading...' : 'Upload Signature'}
+                                            {uploading === 'signature' ? t('settings.uploading') : t('settings.upload_signature')}
                                         </button>
-                                        <p className="text-[10px] text-slate-400 mt-2 ml-1">PNG with transparent background recommended.</p>
+                                        <p className="text-[10px] text-slate-400 mt-2 ml-1">{t('settings.png_msg')}</p>
                                         <input ref={sigInputRef} type="file" className="hidden" accept="image/*" onChange={(e) => {
                                             const file = e.target.files?.[0];
                                             if (file) { 
@@ -295,8 +306,8 @@ const Settings = () => {
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('landing.choose_lang')}</label>
                                 <select className="input py-4 font-bold bg-slate-50 border-none rounded-2xl cursor-pointer hover:bg-slate-100 transition-colors" value={i18n.language} onChange={(e) => i18n.changeLanguage(e.target.value)}>
-                                    <option value="en">English (International)</option>
-                                    <option value="hi">हिन्दी (India)</option>
+                                    <option value="en">{t('settings.english_lang')}</option>
+                                    <option value="hi">{t('settings.hindi_lang')}</option>
                                 </select>
                             </div>
                         </div>
@@ -319,7 +330,7 @@ const Settings = () => {
                             <div className="space-y-1">
                                 <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">{t('settings.active_plan')}</p>
                                 <div className="flex items-center gap-3">
-                                    <span className="text-2xl font-black text-white uppercase tracking-tighter">{user?.planType || 'Free'} Plan</span>
+                                    <span className="text-2xl font-black text-white uppercase tracking-tighter">{user?.planType || 'Free'} {t('settings.plan_text')}</span>
                                     <span className="px-3 py-1 bg-emerald-500/10 text-emerald-500 text-[10px] font-black uppercase tracking-widest rounded-full border border-emerald-500/20">Active</span>
                                 </div>
                             </div>

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
+import { useQuery } from '@tanstack/react-query';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -9,8 +10,6 @@ import {
   Tooltip,
   BarChart,
   Bar,
-  Legend,
-  Cell,
 } from "recharts";
 import { useTranslation } from "react-i18next";
 import {
@@ -18,14 +17,12 @@ import {
   Package,
   Users,
   AlertTriangle,
-  IndianRupee,
   ArrowUpRight,
   ArrowDownRight,
   Wallet,
   Clock,
   ChevronRight,
   Filter,
-  Calendar,
   ArrowRightLeft,
   HandCoins,
   Banknote,
@@ -138,27 +135,29 @@ const MetricCard = ({ title, subtitle, value, icon, trend, color }: any) => {
   );
 };
 
-const ErrorState = ({ message, onRetry }: any) => (
-  <div className="flex flex-col items-center justify-center py-20 px-8 bg-rose-50/50 rounded-[3rem] border border-rose-100 animate-in zoom-in-95 duration-500">
-    <div className="w-20 h-20 bg-rose-100 text-rose-600 rounded-[2rem] flex items-center justify-center mb-6 shadow-xl shadow-rose-100">
-      <AlertCircle size={40} />
+const ErrorState = ({ message, onRetry }: any) => {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-col items-center justify-center py-20 px-8 bg-rose-50/50 rounded-[3rem] border border-rose-100 animate-in zoom-in-95 duration-500">
+      <div className="w-20 h-20 bg-rose-100 text-rose-600 rounded-[2rem] flex items-center justify-center mb-6 shadow-xl shadow-rose-100">
+        <AlertCircle size={40} />
+      </div>
+      <h3 className="text-2xl font-black text-slate-800 mb-2">
+        {t("dashboard.connection_issue")}
+      </h3>
+      <p className="text-slate-500 font-medium mb-8 text-center max-w-md">
+        {message || t("dashboard.connection_desc")}
+      </p>
+      <button
+        onClick={onRetry}
+        className="px-8 py-4 bg-primary-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-primary-700 shadow-xl shadow-primary-200 transition-all flex items-center gap-3 active:scale-95"
+      >
+        <RefreshCw size={18} />
+        {t("dashboard.try_again")}
+      </button>
     </div>
-    <h3 className="text-2xl font-black text-slate-800 mb-2">
-      Connection Issue
-    </h3>
-    <p className="text-slate-500 font-medium mb-8 text-center max-w-md">
-      {message ||
-        "We're having trouble connecting to the server. Please check your connection or try again."}
-    </p>
-    <button
-      onClick={onRetry}
-      className="px-8 py-4 bg-primary-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-primary-700 shadow-xl shadow-primary-200 transition-all flex items-center gap-3 active:scale-95"
-    >
-      <RefreshCw size={18} />
-      Try Again
-    </button>
-  </div>
-);
+  );
+};
 
 const CustomTooltip = ({ active, payload, label, timeRange }: any) => {
   if (active && payload && payload.length) {
@@ -200,6 +199,7 @@ const CustomTooltip = ({ active, payload, label, timeRange }: any) => {
 };
 
 const ActivityItem = ({ activity, onClick }: any) => {
+  const { t } = useTranslation();
   return (
     <div
       onClick={onClick}
@@ -242,7 +242,7 @@ const ActivityItem = ({ activity, onClick }: any) => {
         </p>
         <div className="flex items-center justify-end gap-1 mt-0.5">
           <span className="text-[9px] font-black uppercase tracking-tighter text-slate-400">
-            {activity.itemCount || 0} items sold
+            {activity.itemCount || 0} {t("dashboard.items_sold")}
           </span>
           <ChevronRight
             size={12}
@@ -258,62 +258,47 @@ const Dashboard = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { showToast } = useToast();
-  const [stats, setStats] = useState<any>(null);
-  const [chartData, setChartData] = useState<any[]>([]);
-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
-  const [alerts, setAlerts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [timeRange, setTimeRange] = useState("today");
-  const [selectedSale, setSelectedSale] = useState<any>(null);
-
-  useEffect(() => {
-    fetchStats();
-    const interval = setInterval(fetchStats, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [timeRange]);
-
-  const fetchStats = async () => {
-    try {
-      if (!loading) setRefreshing(true);
-      setError(null);
+  const { data: dashboardData, isLoading: loading, error: queryError, refetch } = useQuery({
+    queryKey: ['dashboard-stats', timeRange],
+    queryFn: async () => {
       const response = await axios.get(
         `/api/dashboard/stats?timeRange=${timeRange}`,
       );
-      setStats(response.data.stats);
-      setChartData(response.data.chartData || []);
-      setRecentActivity(response.data.recentActivity || []);
-      setAlerts(response.data.alerts);
-    } catch (err: any) {
-      console.error("Dashboard fetch error:", err);
-      setError(
-        err.response?.data?.message || "Failed to connect to business server",
-      );
-      showToast("Connection error. Please retry.", "error");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+      return response.data;
+    },
+    enabled: !!user?.token
+  });
+
+  const stats = dashboardData?.stats;
+  const chartData = dashboardData?.chartData || [];
+  const recentActivity = dashboardData?.recentActivity || [];
+  const alerts = dashboardData?.alerts || [];
+  
+
+  const [selectedSale, setSelectedSale] = useState<any>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
   };
 
-  const handleRefresh = () => {
-    setRefreshing(true);
-    fetchStats();
-  };
+  const error = queryError ? (queryError as any).response?.data?.message || "Failed to load dashboard" : null;
 
   const getFilterLabel = () => {
     switch (timeRange) {
       case "today":
-        return "Today";
+        return t("dashboard.today");
       case "yesterday":
-        return "Yesterday";
+        return t("dashboard.yesterday");
       case "week":
-        return "This Week";
+        return t("dashboard.week");
       case "month":
-        return "This Month";
+        return t("dashboard.month");
       case "year":
-        return "This Year";
+        return t("dashboard.year");
       default:
         return "Period";
     }
@@ -336,7 +321,7 @@ const Dashboard = () => {
                       <TrendingUp size={24} />
                     </div>
                     <h2 className="text-2xl font-black text-slate-800 tracking-tight">
-                      Invoice Details
+                      {t("dashboard.invoice_details")}
                     </h2>
                   </div>
                   <p className="text-sm font-bold text-primary-500 uppercase tracking-widest">
@@ -355,7 +340,7 @@ const Dashboard = () => {
               <div className="grid grid-cols-2 gap-8 mb-8 pb-8 border-b border-slate-100">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                    Customer
+                    {t("billing.customer")}
                   </p>
                   <h3 className="font-bold text-slate-800 text-lg">
                     {selectedSale.customerName}
@@ -363,7 +348,7 @@ const Dashboard = () => {
                 </div>
                 <div className="text-right">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                    Date
+                    {t("common.date")}
                   </p>
                   <h3 className="font-bold text-slate-800 text-lg">
                     {format(new Date(selectedSale.date), "dd MMM, yyyy")}
@@ -376,10 +361,10 @@ const Dashboard = () => {
                 <table className="w-full text-left border-collapse">
                   <thead className="bg-slate-50">
                     <tr className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                      <th className="px-6 py-4">Item Name</th>
-                      <th className="px-6 py-4">Quantity</th>
-                      <th className="px-6 py-4">Price</th>
-                      <th className="px-6 py-4 text-right">Total</th>
+                      <th className="px-6 py-4">{t("inventory.product_details")}</th>
+                      <th className="px-6 py-4">{t("common.qty")}</th>
+                      <th className="px-6 py-4">{t("common.price")}</th>
+                      <th className="px-6 py-4 text-right">{t("common.total")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -426,7 +411,7 @@ const Dashboard = () => {
               <div className="flex justify-between items-center bg-slate-50 p-6 rounded-[2rem]">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                    Status
+                    {t("dashboard.status")}
                   </p>
                   <span
                     className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase ring-1 ${
@@ -440,7 +425,7 @@ const Dashboard = () => {
                 </div>
                 <div className="text-right">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                    Grand Total
+                    {t("common.total")}
                   </p>
                   <h3 className="text-3xl font-black text-primary-600 tracking-tighter">
                     ₹{(selectedSale.amount || 0).toLocaleString()}
@@ -452,11 +437,11 @@ const Dashboard = () => {
             <div className="bg-slate-50/50 p-6 border-t border-slate-100 flex justify-between gap-4">
               <button className="flex-1 py-4 bg-white border border-slate-200 rounded-2xl font-black uppercase tracking-widest text-[10px] text-slate-600 hover:bg-slate-100 transition-all flex items-center justify-center gap-2">
                 <Download size={16} />
-                Download PDF
+                {t("dashboard.download_pdf")}
               </button>
               <button className="flex-1 py-4 bg-primary-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-primary-700 shadow-lg shadow-primary-200 transition-all flex items-center justify-center gap-2">
                 <Printer size={16} />
-                Print Invoice
+                {t("dashboard.print_invoice")}
               </button>
             </div>
           </div>
@@ -478,10 +463,10 @@ const Dashboard = () => {
           </div>
           <div>
             <h1 className="text-3xl font-black text-slate-800 tracking-tight leading-none mb-1">
-              Business Overview
+              {t("dashboard.business_overview")}
             </h1>
             <p className="text-slate-500 font-medium">
-              Monitoring {user?.companyName || "your business"}
+              {t("dashboard.subtitle")}
             </p>
           </div>
         </div>
@@ -504,7 +489,7 @@ const Dashboard = () => {
                     : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                {range}
+                {t(`dashboard.${range}`)}
               </button>
             ))}
           </div>
@@ -512,15 +497,15 @@ const Dashboard = () => {
       </div>
 
       {error ? (
-        <ErrorState message={error} onRetry={fetchStats} />
+        <ErrorState message={error} onRetry={() => refetch()} />
       ) : (
         <>
           {/* Metrics Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {/* 1. Period Sales */}
             <MetricCard
-              title={`${getFilterLabel()} Sales`}
-              subtitle={`Revenue for selected period`}
+              title={`${getFilterLabel()} ${t("common.sales")}`}
+              subtitle={t("dashboard.revenue")}
               value={`₹${stats?.periodSales?.toLocaleString() || 0}`}
               icon={<TrendingUp size={24} />}
               trend={stats?.salesTrend}
@@ -529,8 +514,8 @@ const Dashboard = () => {
 
             {/* 2. Period Profit */}
             <MetricCard
-              title={`${getFilterLabel()} Profit`}
-              subtitle={`Income after expenses`}
+              title={`${getFilterLabel()} ${t("dashboard.profit")}`}
+              subtitle={t("dashboard.growth_analysis")}
               value={`₹${stats?.periodProfit?.toLocaleString() || 0}`}
               icon={<ArrowUpCircle size={24} />}
               trend={stats?.profitTrend}
@@ -539,8 +524,8 @@ const Dashboard = () => {
 
             {/* 3. Period Expenses */}
             <MetricCard
-              title={`${getFilterLabel()} Expenses`}
-              subtitle={`Purchases & Salaries paid`}
+              title={`${getFilterLabel()} ${t("dashboard.expenses")}`}
+              subtitle={t("dashboard.budget_vs_spending")}
               value={`₹${stats?.periodExpenses?.toLocaleString() || 0}`}
               icon={<Receipt size={24} />}
               trend={stats?.expensesTrend}
@@ -549,42 +534,42 @@ const Dashboard = () => {
 
             {/* 4. To Collect */}
             <MetricCard
-              title="To Collect"
-              subtitle="Pending from customers"
+              title={t("dashboard.to_collect")}
+              subtitle={t("billing.receivable")}
               value={`₹${stats?.toCollect?.toLocaleString() || 0}`}
               icon={<Clock size={24} />}
-              trend="Pending"
+              trend={t("billing.pending")}
               color="indigo"
             />
 
             {/* 5. To Pay */}
             <MetricCard
-              title="To Pay"
-              subtitle="Pending to suppliers/staff"
+              title={t("dashboard.to_pay")}
+              subtitle={t("billing.payable")}
               value={`₹${stats?.toPay?.toLocaleString() || 0}`}
               icon={<HandCoins size={24} />}
-              trend="Outstanding"
+              trend={t("billing.pending")}
               color="indigo"
             />
 
             {/* 6. Stock Value */}
             <MetricCard
-              title="Stock Value"
-              subtitle="Total inventory worth"
+              title={t("dashboard.stock_value")}
+              subtitle={t("dashboard.stats.monthly_revenue")}
               value={`₹${stats?.stockValue?.toLocaleString() || 0}`}
               icon={<Package size={24} />}
               trend={
                 stats?.lowStockCount > 0
                   ? `${stats?.lowStockCount} items low`
-                  : "Healthy"
+                  : t("dashboard.all_clear")
               }
               color="blue"
             />
 
             {/* 7. Estimated Balance */}
             <MetricCard
-              title="Estimated Balance"
-              subtitle="Total available (Estimated)"
+              title={t("dashboard.est_balance")}
+              subtitle={t("dashboard.stats.monthly_revenue")}
               value={`₹${stats?.estimatedBalance?.toLocaleString() || 0}`}
               icon={<Wallet size={24} />}
               trend="Real-time"
@@ -593,7 +578,7 @@ const Dashboard = () => {
 
             {/* 8. Staff Attendance */}
             <MetricCard
-              title="Staff Present"
+              title={t("dashboard.staff_present")}
               subtitle={`${stats?.presentToday || 0}/${stats?.totalStaff || 0} active today`}
               value={(stats?.presentToday || 0).toString()}
               icon={<Users size={24} />}
@@ -603,11 +588,11 @@ const Dashboard = () => {
 
             {/* 9. Critical Alerts */}
             <MetricCard
-              title="System Alerts"
+              title={t("dashboard.system_alerts")}
               subtitle={`${alerts?.length || 0} items need attention`}
               value={(alerts?.length || 0).toString()}
               icon={<AlertTriangle size={24} />}
-              trend={alerts?.length > 0 ? "Action Reqd" : "All Clear"}
+              trend={alerts?.length > 0 ? t("dashboard.action_reqd") : t("dashboard.all_clear")}
               color={alerts?.length > 0 ? "amber" : "emerald"}
             />
           </div>
@@ -619,10 +604,10 @@ const Dashboard = () => {
                 <div className="flex items-center justify-between mb-8">
                   <div>
                     <h3 className="text-xl font-black text-slate-800 tracking-tight">
-                      Revenue & Profit Trend
+                      {t("dashboard.revenue_profit_trend")}
                     </h3>
                     <p className="text-slate-400 text-sm font-medium">
-                      Growth analysis over time
+                      {t("dashboard.growth_analysis")}
                     </p>
                   </div>
                   <div className="p-3 bg-primary-50 text-primary-600 rounded-2xl">
@@ -634,7 +619,7 @@ const Dashboard = () => {
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300">
                       <TrendingUp size={48} className="mb-2 opacity-20" />
                       <p className="text-[10px] font-black uppercase tracking-widest">
-                        No data for this period
+                        {t("dashboard.no_data")}
                       </p>
                     </div>
                   ) : (
@@ -689,7 +674,7 @@ const Dashboard = () => {
                         />
                         <Area
                           type="monotone"
-                          name="Revenue"
+                          name={t("dashboard.revenue")}
                           dataKey="revenue"
                           stroke="#0284c7"
                           strokeWidth={4}
@@ -701,7 +686,7 @@ const Dashboard = () => {
                         />
                         <Area
                           type="monotone"
-                          name="Profit"
+                          name={t("dashboard.profit")}
                           dataKey="profit"
                           stroke="#10b981"
                           strokeWidth={4}
@@ -722,10 +707,10 @@ const Dashboard = () => {
                 <div className="flex items-center justify-between mb-8">
                   <div>
                     <h3 className="text-xl font-black text-slate-800 tracking-tight">
-                      Revenue vs Expenses
+                      {t("dashboard.revenue_vs_expenses")}
                     </h3>
                     <p className="text-slate-400 text-sm font-medium">
-                      Budget vs Spending
+                      {t("dashboard.budget_vs_spending")}
                     </p>
                   </div>
                   <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl">
@@ -737,7 +722,7 @@ const Dashboard = () => {
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300">
                       <Receipt size={48} className="mb-2 opacity-20" />
                       <p className="text-[10px] font-black uppercase tracking-widest">
-                        No data for this period
+                        {t("dashboard.no_data")}
                       </p>
                     </div>
                   ) : (
@@ -771,7 +756,7 @@ const Dashboard = () => {
                           cursor={{ fill: '#F8FAFC', opacity: 0.4 }}
                         />
                         <Bar
-                          name="Revenue"
+                          name={t("dashboard.revenue")}
                           dataKey="revenue"
                           fill="#0284c7"
                           radius={[10, 10, 0, 0]}
@@ -779,7 +764,7 @@ const Dashboard = () => {
                           animationDuration={1500}
                         />
                         <Bar
-                          name="Expenses"
+                          name={t("dashboard.expenses")}
                           dataKey="expenses"
                           fill="#f59e0b"
                           radius={[10, 10, 0, 0]}
@@ -799,21 +784,21 @@ const Dashboard = () => {
           <div className="mt-8 bg-white/70 backdrop-blur-md rounded-[3rem] border border-white/40 shadow-xl p-8 group hover:shadow-2xl transition-all duration-500">
             <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-8">
               <div>
-                <h3 className="text-2xl font-black text-slate-800 tracking-tight">Sales Report</h3>
+                <h3 className="text-2xl font-black text-slate-800 tracking-tight">{t("dashboard.sales_report")}</h3>
                 <p className="text-slate-400 text-sm font-medium mt-1">
                   {chartData.length > 0
                     ? `${new Date(chartData[0]?.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} to ${new Date(chartData[chartData.length - 1]?.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`
-                    : 'No data available'
+                    : t("dashboard.no_data")
                   }
                 </p>
               </div>
               <div className="flex items-start gap-8 text-right">
                 <div>
-                  <p className="text-slate-400 text-xs font-medium mb-1">Period Sales</p>
+                  <p className="text-slate-400 text-xs font-medium mb-1">{t("dashboard.today")} {t("common.sales")}</p>
                   <p className="text-3xl font-black text-slate-800 tracking-tighter">₹{(stats?.periodSales || 0).toLocaleString()}</p>
                 </div>
                 <div className="pl-8 border-l border-slate-100">
-                  <p className="text-slate-400 text-xs font-medium mb-1">Invoices Made</p>
+                  <p className="text-slate-400 text-xs font-medium mb-1">{t("billing.invoices")}</p>
                   <p className="text-3xl font-black text-slate-800 tracking-tighter">{stats?.invoiceCount || 0}</p>
                 </div>
               </div>
@@ -822,7 +807,7 @@ const Dashboard = () => {
               {chartData.length === 0 ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300">
                   <TrendingUp size={48} className="mb-2 opacity-20" />
-                  <p className="text-[10px] font-black uppercase tracking-widest">No data for this period</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest">{t("dashboard.no_data")}</p>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
@@ -861,7 +846,7 @@ const Dashboard = () => {
                     />
                     <Area
                       type="monotone"
-                      name="Revenue"
+                      name={t("dashboard.revenue")}
                       dataKey="revenue"
                       stroke="#16a34a"
                       strokeWidth={3}
@@ -884,10 +869,10 @@ const Dashboard = () => {
                 <div>
                   <h2 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-3">
                     <ArrowRightLeft className="text-primary-500" size={24} />
-                    Recent Transactions
+                    {t("dashboard.recent_transactions")}
                   </h2>
                   <p className="text-slate-400 text-sm font-medium">
-                    Showing latest billing activity
+                    {t("dashboard.showing_latest")}
                   </p>
                 </div>
                 <button className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-primary-50 hover:text-primary-600 transition-all border border-slate-100">
@@ -910,7 +895,7 @@ const Dashboard = () => {
                         <Banknote size={32} />
                       </div>
                       <p className="text-slate-400 font-bold">
-                        No transactions found
+                        {t("dashboard.no_transactions")}
                       </p>
                     </div>
                   )}
@@ -925,7 +910,7 @@ const Dashboard = () => {
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-rose-700 font-black uppercase tracking-widest text-xs flex items-center gap-2">
                       <AlertTriangle size={18} />
-                      Critical Alerts
+                      {t("dashboard.critical_alerts")}
                     </h2>
                     <span className="px-2 py-1 bg-rose-200/50 text-rose-700 rounded-lg text-[10px] font-black">
                       {alerts.length}

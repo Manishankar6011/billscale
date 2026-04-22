@@ -67,8 +67,11 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                 <div className="text-right">
                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3">Payment Info</h3>
                     <p className="text-lg font-black text-slate-800 uppercase tracking-tight">{sale.paymentMode || 'CASH'}</p>
-                    <p className={`text-xs font-black uppercase tracking-widest mt-1 ${sale.status === 'paid' ? 'text-emerald-500' : 'text-rose-500'}`}>
-                        Status: {sale.status?.toUpperCase()}
+                    <p className={`text-xs font-black uppercase tracking-widest mt-1 ${
+                        sale.status === 'paid' ? 'text-emerald-500' : 
+                        sale.status === 'partial' ? 'text-amber-500' : 'text-rose-500'
+                    }`}>
+                        Status: {sale.status === 'pending' ? 'DUE' : sale.status?.toUpperCase()}
                     </p>
                 </div>
             </div>

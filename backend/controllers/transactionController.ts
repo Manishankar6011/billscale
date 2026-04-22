@@ -131,6 +131,16 @@ export const processSale = async (req: AuthRequest, res: Response) => {
         const finalAmountPaid = Number(amountPaid) || 0;
         const balanceDue = totalAmount - finalAmountPaid;
 
+        // Auto-calculate status based on balance
+        let calculatedStatus = status;
+        if (balanceDue <= 0) {
+            calculatedStatus = 'paid';
+        } else if (finalAmountPaid > 0) {
+            calculatedStatus = 'partial';
+        } else {
+            calculatedStatus = 'pending';
+        }
+
         const currentInvoiceNum = tenant.nextInvoiceNumber || 1;
         const invoiceNumber = `INV-${currentInvoiceNum}`;
 
@@ -148,7 +158,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
             balanceDue: balanceDue,
             roundOffAmount: finalRoundOff,
             paymentMode,
-            status,
+            status: calculatedStatus,
             date: date || new Date()
         });
 
@@ -182,7 +192,7 @@ export const getPurchases = async (req: AuthRequest, res: Response) => {
 // @desc    Process a new purchase (increases stock)
 // @route   POST /api/transactions/purchases
 export const processPurchase = async (req: AuthRequest, res: Response) => {
-    const { supplierName, productId, quantity, purchasePrice, paymentStatus, date } = req.body;
+    const { supplierName, productId, quantity, purchasePrice, sellingPrice, mrp, paymentStatus, date } = req.body;
     const session = await mongoose.startSession();
     session.startTransaction();
 
@@ -198,12 +208,22 @@ export const processPurchase = async (req: AuthRequest, res: Response) => {
 
         let targetProduct = originalProduct;
 
-        // 2. If price differs, find or create a new batch
-        if (Number(purchasePrice) !== originalProduct.purchasePrice) {
+        // 2. If price/mrp/sellingPrice differs, find or create a new batch
+        const numPurchasePrice = Number(purchasePrice);
+        const numSellingPrice = Number(sellingPrice);
+        const numMRP = Number(mrp);
+
+        if (
+            numPurchasePrice !== originalProduct.purchasePrice || 
+            numSellingPrice !== originalProduct.pricePerUnit || 
+            numMRP !== originalProduct.mrp
+        ) {
             const existingBatch = await Product.findOne({
                 tenantId: req.tenantId,
                 name: originalProduct.name,
-                purchasePrice: Number(purchasePrice)
+                purchasePrice: numPurchasePrice,
+                pricePerUnit: numSellingPrice,
+                mrp: numMRP
             }).session(session);
 
             if (existingBatch) {
@@ -221,9 +241,9 @@ export const processPurchase = async (req: AuthRequest, res: Response) => {
                     category: originalProduct.category,
                     unit: originalProduct.unit,
                     barcode: originalProduct.barcode,
-                    pricePerUnit: originalProduct.pricePerUnit, // Default to same selling price
-                    mrp: originalProduct.mrp,
-                    purchasePrice: Number(purchasePrice),
+                    pricePerUnit: numSellingPrice,
+                    mrp: numMRP,
+                    purchasePrice: numPurchasePrice,
                     stock: 0, // Will be updated below
                     batchNumber: `Batch ${count + 1}`,
                     minStockAlert: originalProduct.minStockAlert
@@ -263,7 +283,7 @@ export const processPurchase = async (req: AuthRequest, res: Response) => {
 // @desc    Update a purchase (syncs stock)
 // @route   PUT /api/transactions/purchases/:id
 export const updatePurchase = async (req: AuthRequest, res: Response) => {
-    const { supplierName, productId, quantity, purchasePrice, paymentStatus, date } = req.body;
+    const { supplierName, productId, quantity, purchasePrice, sellingPrice, mrp, paymentStatus, date } = req.body;
     const session = await mongoose.startSession();
     session.startTransaction();
 
@@ -284,12 +304,22 @@ export const updatePurchase = async (req: AuthRequest, res: Response) => {
 
         let targetProduct = selectedProduct;
 
-        // Check if price matches selectedProduct. If not, find or create the correct batch
-        if (Number(purchasePrice) !== selectedProduct.purchasePrice) {
+        // Check if price/mrp/sellingPrice matches selectedProduct. If not, find or create the correct batch
+        const numPurchasePrice = Number(purchasePrice);
+        const numSellingPrice = Number(sellingPrice);
+        const numMRP = Number(mrp);
+
+        if (
+            numPurchasePrice !== selectedProduct.purchasePrice || 
+            numSellingPrice !== selectedProduct.pricePerUnit || 
+            numMRP !== selectedProduct.mrp
+        ) {
             const existingBatch = await Product.findOne({
                 tenantId: req.tenantId,
                 name: selectedProduct.name,
-                purchasePrice: Number(purchasePrice)
+                purchasePrice: numPurchasePrice,
+                pricePerUnit: numSellingPrice,
+                mrp: numMRP
             }).session(session);
 
             if (existingBatch) {
@@ -306,9 +336,9 @@ export const updatePurchase = async (req: AuthRequest, res: Response) => {
                     category: selectedProduct.category,
                     unit: selectedProduct.unit,
                     barcode: selectedProduct.barcode,
-                    pricePerUnit: selectedProduct.pricePerUnit,
-                    mrp: selectedProduct.mrp,
-                    purchasePrice: Number(purchasePrice),
+                    pricePerUnit: numSellingPrice,
+                    mrp: numMRP,
+                    purchasePrice: numPurchasePrice,
                     stock: 0,
                     batchNumber: `Batch ${count + 1}`,
                     minStockAlert: selectedProduct.minStockAlert

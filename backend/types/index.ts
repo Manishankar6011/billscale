@@ -65,6 +65,8 @@ export interface IPurchase extends Document {
   productId: Types.ObjectId;
   quantity: number;
   purchasePrice: number;
+  sellingPrice?: number;
+  mrp?: number;
   totalAmount: number;
   taxAmount?: number;
   discount?: number;
@@ -96,7 +98,7 @@ export interface ISale extends Document {
   taxAmount?: number;
   discount?: number;
   paymentMode: "cash" | "credit" | "upi" | "card" | "bank_transfer";
-  status: "paid" | "pending";
+  status: "paid" | "pending" | "partial";
   additionalItems?: { name: string, price: number }[];
   invoiceNumber: string;
   date: Date;
