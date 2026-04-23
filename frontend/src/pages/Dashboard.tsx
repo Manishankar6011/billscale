@@ -287,11 +287,13 @@ const Dashboard = () => {
     setRefreshing(false);
   };
 
-  const filteredActivity = (recentActivity || []).filter((act: any) => 
-    act.customerName?.toLowerCase().includes(transactionSearch.toLowerCase()) ||
-    act.invoiceNumber?.toLowerCase().includes(transactionSearch.toLowerCase()) ||
-    act.amount?.toString().includes(transactionSearch)
-  );
+  const filteredActivity = (recentActivity || [])
+    .filter((act: any) => 
+      act.customerName?.toLowerCase().includes(transactionSearch.toLowerCase()) ||
+      act.invoiceNumber?.toLowerCase().includes(transactionSearch.toLowerCase()) ||
+      act.amount?.toString().includes(transactionSearch)
+    )
+    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const error = queryError ? (queryError as any).response?.data?.message || "Failed to load dashboard" : null;
 

@@ -153,7 +153,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
             Staff.find({ tenantId, status: 'active' }),
             Attendance.find({ tenantId }),
             SalaryPayment.find({ tenantId }),
-            Sale.find({ tenantId }).sort({ date: -1 }).limit(10).populate('items.productId', 'name pricePerUnit unit'),
+            Sale.find({ tenantId }).sort({ date: -1, createdAt: -1 }).limit(10).populate('items.productId', 'name pricePerUnit unit'),
             Sale.aggregate([
                 { $match: { tenantId, date: { $gte: startOfDayUTC } } },
                 { $group: { _id: null, total: { $sum: "$totalAmount" } } }
