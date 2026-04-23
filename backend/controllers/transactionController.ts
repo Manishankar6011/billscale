@@ -178,6 +178,169 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     }
 };
 
+// @desc    Update a sale (syncs stock)
+// @route   PUT /api/transactions/sales/:id
+export const updateSale = async (req: AuthRequest, res: Response) => {
+    const { 
+        customerName, 
+        customerPhone, 
+        customerAddress,
+        items, 
+        additionalItems, 
+        paymentMode, 
+        status, 
+        date,
+        amountPaid,
+        roundOffAmount
+    } = req.body;
+    
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const oldSale = await Sale.findOne({ _id: req.params.id, tenantId: req.tenantId }).session(session);
+        if (!oldSale) throw new Error('Sale not found');
+
+        // 1. Revert Old Stock
+        for (const item of oldSale.items) {
+            const product = await Product.findOne({ _id: item.productId, tenantId: req.tenantId }).session(session);
+            if (product) {
+                const factor = item.conversionFactor || 1;
+                product.stock += (item.quantity / factor);
+                await product.save({ session });
+            }
+        }
+
+        let totalAmount = 0;
+        let totalProfit = 0;
+        const processedItems = [];
+
+        // 2. Handle Customer
+        if (customerPhone) {
+            const existingCustomer = await Customer.findOne({ 
+                tenantId: req.tenantId, 
+                phone: customerPhone 
+            }).session(session);
+
+            if (!existingCustomer) {
+                const newCustomer = new Customer({
+                    tenantId: req.tenantId,
+                    name: customerName,
+                    phone: customerPhone,
+                    address: customerAddress
+                });
+                await newCustomer.save({ session });
+            }
+        }
+
+        // 3. Process New Items & Deduct Stock
+        for (const item of items) {
+            if (Number(item.quantity) <= 0) throw new Error(`Invalid quantity for item`);
+            
+            const product = await Product.findOne({ _id: item.productId, tenantId: req.tenantId }).session(session);
+            if (!product) throw new Error(`Product ${item.productId} not found`);
+            
+            const conversionFactor = Number(item.conversionFactor) || 1;
+            const baseQtyToDeduct = Number(item.quantity) / conversionFactor;
+
+            if (product.stock < baseQtyToDeduct) throw new Error(`Insufficient stock for ${product.name}`);
+
+            const itemTotal = Number(item.quantity) * Number(item.sellingPrice);
+            const itemProfit = itemTotal - (product.purchasePrice * baseQtyToDeduct);
+
+            totalAmount += itemTotal;
+            totalProfit += itemProfit;
+
+            processedItems.push({
+                productId: item.productId,
+                quantity: Number(item.quantity),
+                unit: item.unit || product.unit,
+                conversionFactor: conversionFactor,
+                sellingPrice: Number(item.sellingPrice),
+                purchasePriceAtTime: item.purchasePriceAtTime || product.purchasePrice,
+                mrpAtTime: item.mrpAtTime || product.mrp || 0
+            });
+
+            product.stock -= baseQtyToDeduct;
+            await product.save({ session });
+        }
+
+        if (additionalItems && Array.isArray(additionalItems)) {
+            for (const item of additionalItems) {
+                totalAmount += Number(item.price);
+                totalProfit += Number(item.price);
+            }
+        }
+
+        const finalRoundOff = Number(roundOffAmount) || 0;
+        totalAmount += finalRoundOff;
+        const finalAmountPaid = Number(amountPaid) || 0;
+        const balanceDue = totalAmount - finalAmountPaid;
+
+        let calculatedStatus = status;
+        if (balanceDue <= 0) calculatedStatus = 'paid';
+        else if (finalAmountPaid > 0) calculatedStatus = 'partial';
+        else calculatedStatus = 'pending';
+
+        // Update Sale
+        oldSale.customerName = customerName;
+        oldSale.customerPhone = customerPhone;
+        oldSale.customerAddress = customerAddress;
+        oldSale.items = processedItems;
+        oldSale.additionalItems = additionalItems || [];
+        oldSale.totalAmount = totalAmount;
+        oldSale.totalProfit = totalProfit;
+        oldSale.amountPaid = finalAmountPaid;
+        oldSale.balanceDue = balanceDue;
+        oldSale.roundOffAmount = finalRoundOff;
+        oldSale.paymentMode = paymentMode;
+        oldSale.status = calculatedStatus;
+        oldSale.date = date || oldSale.date;
+
+        await oldSale.save({ session });
+
+        await session.commitTransaction();
+        res.json(oldSale);
+    } catch (err: any) {
+        await session.abortTransaction();
+        res.status(400).json({ message: err.message });
+    } finally {
+        session.endSession();
+    }
+};
+
+// @desc    Delete a sale (reverts stock)
+// @route   DELETE /api/transactions/sales/:id
+export const deleteSale = async (req: AuthRequest, res: Response) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const sale = await Sale.findOne({ _id: req.params.id, tenantId: req.tenantId }).session(session);
+        if (!sale) throw new Error('Sale not found');
+
+        // Revert Stock
+        for (const item of sale.items) {
+            const product = await Product.findOne({ _id: item.productId, tenantId: req.tenantId }).session(session);
+            if (product) {
+                const factor = item.conversionFactor || 1;
+                product.stock += (item.quantity / factor);
+                await product.save({ session });
+            }
+        }
+
+        await Sale.deleteOne({ _id: req.params.id, tenantId: req.tenantId }).session(session);
+
+        await session.commitTransaction();
+        res.json({ message: 'Sale deleted and stock reverted' });
+    } catch (err: any) {
+        await session.abortTransaction();
+        res.status(400).json({ message: err.message });
+    } finally {
+        session.endSession();
+    }
+};
+
 // @desc    Get all purchases
 // @route   GET /api/transactions/purchases
 export const getPurchases = async (req: AuthRequest, res: Response) => {

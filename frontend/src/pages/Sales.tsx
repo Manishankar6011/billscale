@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
   Plus,
@@ -133,25 +133,27 @@ const Sales = () => {
 
   // Queries
   const { data: sales = [], isLoading: salesLoading } = useQuery<Sale[]>({
-    queryKey: ['sales'],
+    queryKey: ["sales"],
     queryFn: async () => {
       const res = await axios.get<Sale[]>("/api/transactions/sales", {
         headers: { Authorization: `Bearer ${user?.token}` },
       });
       return res.data;
     },
-    enabled: !!user?.token
+    enabled: !!user?.token,
   });
 
-  const { data: products = [], isLoading: productsLoading } = useQuery<Product[]>({
-    queryKey: ['inventory'],
+  const { data: products = [], isLoading: productsLoading } = useQuery<
+    Product[]
+  >({
+    queryKey: ["inventory"],
     queryFn: async () => {
       const res = await axios.get<Product[]>("/api/inventory", {
         headers: { Authorization: `Bearer ${user?.token}` },
       });
       return res.data;
     },
-    enabled: !!user?.token
+    enabled: !!user?.token,
   });
 
   const loading = salesLoading || productsLoading;
@@ -164,13 +166,14 @@ const Sales = () => {
   const [customerAddress, setCustomerAddress] = useState("");
   const [paymentMode, setPaymentMode] = useState<"cash" | "credit">("cash");
   const [paymentStatus, setPaymentStatus] = useState<"paid" | "pending">(
-    "paid",
+    "pending",
   );
   const [invoiceFormat, setInvoiceFormat] = useState<"thermal" | "a4">(
     "thermal",
   );
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
-  const [selectedSaleForPreview, setSelectedSaleForPreview] = useState<Sale | null>(null);
+  const [selectedSaleForPreview, setSelectedSaleForPreview] =
+    useState<Sale | null>(null);
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
 
   // Round-off & change calculator
@@ -200,6 +203,9 @@ const Sales = () => {
   const [hwScannerInput, setHwScannerInput] = useState("");
   const [autoPrint, setAutoPrint] = useState(true);
   const [printData, setPrintData] = useState<any>(null);
+  const [selectedSaleForEdit, setSelectedSaleForEdit] = useState<Sale | null>(
+    null,
+  );
   const scannerInputRef = useRef<HTMLInputElement>(null);
 
   // Leave warning
@@ -256,11 +262,12 @@ const Sales = () => {
     setPaymentMode("cash");
     setAmountReceived("");
     setRoundOff(false);
-    setPaymentStatus("paid");
+    setPaymentStatus("pending");
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
+    setSelectedSaleForEdit(null);
     resetForm();
   };
 
@@ -288,14 +295,65 @@ const Sales = () => {
         setTimeout(() => window.print(), 500);
       }
       setIsModalOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['sales'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ["sales"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
       resetForm();
     },
     onError: (err: any) => {
-      showToast(err.response?.data?.message || t("billing.error_processing_sale"), "error");
-    }
+      showToast(
+        err.response?.data?.message || t("billing.error_processing_sale"),
+        "error",
+      );
+    },
+  });
+
+  const updateSaleMutation = useMutation({
+    mutationFn: async (saleData: Partial<Sale>) => {
+      return axios.put<Sale>(
+        `/api/transactions/sales/${selectedSaleForEdit?._id}`,
+        saleData,
+        {
+          headers: { Authorization: `Bearer ${user?.token}` },
+        },
+      );
+    },
+    onSuccess: (res) => {
+      showToast(t("billing.sale_updated"), "success");
+      if (autoPrint && res.data) {
+        setPrintData(res.data);
+        setTimeout(() => window.print(), 500);
+      }
+      setIsModalOpen(false);
+      setSelectedSaleForEdit(null);
+      queryClient.invalidateQueries({ queryKey: ["sales"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      resetForm();
+    },
+    onError: (err: any) => {
+      showToast(
+        err.response?.data?.message || t("billing.error_updating_sale"),
+        "error",
+      );
+    },
+  });
+
+  const deleteSaleMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return axios.delete(`/api/transactions/sales/${id}`, {
+        headers: { Authorization: `Bearer ${user?.token}` },
+      });
+    },
+    onSuccess: () => {
+      showToast(t("billing.sale_deleted"), "success");
+      queryClient.invalidateQueries({ queryKey: ["sales"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+    },
+    onError: (err: any) => {
+      showToast(err.response?.data?.message || "Error deleting sale", "error");
+    },
   });
 
   const handleWhatsAppShare = (sale: any) => {
@@ -316,7 +374,7 @@ const Sales = () => {
       showToast("Add at least one item to cart", "error");
       return;
     }
-    
+
     const saleData: Partial<Sale> = {
       customerName,
       customerPhone,
@@ -341,13 +399,22 @@ const Sales = () => {
       roundOffAmount: roundOffAmount,
     };
 
-    createSaleMutation.mutate(saleData);
+    if (selectedSaleForEdit) {
+      updateSaleMutation.mutate(saleData);
+    } else {
+      createSaleMutation.mutate(saleData);
+    }
   };
 
   const handleScan = useCallback(
     (code: string) => {
       const trimmedCode = code.trim();
       if (!trimmedCode) return;
+
+      if (isItemsModalOpen) {
+        setItemSearch(trimmedCode);
+      }
+
       const matches = products.filter((p) => p.barcode === trimmedCode);
       if (matches.length === 0) {
         showToast(`Product with barcode ${trimmedCode} not found`, "error");
@@ -355,20 +422,47 @@ const Sales = () => {
       }
       if (matches.length === 1) {
         const product = matches[0]!;
-        setCart((prev) => [
-          ...prev,
-          {
-            productId: product._id!,
-            name: product.name,
-            quantity: 1,
-            sellingPrice: product.pricePerUnit,
-            purchasePrice: product.purchasePrice,
-            mrp: product.mrp,
-            unit: product.unit,
-            conversionFactor: 1,
-          },
-        ]);
-        showToast(`${product.name} added to bill`, "success");
+
+        if (isItemsModalOpen) {
+          // If modal is open, increment the qty in the modal's map
+          setItemQtyMap((prev) => ({
+            ...prev,
+            [product._id!]: (Number(prev[product._id!] || 0) + 1).toString(),
+          }));
+          setItemPriceMap((prev) => ({
+            ...prev,
+            [product._id!]: product.pricePerUnit.toString(),
+          }));
+          showToast(`${product.name} qty increased in list`, "success");
+        } else {
+          // If modal is NOT open, add to main cart directly
+          setCart((prev) => {
+            const existing = prev.find(
+              (item) => item.productId === product._id,
+            );
+            if (existing) {
+              return prev.map((item) =>
+                item.productId === product._id
+                  ? { ...item, quantity: item.quantity + 1 }
+                  : item,
+              );
+            }
+            return [
+              ...prev,
+              {
+                productId: product._id!,
+                name: product.name,
+                quantity: 1,
+                sellingPrice: product.pricePerUnit,
+                purchasePrice: product.purchasePrice,
+                mrp: product.mrp,
+                unit: product.unit,
+                conversionFactor: 1,
+              },
+            ];
+          });
+          showToast(`${product.name} quantity increased`, "success");
+        }
         setIsScannerOpen(false);
         setHwScannerInput("");
       } else {
@@ -376,7 +470,15 @@ const Sales = () => {
         setIsScannerOpen(false);
       }
     },
-    [products, showToast],
+    [
+      products,
+      showToast,
+      isItemsModalOpen,
+      setItemQtyMap,
+      setItemPriceMap,
+      setItemSearch,
+      setCart,
+    ],
   );
 
   // Item modal handlers
@@ -410,7 +512,24 @@ const Sales = () => {
       showToast("Set quantity for at least one item", "error");
       return;
     }
-    setCart((prev) => [...prev, ...newItems]);
+    setCart((prev) => {
+      const updatedCart = [...prev];
+      newItems.forEach((newItem) => {
+        const existingIdx = updatedCart.findIndex(
+          (item) => item.productId === newItem.productId,
+        );
+        if (existingIdx !== -1) {
+          const existingItem = updatedCart[existingIdx]!;
+          updatedCart[existingIdx] = {
+            ...existingItem,
+            quantity: existingItem.quantity + newItem.quantity,
+          };
+        } else {
+          updatedCart.push(newItem);
+        }
+      });
+      return updatedCart;
+    });
     setItemQtyMap({});
     setItemPriceMap({});
     setItemSearch("");
@@ -438,10 +557,7 @@ const Sales = () => {
     (a, s) => a + (s.totalAmount || 0),
     0,
   );
-  const totalPaid = filteredSales.reduce(
-    (a, s) => a + (s.amountPaid || 0),
-    0,
-  );
+  const totalPaid = filteredSales.reduce((a, s) => a + (s.amountPaid || 0), 0);
   const totalUnpaid = filteredSales.reduce(
     (a, s) => a + (s.balanceDue || 0),
     0,
@@ -556,12 +672,64 @@ const Sales = () => {
     setIsNewCustomerModalOpen(true);
   };
 
-  if (loading) return (
-    <div className="space-y-6">
-      <MetricsSkeleton />
-      <TableSkeleton rows={10} />
-    </div>
-  );
+  const handleEdit = (sale: Sale) => {
+    setSelectedSaleForEdit(sale);
+    setCustomerName(sale.customerName);
+    setCustomerPhone(sale.customerPhone || "");
+    setCustomerAddress(sale.customerAddress || "");
+    setPaymentMode(sale.paymentMode);
+    setPaymentStatus(sale.status as any);
+    setDate(new Date(sale.date).toISOString().split("T")[0]);
+    setAmountReceived(sale.amountPaid.toString());
+    setRoundOff(sale.roundOffAmount !== 0);
+    setCart(
+      sale.items.map((i) => {
+        const pId =
+          typeof i.productId === "object"
+            ? (i.productId as any)?._id
+            : i.productId;
+        const pName =
+          typeof i.productId === "object"
+            ? (i.productId as any)?.name
+            : "Product";
+        return {
+          productId: pId || (i as any).productId,
+          name: pName || "Product",
+          quantity: i.quantity,
+          sellingPrice: i.sellingPrice,
+          purchasePrice: i.purchasePriceAtTime,
+          mrp: i.mrpAtTime,
+          unit: i.unit,
+          conversionFactor: i.conversionFactor,
+        };
+      }),
+    );
+    setAdditionalItems(
+      (sale.additionalItems || []).map((i) => ({
+        name: i.name,
+        price: i.price.toString(),
+      })),
+    );
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = (id: string) => {
+    if (
+      window.confirm(
+        "Are you sure you want to delete this sale? This will revert stock and cannot be undone.",
+      )
+    ) {
+      deleteSaleMutation.mutate(id);
+    }
+  };
+
+  if (loading)
+    return (
+      <div className="space-y-6">
+        <MetricsSkeleton />
+        <TableSkeleton rows={10} />
+      </div>
+    );
 
   return (
     <div className="space-y-6">
@@ -587,7 +755,7 @@ const Sales = () => {
                 onClick={() => setShowLeaveWarning(false)}
                 className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-200 transition-all"
               >
-                {t('inventory.stay')}
+                {t("inventory.stay")}
               </button>
               <button
                 onClick={() => {
@@ -599,7 +767,7 @@ const Sales = () => {
                 }}
                 className="flex-1 py-3 bg-rose-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-rose-700 transition-all"
               >
-                {t('inventory.leave_anyway')}
+                {t("inventory.leave_anyway")}
               </button>
             </div>
           </div>
@@ -612,9 +780,7 @@ const Sales = () => {
           <h1 className="text-2xl font-bold text-slate-800">
             {t("billing.sale_title")}
           </h1>
-          <p className="text-slate-500">
-            {t("billing.sale_subtitle")}
-          </p>
+          <p className="text-slate-500">{t("billing.sale_subtitle")}</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -897,24 +1063,48 @@ const Sales = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-3">
-                            <button
-                                onClick={() => setPrintData(sale)}
-                                className="group relative p-3 bg-primary-50 text-primary-600 hover:bg-primary-600 hover:text-white rounded-2xl transition-all shadow-sm active:scale-95"
-                                title="View / Print Invoice"
-                            >
-                                <Receipt size={18} />
-                                <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">{t("billing.view_invoice")}</span>
-                            </button>
-                            <button
-                                onClick={() => handleWhatsAppShare(sale)}
-                                className="group relative p-3 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-2xl transition-all shadow-sm active:scale-95"
-                                title="Share on WhatsApp"
-                            >
-                                <MessageCircle size={18} fill="currentColor" />
-                                <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">{t("billing.whatsapp_share")}</span>
-                            </button>
-                        </div>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleEdit(sale)}
+                          className="group relative p-2.5 bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white rounded-xl transition-all shadow-sm active:scale-95"
+                          title="Edit Sale"
+                        >
+                          <Receipt size={16} />
+                          <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                            Edit Sale
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => handleDelete(sale._id!)}
+                          className="group relative p-2.5 bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white rounded-xl transition-all shadow-sm active:scale-95"
+                          title="Delete Sale"
+                        >
+                          <Trash2 size={16} />
+                          <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                            Delete Sale
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => setPrintData(sale)}
+                          className="group relative p-2.5 bg-primary-50 text-primary-600 hover:bg-primary-600 hover:text-white rounded-xl transition-all shadow-sm active:scale-95"
+                          title="View / Print Invoice"
+                        >
+                          <Printer size={16} />
+                          <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                            {t("billing.view_invoice")}
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => handleWhatsAppShare(sale)}
+                          className="group relative p-2.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-xl transition-all shadow-sm active:scale-95"
+                          title="Share on WhatsApp"
+                        >
+                          <MessageCircle size={16} fill="currentColor" />
+                          <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                            {t("billing.whatsapp_share")}
+                          </span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -940,7 +1130,7 @@ const Sales = () => {
           <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-8 animate-in fade-in zoom-in duration-200 h-[90vh] flex flex-col">
             <div className="flex justify-between items-center mb-6 shrink-0">
               <h2 className="text-2xl font-black text-slate-800 tracking-tighter">
-                {t("billing.new_sale")}
+                {selectedSaleForEdit ? "Edit Sale" : t("billing.new_sale")}
               </h2>
               <button
                 onClick={() => tryClose(closeModal)}
@@ -1118,10 +1308,51 @@ const Sales = () => {
                           <p className="font-bold text-slate-800 tracking-tight">
                             {item.name}
                           </p>
-                          <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
-                            {item.quantity} {item.unit} × ₹
-                            {item.sellingPrice.toLocaleString()}
-                          </p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCart((prev) =>
+                                  prev.map((it, i) =>
+                                    i === idx
+                                      ? {
+                                          ...it,
+                                          quantity: Math.max(
+                                            1,
+                                            it.quantity - 1,
+                                          ),
+                                        }
+                                      : it,
+                                  ),
+                                )
+                              }
+                              className="w-6 h-6 flex items-center justify-center bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-all text-xs"
+                            >
+                              -
+                            </button>
+                            <span className="text-xs font-black text-slate-700 w-8 text-center">
+                              {item.quantity}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCart((prev) =>
+                                  prev.map((it, i) =>
+                                    i === idx
+                                      ? { ...it, quantity: it.quantity + 1 }
+                                      : it,
+                                  ),
+                                )
+                              }
+                              className="w-6 h-6 flex items-center justify-center bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition-all text-xs"
+                            >
+                              +
+                            </button>
+                            <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest ml-1">
+                              {item.unit} × ₹
+                              {item.sellingPrice.toLocaleString()}
+                            </span>
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-4">
@@ -1205,7 +1436,8 @@ const Sales = () => {
                       className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
                     />
                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                      {t("inventory.low_stock_threshold")} {/* Need better key? Using total items for now or adding roundoff */}
+                      {t("inventory.low_stock_threshold")}{" "}
+                      {/* Need better key? Using total items for now or adding roundoff */}
                       Round Off
                     </span>
                   </label>
@@ -1213,9 +1445,15 @@ const Sales = () => {
                     <input
                       type="checkbox"
                       checked={paymentStatus === "paid"}
-                      onChange={(e) =>
-                        setPaymentStatus(e.target.checked ? "paid" : "pending")
-                      }
+                      onChange={(e) => {
+                        const isPaid = e.target.checked;
+                        setPaymentStatus(isPaid ? "paid" : "pending");
+                        if (isPaid) {
+                          setAmountReceived(grandTotal.toString());
+                        } else {
+                          setAmountReceived("");
+                        }
+                      }}
                       className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                     />
                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
@@ -1273,7 +1511,9 @@ const Sales = () => {
                       <p
                         className={`text-xs font-black uppercase tracking-widest ${changeAmount >= 0 ? "text-emerald-600" : "text-rose-600"}`}
                       >
-                        {changeAmount >= 0 ? t("billing.change_to_return") : t("billing.balance_due")}
+                        {changeAmount >= 0
+                          ? t("billing.change_to_return")
+                          : t("billing.balance_due")}
                       </p>
                       <p
                         className={`text-xl font-black ${changeAmount >= 0 ? "text-emerald-600" : "text-rose-600"}`}
@@ -1299,7 +1539,11 @@ const Sales = () => {
                     </>
                   ) : (
                     <>
-                      <Receipt size={20} /> {t("billing.complete_sale")} (₹
+                      <Receipt size={20} />{" "}
+                      {selectedSaleForEdit
+                        ? "Update Sale"
+                        : t("billing.complete_sale")}{" "}
+                      (₹
                       {grandTotal.toLocaleString()})
                     </>
                   )}
@@ -1313,16 +1557,27 @@ const Sales = () => {
       {/* Invoice Preview Modal (Success or Table Action) */}
       {printData && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-0 md:p-10 animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-5xl h-full md:h-[90vh] md:rounded-[3rem] shadow-2xl flex flex-col md:flex-row overflow-hidden border border-white/20">
-            
+          <div className="bg-white w-full max-w-5xl h-full md:h-[90vh] md:rounded-[3rem] shadow-2xl flex flex-col md:flex-row overflow-hidden border border-white/20 relative">
+            <button
+              onClick={() => setPrintData(null)}
+              className="absolute top-6 right-6 p-3 bg-white/80 backdrop-blur-md rounded-full shadow-xl text-slate-400 hover:text-rose-500 hover:scale-110 transition-all z-[110] hidden md:flex items-center justify-center border border-slate-100"
+            >
+              <X size={24} />
+            </button>
+
             {/* Preview Area */}
             <div className="flex-1 bg-slate-50 p-4 md:p-8 overflow-y-auto custom-scrollbar flex flex-col items-center">
-                <div className="md:hidden flex justify-between items-center w-full mb-4 px-2">
-                     <h3 className="font-black text-slate-800 uppercase tracking-tighter text-lg">Invoice Preview</h3>
-                     <button onClick={() => setPrintData(null)} className="p-2 bg-white rounded-full shadow-sm text-slate-400">
-                        <X size={20} />
-                     </button>
-                </div>
+              <div className="md:hidden flex justify-between items-center w-full mb-4 px-2">
+                <h3 className="font-black text-slate-800 uppercase tracking-tighter text-lg">
+                  Invoice Preview
+                </h3>
+                <button
+                  onClick={() => setPrintData(null)}
+                  className="p-2 bg-white rounded-full shadow-sm text-slate-400"
+                >
+                  <X size={20} />
+                </button>
+              </div>
 
               <div
                 className={`bg-white shadow-2xl transition-all duration-500 overflow-visible ${invoiceFormat === "thermal" ? "rounded-2xl md:rounded-[2rem] p-6 md:p-10 max-w-[80mm] w-full" : "w-[210mm] min-h-[297mm] scale-[0.45] md:scale-[0.55] lg:scale-[0.75] origin-top mb-[-120px] md:mb-[-150px] lg:mb-[-100px]"}`}
@@ -1332,21 +1587,27 @@ const Sales = () => {
                     sale={printData}
                     businessName={user?.companyName || "BuildMate ERP"}
                     ownerName={user?.name}
-                    companyLogo={user?.logoUrl || (user?.tenantId as any)?.logoUrl}
-                    companyEmail={user?.billingEmail || (user?.tenantId as any)?.billingEmail}
+                    companyLogo={
+                      user?.logoUrl || (user?.tenantId as any)?.logoUrl
+                    }
+                    companyEmail={
+                      user?.billingEmail ||
+                      (user?.tenantId as any)?.billingEmail
+                    }
                     companyAddress={
-                      user?.billingAddress || (user?.tenantId as any)?.billingAddress
+                      user?.billingAddress ||
+                      (user?.tenantId as any)?.billingAddress
                     }
                     companyPhone={user?.phone || (user?.tenantId as any)?.phone}
-                    signature={user?.signature || (user?.tenantId as any)?.signature}
+                    signature={
+                      user?.signature || (user?.tenantId as any)?.signature
+                    }
                     changeAmount={
                       changeAmount !== null && changeAmount > 0
                         ? changeAmount
                         : undefined
                     }
-                    roundOffAmount={
-                      printData?.roundOffAmount || roundOffAmount
-                    }
+                    roundOffAmount={printData?.roundOffAmount || roundOffAmount}
                     isPreview={true}
                   />
                 ) : (
@@ -1354,13 +1615,21 @@ const Sales = () => {
                     sale={printData}
                     businessName={user?.companyName || "BuildMate ERP"}
                     ownerName={user?.name}
-                    companyLogo={user?.logoUrl || (user?.tenantId as any)?.logoUrl}
-                    companyEmail={user?.billingEmail || (user?.tenantId as any)?.billingEmail}
+                    companyLogo={
+                      user?.logoUrl || (user?.tenantId as any)?.logoUrl
+                    }
+                    companyEmail={
+                      user?.billingEmail ||
+                      (user?.tenantId as any)?.billingEmail
+                    }
                     companyAddress={
-                      user?.billingAddress || (user?.tenantId as any)?.billingAddress
+                      user?.billingAddress ||
+                      (user?.tenantId as any)?.billingAddress
                     }
                     companyPhone={user?.phone || (user?.tenantId as any)?.phone}
-                    signature={user?.signature || (user?.tenantId as any)?.signature}
+                    signature={
+                      user?.signature || (user?.tenantId as any)?.signature
+                    }
                     isPreview={true}
                   />
                 )}
@@ -1389,50 +1658,59 @@ const Sales = () => {
                 </p>
               </div>
 
-                <div className="space-y-6">
-                    {/* Format Switcher */}
-                    <div>
-                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 ml-1">Print Format</label>
-                        <div className="bg-slate-50 p-1.5 rounded-2xl flex gap-1.5">
-                            <button
-                                onClick={() => setInvoiceFormat("thermal")}
-                                className={`flex-1 py-3 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${invoiceFormat === "thermal" ? "bg-white text-primary-600 shadow-md" : "text-slate-400 hover:text-slate-600"}`}
-                            >
-                                {t("billing.thermal_format")}
-                            </button>
-                            <button
-                                onClick={() => setInvoiceFormat("a4")}
-                                className={`flex-1 py-3 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${invoiceFormat === "a4" ? "bg-white text-primary-600 shadow-md" : "text-slate-400 hover:text-slate-600"}`}
-                            >
-                                {t("billing.a4_format")}
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
-                        <button
-                            type="button"
-                            onClick={() => window.print()}
-                            className="w-full py-4 bg-primary-600 text-white rounded-[1.5rem] font-black uppercase tracking-widest text-xs shadow-xl shadow-primary-100 hover:bg-primary-700 transition-all flex items-center justify-center gap-3 active:scale-95"
-                        >
-                            <Printer size={18} /> {t("billing.print_now")}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => handleWhatsAppShare(printData)}
-                            className="w-full py-4 bg-emerald-500 text-white rounded-[1.5rem] font-black uppercase tracking-widest text-xs shadow-xl shadow-emerald-100 hover:bg-emerald-600 transition-all flex items-center justify-center gap-3 active:scale-95"
-                        >
-                            <MessageCircle size={18} fill="currentColor" /> {t("billing.whatsapp_share")}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => generateInvoice(printData, user?.companyName || "Business", user?.name || "Admin")}
-                            className="w-full py-4 bg-slate-50 text-slate-600 rounded-[1.5rem] font-black uppercase tracking-widest text-xs hover:bg-slate-100 transition-all flex items-center justify-center gap-3 border border-slate-200 shadow-sm"
-                        >
-                            <Download size={18} /> Download PDF
-                        </button>
-                    </div>
+              <div className="space-y-6">
+                {/* Format Switcher */}
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 ml-1">
+                    Print Format
+                  </label>
+                  <div className="bg-slate-50 p-1.5 rounded-2xl flex gap-1.5">
+                    <button
+                      onClick={() => setInvoiceFormat("thermal")}
+                      className={`flex-1 py-3 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${invoiceFormat === "thermal" ? "bg-white text-primary-600 shadow-md" : "text-slate-400 hover:text-slate-600"}`}
+                    >
+                      {t("billing.thermal_format")}
+                    </button>
+                    <button
+                      onClick={() => setInvoiceFormat("a4")}
+                      className={`flex-1 py-3 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${invoiceFormat === "a4" ? "bg-white text-primary-600 shadow-md" : "text-slate-400 hover:text-slate-600"}`}
+                    >
+                      {t("billing.a4_format")}
+                    </button>
+                  </div>
                 </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="w-full py-4 bg-primary-600 text-white rounded-[1.5rem] font-black uppercase tracking-widest text-xs shadow-xl shadow-primary-100 hover:bg-primary-700 transition-all flex items-center justify-center gap-3 active:scale-95"
+                  >
+                    <Printer size={18} /> {t("billing.print_now")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleWhatsAppShare(printData)}
+                    className="w-full py-4 bg-emerald-500 text-white rounded-[1.5rem] font-black uppercase tracking-widest text-xs shadow-xl shadow-emerald-100 hover:bg-emerald-600 transition-all flex items-center justify-center gap-3 active:scale-95"
+                  >
+                    <MessageCircle size={18} fill="currentColor" />{" "}
+                    {t("billing.whatsapp_share")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      generateInvoice(
+                        printData,
+                        user?.companyName || "Business",
+                        user?.name || "Admin",
+                      )
+                    }
+                    className="w-full py-4 bg-slate-50 text-slate-600 rounded-[1.5rem] font-black uppercase tracking-widest text-xs hover:bg-slate-100 transition-all flex items-center justify-center gap-3 border border-slate-200 shadow-sm"
+                  >
+                    <Download size={18} /> Download PDF
+                  </button>
+                </div>
+              </div>
 
               <button
                 type="button"
@@ -1452,7 +1730,7 @@ const Sales = () => {
       {isItemsModalOpen && (
         <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
           <div
-            className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl animate-in fade-in zoom-in duration-200 flex flex-col"
+            className="bg-white w-full max-w-6xl rounded-3xl shadow-2xl animate-in fade-in zoom-in duration-200 flex flex-col"
             style={{ maxHeight: "90vh" }}
           >
             <div className="flex items-center justify-between p-6 border-b border-slate-100 shrink-0">
@@ -1489,6 +1767,12 @@ const Sales = () => {
                   className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-12 pr-4 text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all"
                   value={itemSearch}
                   onChange={(e) => setItemSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleScan(itemSearch);
+                    }
+                  }}
                   autoFocus
                 />
               </div>
@@ -1498,7 +1782,7 @@ const Sales = () => {
               <table className="w-full text-left">
                 <thead className="sticky top-0 z-10 bg-white border-b border-slate-100">
                   <tr>
-                    <th className="px-4 py-3 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                    <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest w-[400px]">
                       Item Name
                     </th>
                     <th className="px-4 py-3 text-[10px] font-black uppercase text-slate-400 tracking-widest">
@@ -1550,11 +1834,18 @@ const Sales = () => {
                         />
                       </td>
                       <td className="px-4 py-3">
-                        {(!itemQtyMap[p._id!] || Number(itemQtyMap[p._id!]) === 0) ? (
+                        {!itemQtyMap[p._id!] ||
+                        Number(itemQtyMap[p._id!]) === 0 ? (
                           <button
                             onClick={() => {
-                              setItemQtyMap(prev => ({ ...prev, [p._id!]: "1" }));
-                              setItemPriceMap(prev => ({ ...prev, [p._id!]: p.pricePerUnit.toString() }));
+                              setItemQtyMap((prev) => ({
+                                ...prev,
+                                [p._id!]: "1",
+                              }));
+                              setItemPriceMap((prev) => ({
+                                ...prev,
+                                [p._id!]: p.pricePerUnit.toString(),
+                              }));
                             }}
                             className="flex items-center gap-2 px-6 py-2.5 bg-primary-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-primary-700 shadow-lg shadow-primary-100 transition-all active:scale-95"
                           >
@@ -1563,7 +1854,15 @@ const Sales = () => {
                         ) : (
                           <div className="flex items-center bg-emerald-50 rounded-xl p-1 border border-emerald-100 w-fit">
                             <button
-                              onClick={() => setItemQtyMap(prev => ({ ...prev, [p._id!]: Math.max(0, Number(prev[p._id!]) - 1).toString() }))}
+                              onClick={() =>
+                                setItemQtyMap((prev) => ({
+                                  ...prev,
+                                  [p._id!]: Math.max(
+                                    0,
+                                    Number(prev[p._id!]) - 1,
+                                  ).toString(),
+                                }))
+                              }
                               className="w-8 h-8 flex items-center justify-center bg-white text-emerald-600 rounded-lg shadow-sm hover:bg-emerald-100 transition-all"
                             >
                               -
@@ -1575,9 +1874,15 @@ const Sales = () => {
                               onClick={() => {
                                 const current = Number(itemQtyMap[p._id!]);
                                 if (current < p.stock) {
-                                  setItemQtyMap(prev => ({ ...prev, [p._id!]: (current + 1).toString() }));
+                                  setItemQtyMap((prev) => ({
+                                    ...prev,
+                                    [p._id!]: (current + 1).toString(),
+                                  }));
                                 } else {
-                                  showToast(`Max stock reached: ${p.stock}`, 'error');
+                                  showToast(
+                                    `Max stock reached: ${p.stock}`,
+                                    "error",
+                                  );
                                 }
                               }}
                               className="w-8 h-8 flex items-center justify-center bg-primary-600 text-white rounded-lg shadow-sm hover:bg-primary-700 transition-all"
@@ -1804,20 +2109,6 @@ const Sales = () => {
         </div>
       )}
 
-      <PrintableInvoice
-        sale={printData}
-        businessName={user?.companyName || "BuildMate ERP"}
-        ownerName={user?.name}
-        companyLogo={typeof user?.tenantId === 'object' ? user?.tenantId?.logoUrl : undefined}
-        companyEmail={typeof user?.tenantId === 'object' ? user?.tenantId?.billingEmail : undefined}
-        companyAddress={typeof user?.tenantId === 'object' ? user?.tenantId?.billingAddress : undefined}
-        companyPhone={typeof user?.tenantId === 'object' ? user?.tenantId?.phone : undefined}
-        signature={typeof user?.tenantId === 'object' ? user?.tenantId?.signature : undefined}
-        changeAmount={
-          changeAmount !== null && changeAmount > 0 ? changeAmount : undefined
-        }
-        roundOffAmount={roundOffAmount !== 0 ? roundOffAmount : undefined}
-      />
     </div>
   );
 };
