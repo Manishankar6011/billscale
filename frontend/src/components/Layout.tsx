@@ -58,7 +58,7 @@ const Layout = () => {
   return (
     <div className="flex flex-col min-h-screen lg:flex-row">
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-slate-100 p-6 fixed h-full overflow-y-auto">
+      <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-slate-100 p-6 fixed h-full overflow-y-auto print:hidden">
         <div className="mb-10 flex items-center gap-3">
           <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center text-white shadow-lg">
             <span className="text-xl font-bold italic">B</span>
@@ -145,7 +145,7 @@ const Layout = () => {
       </aside>
 
       {/* Mobile Bottom Nav */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 px-2 py-3 flex justify-around items-center z-50 shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.05)] overflow-x-auto">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 px-2 py-3 flex justify-around items-center z-50 shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.05)] overflow-x-auto print:hidden">
         {navItems.map((item) => (
           <NavLink
             key={item.path}
@@ -171,7 +171,7 @@ const Layout = () => {
         {/* Subscription Alert Banner */}
         {(isExpired || (isAboutToExpire && !isExpired)) && (
           <div className={cn(
-            "mb-6 p-4 rounded-2xl flex items-center justify-between gap-4 animate-in slide-in-from-top-4 duration-500",
+            "mb-6 p-4 rounded-2xl flex items-center justify-between gap-4 animate-in slide-in-from-top-4 duration-500 print:hidden",
             isExpired ? "bg-rose-600 text-white shadow-lg shadow-rose-100" : "bg-amber-50 border border-amber-100 text-amber-800 shadow-sm"
           )}>
             <div className="flex items-center gap-3">
@@ -200,7 +200,7 @@ const Layout = () => {
         )}
 
         {/* Mobile Header */}
-        <header className="lg:hidden flex items-center justify-between mb-6">
+        <header className="lg:hidden flex items-center justify-between mb-6 print:hidden">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center text-white text-xs font-bold">
               B
@@ -213,7 +213,9 @@ const Layout = () => {
         </header>
 
         <Outlet />
-        <AIAssistant />
+        <div className="print:hidden">
+          <AIAssistant />
+        </div>
       </main>
     </div>
   );

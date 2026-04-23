@@ -195,7 +195,9 @@ const Sales = () => {
   >([]);
 
   // Item-Add modal (new)
-  const [isItemsModalOpen, setIsItemsModalOpen] = useState(false);
+  const [itemsModalMode, setItemsModalMode] = useState<"all" | "scan" | null>(
+    null,
+  );
   const [itemSearch, setItemSearch] = useState("");
   const [itemQtyMap, setItemQtyMap] = useState<Record<string, string>>({});
   const [itemPriceMap, setItemPriceMap] = useState<Record<string, string>>({});
@@ -251,13 +253,13 @@ const Sales = () => {
     );
     if (hasSelectedItems) {
       setPendingCloseAction(() => () => {
-        setIsItemsModalOpen(false);
+        setItemsModalMode(null);
         setItemQtyMap({});
         setItemPriceMap({});
       });
       setShowLeaveWarning(true);
     } else {
-      setIsItemsModalOpen(false);
+      setItemsModalMode(null);
     }
   };
 
@@ -419,7 +421,7 @@ const Sales = () => {
       const trimmedCode = code.trim();
       if (!trimmedCode) return;
 
-      if (isItemsModalOpen) {
+      if (itemsModalMode !== null) {
         setItemSearch(trimmedCode);
       }
 
@@ -431,7 +433,7 @@ const Sales = () => {
       if (matches.length === 1) {
         const product = matches[0]!;
 
-        if (isItemsModalOpen) {
+        if (itemsModalMode !== null) {
           // If modal is open, increment the qty in the modal's map
           setItemQtyMap((prev) => ({
             ...prev,
@@ -481,7 +483,7 @@ const Sales = () => {
     [
       products,
       showToast,
-      isItemsModalOpen,
+      itemsModalMode,
       setItemQtyMap,
       setItemPriceMap,
       setItemSearch,
@@ -490,11 +492,20 @@ const Sales = () => {
   );
 
   // Item modal handlers
-  const filteredItems = products.filter(
-    (p) =>
-      p.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
-      (p.barcode && p.barcode.includes(itemSearch)),
-  );
+  const filteredItems =
+    itemsModalMode === "scan"
+      ? products.filter(
+          (p) =>
+            Number(itemQtyMap[p._id!]) > 0 ||
+            (itemSearch &&
+              (p.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
+                (p.barcode && p.barcode.includes(itemSearch)))),
+        )
+      : products.filter(
+          (p) =>
+            p.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
+            (p.barcode && p.barcode.includes(itemSearch)),
+        );
 
   const addItemsFromModal = () => {
     const newItems: CartItem[] = [];
@@ -541,7 +552,7 @@ const Sales = () => {
     setItemQtyMap({});
     setItemPriceMap({});
     setItemSearch("");
-    setIsItemsModalOpen(false);
+    setItemsModalMode(null);
   };
 
   // Filtered Sales
@@ -740,401 +751,403 @@ const Sales = () => {
     );
 
   return (
-    <div className="space-y-6">
-      {/* Leave Warning Modal */}
-      {showLeaveWarning && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-8 animate-in zoom-in duration-200">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center">
-                <AlertCircle size={24} />
+    <div className="w-full">
+      <div className="space-y-6 print:hidden">
+        {/* Leave Warning Modal */}
+        {showLeaveWarning && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+            <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-8 animate-in zoom-in duration-200">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center">
+                  <AlertCircle size={24} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-800">
+                    Unsaved Sale Data
+                  </h3>
+                  <p className="text-sm text-slate-500">
+                    You have items in your cart. Are you sure you want to leave?
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-lg font-black text-slate-800">
-                  Unsaved Sale Data
-                </h3>
-                <p className="text-sm text-slate-500">
-                  You have items in your cart. Are you sure you want to leave?
-                </p>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setShowLeaveWarning(false)}
+                  className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-200 transition-all"
+                >
+                  {t("inventory.stay")}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowLeaveWarning(false);
+                    if (pendingCloseAction) {
+                      pendingCloseAction();
+                      setPendingCloseAction(null);
+                    }
+                  }}
+                  className="flex-1 py-3 bg-rose-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-rose-700 transition-all"
+                >
+                  {t("inventory.leave_anyway")}
+                </button>
               </div>
             </div>
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setShowLeaveWarning(false)}
-                className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-200 transition-all"
-              >
-                {t("inventory.stay")}
-              </button>
-              <button
-                onClick={() => {
-                  setShowLeaveWarning(false);
-                  if (pendingCloseAction) {
-                    pendingCloseAction();
-                    setPendingCloseAction(null);
-                  }
-                }}
-                className="flex-1 py-3 bg-rose-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-rose-700 transition-all"
-              >
-                {t("inventory.leave_anyway")}
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800">
-            {t("billing.sale_title")}
-          </h1>
-          <p className="text-slate-500">{t("billing.sale_subtitle")}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={exportPDF}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-600 hover:bg-primary-50 hover:border-primary-200 hover:text-primary-600 transition-all shadow-sm"
-          >
-            <Download size={16} /> PDF
-          </button>
-          <button
-            onClick={exportExcel}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-600 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-600 transition-all shadow-sm"
-          >
-            <FileSpreadsheet size={16} /> Excel
-          </button>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="btn-primary flex items-center gap-2"
-          >
-            <Plus size={20} /> {t("billing.new_sale")}
-          </button>
-        </div>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <SummaryCard
-          title={t("billing.total_sales")}
-          value={`₹${totalSales.toLocaleString()}`}
-          sub={`${filteredSales.length} ${t("billing.invoices")}`}
-          color="purple"
-        />
-        <SummaryCard
-          title={t("billing.total_paid")}
-          value={`₹${totalPaid.toLocaleString()}`}
-          sub={`${filteredSales.filter((s) => s.status === "paid").length} ${t("billing.invoices")}`}
-          color="emerald"
-        />
-        <SummaryCard
-          title={t("billing.total_unpaid")}
-          value={`₹${totalUnpaid.toLocaleString()}`}
-          sub={`${filteredSales.filter((s) => s.status === "pending").length} ${t("billing.invoices")}`}
-          color="rose"
-        />
-      </div>
-
-      {/* Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-        <div className="md:col-span-1">
-          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-            {t("billing.search_sales")}
-          </label>
-          <div className="relative">
-            <Search
-              className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300"
-              size={18}
-            />
-            <input
-              type="text"
-              className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-12 pr-4 text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all"
-              placeholder={t("placeholders.search_sales")}
-              value={filterSearch}
-              onChange={(e) => setFilterSearch(e.target.value)}
-            />
-          </div>
-        </div>
-        <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-            {t("billing.date_from")}
-          </label>
-          <input
-            type="date"
-            className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-            {t("billing.date_to")}
-          </label>
-          <input
-            type="date"
-            className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-          />
-        </div>
-      </div>
-
-      {/* Net Profit summary bar */}
-      <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-3xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 text-white shadow-xl">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-white/10 rounded-2xl">
-            <TrendingUp size={20} />
-          </div>
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-              {t("billing.net_profit")}
-            </p>
-            <p
-              className={`text-2xl font-black tracking-tight ${totalNetProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}
+            <h1 className="text-2xl font-bold text-slate-800">
+              {t("billing.sale_title")}
+            </h1>
+            <p className="text-slate-500">{t("billing.sale_subtitle")}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={exportPDF}
+              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-600 hover:bg-primary-50 hover:border-primary-200 hover:text-primary-600 transition-all shadow-sm"
             >
-              {totalNetProfit >= 0 ? "+" : ""}₹
-              {Math.abs(totalNetProfit).toLocaleString()}
-            </p>
+              <Download size={16} /> PDF
+            </button>
+            <button
+              onClick={exportExcel}
+              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-600 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-600 transition-all shadow-sm"
+            >
+              <FileSpreadsheet size={16} /> Excel
+            </button>
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="btn-primary flex items-center gap-2"
+            >
+              <Plus size={20} /> {t("billing.new_sale")}
+            </button>
           </div>
         </div>
-        <div className="flex items-center gap-6 text-right">
-          <div>
-            <p className="text-[10px] text-slate-400 uppercase tracking-widest">
-              {t("billing.margin")}
-            </p>
-            <p className="text-xl font-black text-white">
-              {totalSales > 0
-                ? ((totalNetProfit / totalSales) * 100).toFixed(1)
-                : 0}
-              %
-            </p>
-          </div>
-          <div>
-            <p className="text-[10px] text-slate-400 uppercase tracking-widest">
-              {t("billing.invoices")}
-            </p>
-            <p className="text-xl font-black text-white">
-              {filteredSales.length}
-            </p>
-          </div>
-        </div>
-      </div>
 
-      {/* Sales Table */}
-      <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/50">
-                <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
-                  {t("common.date")}
-                </th>
-                <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
-                  {t("billing.customer")}
-                </th>
-                <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
-                  {t("common.mrp")}
-                </th>
-                <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
-                  {t("billing.sale_price")}
-                </th>
-                <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
-                  {t("billing.cost_price")}
-                </th>
-                <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
-                  {t("billing.profit")}
-                </th>
-                <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
-                  {t("billing.margin_perc")}
-                </th>
-                <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
-                  {t("common.items")}
-                </th>
-                <th className="px-6 py-4 text-right pr-10 text-xs font-black uppercase text-slate-400 tracking-widest">
-                  {t("common.actions")}
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {filteredSales.map((sale) => {
-                const totalMrp = (sale.items || []).reduce((acc, item) => {
-                  const factor = item.conversionFactor || 1;
-                  return acc + item.mrpAtTime * (item.quantity / factor);
-                }, 0);
-                const totalCost = (sale.items || []).reduce((acc, item) => {
-                  const factor = item.conversionFactor || 1;
-                  return (
-                    acc + item.purchasePriceAtTime * (item.quantity / factor)
-                  );
-                }, 0);
-                const profit = (sale.totalAmount || 0) - totalCost;
-                const profitPerc =
-                  (sale.totalAmount || 0) > 0
-                    ? (profit / sale.totalAmount) * 100
-                    : 0;
-                return (
-                  <tr
-                    key={sale._id}
-                    className="group hover:bg-slate-50/50 transition-all border-l-4 border-transparent hover:border-primary-500"
-                  >
-                    <td className="px-6 py-5">
-                      <p className="text-sm font-bold text-slate-800">
-                        {format(new Date(sale.date), "dd MMM yy")}
-                      </p>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
-                        {sale.invoiceNumber}
-                      </p>
-                      <div className="mt-2 text-[8px] font-black uppercase tracking-[0.2em] inline-block px-2 py-0.5 rounded-md border">
-                        {sale.status === "paid" ? (
-                          <span className="text-emerald-600 bg-emerald-50 border-emerald-100">
-                            {t("billing.paid")}
-                          </span>
-                        ) : sale.status === "partial" ? (
-                          <span className="text-amber-600 bg-amber-50 border-amber-100">
-                            {t("billing.partial")}
-                          </span>
-                        ) : (
-                          <span className="text-rose-600 bg-rose-50 border-rose-100">
-                            {t("billing.pending")}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="font-bold text-slate-800">
-                        {sale.customerName}
-                      </p>
-                      {sale.customerPhone && (
-                        <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
-                          <Phone size={10} /> {sale.customerPhone}
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="font-bold text-slate-800">
-                        ₹{(totalMrp || 0).toLocaleString()}
-                      </p>
-                      <p className="text-[10px] text-slate-400 font-medium">
-                        Total MRP
-                      </p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="font-black text-primary-700">
-                        ₹{(sale.totalAmount || 0).toLocaleString()}
-                      </p>
-                      <p className="text-[10px] text-slate-400 font-medium">
-                        Sale Price
-                      </p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="font-bold text-slate-600">
-                        ₹{(totalCost || 0).toLocaleString()}
-                      </p>
-                      <p className="text-[10px] text-slate-400 font-medium">
-                        Cost Price
-                      </p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div
-                        className={`flex items-center gap-1 font-black ${profit >= 0 ? "text-emerald-600" : "text-rose-600"}`}
-                      >
-                        {profit >= 0 ? (
-                          <TrendingUp size={14} />
-                        ) : (
-                          <TrendingDown size={14} />
-                        )}
-                        {profit >= 0 ? "+" : ""}₹
-                        {Math.abs(profit).toLocaleString()}
-                      </div>
-                      <p className="text-[10px] text-slate-400 font-medium">
-                        {t("billing.net_profit")}
-                      </p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p
-                        className={`font-black uppercase tracking-widest text-xs ${profit >= 0 ? "text-emerald-500" : "text-rose-500"}`}
-                      >
-                        {profitPerc.toFixed(1)}%
-                      </p>
-                      <p className="text-[10px] text-slate-400 font-medium">
-                        {t("billing.margin")}
-                      </p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 border border-slate-100">
-                          <Barcode size={14} />
-                        </div>
-                        <p className="font-black text-slate-800 tracking-tight">
-                          {(sale.items?.length || 0) +
-                            (sale.additionalItems?.length || 0)}
-                        </p>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => handleEdit(sale)}
-                          className="group relative p-2.5 bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white rounded-xl transition-all shadow-sm active:scale-95"
-                          title="Edit Sale"
-                        >
-                          <Receipt size={16} />
-                          <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                            Edit Sale
-                          </span>
-                        </button>
-                        <button
-                          onClick={() => handleDelete(sale._id!)}
-                          className="group relative p-2.5 bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white rounded-xl transition-all shadow-sm active:scale-95"
-                          title="Delete Sale"
-                        >
-                          <Trash2 size={16} />
-                          <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                            Delete Sale
-                          </span>
-                        </button>
-                        <button
-                          onClick={() => setPrintData(sale)}
-                          className="group relative p-2.5 bg-primary-50 text-primary-600 hover:bg-primary-600 hover:text-white rounded-xl transition-all shadow-sm active:scale-95"
-                          title="View / Print Invoice"
-                        >
-                          <Printer size={16} />
-                          <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                            {t("billing.view_invoice")}
-                          </span>
-                        </button>
-                        <button
-                          onClick={() => handleWhatsAppShare(sale)}
-                          className="group relative p-2.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-xl transition-all shadow-sm active:scale-95"
-                          title="Share on WhatsApp"
-                        >
-                          <MessageCircle size={16} fill="currentColor" />
-                          <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                            {t("billing.whatsapp_share")}
-                          </span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {filteredSales.length === 0 && (
-            <div className="text-center py-20">
-              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Receipt className="text-slate-300" size={28} />
-              </div>
-              <p className="text-slate-500 font-medium">
-                {t("billing.no_sales_found")}
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <SummaryCard
+            title={t("billing.total_sales")}
+            value={`₹${totalSales.toLocaleString()}`}
+            sub={`${filteredSales.length} ${t("billing.invoices")}`}
+            color="purple"
+          />
+          <SummaryCard
+            title={t("billing.total_paid")}
+            value={`₹${totalPaid.toLocaleString()}`}
+            sub={`${filteredSales.filter((s) => s.status === "paid").length} ${t("billing.invoices")}`}
+            color="emerald"
+          />
+          <SummaryCard
+            title={t("billing.total_unpaid")}
+            value={`₹${totalUnpaid.toLocaleString()}`}
+            sub={`${filteredSales.filter((s) => s.status === "pending").length} ${t("billing.invoices")}`}
+            color="rose"
+          />
+        </div>
+
+        {/* Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+          <div className="md:col-span-1">
+            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+              {t("billing.search_sales")}
+            </label>
+            <div className="relative">
+              <Search
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300"
+                size={18}
+              />
+              <input
+                type="text"
+                className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-12 pr-4 text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all"
+                placeholder={t("placeholders.search_sales")}
+                value={filterSearch}
+                onChange={(e) => setFilterSearch(e.target.value)}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+              {t("billing.date_from")}
+            </label>
+            <input
+              type="date"
+              className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+              {t("billing.date_to")}
+            </label>
+            <input
+              type="date"
+              className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Net Profit summary bar */}
+        <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-3xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 text-white shadow-xl">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-white/10 rounded-2xl">
+              <TrendingUp size={20} />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                {t("billing.net_profit")}
+              </p>
+              <p
+                className={`text-2xl font-black tracking-tight ${totalNetProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}
+              >
+                {totalNetProfit >= 0 ? "+" : ""}₹
+                {Math.abs(totalNetProfit).toLocaleString()}
               </p>
             </div>
-          )}
+          </div>
+          <div className="flex items-center gap-6 text-right">
+            <div>
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest">
+                {t("billing.margin")}
+              </p>
+              <p className="text-xl font-black text-white">
+                {totalSales > 0
+                  ? ((totalNetProfit / totalSales) * 100).toFixed(1)
+                  : 0}
+                %
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest">
+                {t("billing.invoices")}
+              </p>
+              <p className="text-xl font-black text-white">
+                {filteredSales.length}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Sales Table */}
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50/50">
+                  <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
+                    {t("common.date")}
+                  </th>
+                  <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
+                    {t("billing.customer")}
+                  </th>
+                  <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
+                    {t("common.mrp")}
+                  </th>
+                  <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
+                    {t("billing.sale_price")}
+                  </th>
+                  <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
+                    {t("billing.cost_price")}
+                  </th>
+                  <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
+                    {t("billing.profit")}
+                  </th>
+                  <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
+                    {t("billing.margin_perc")}
+                  </th>
+                  <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
+                    {t("common.items")}
+                  </th>
+                  <th className="px-6 py-4 text-right pr-10 text-xs font-black uppercase text-slate-400 tracking-widest">
+                    {t("common.actions")}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {filteredSales.map((sale) => {
+                  const totalMrp = (sale.items || []).reduce((acc, item) => {
+                    const factor = item.conversionFactor || 1;
+                    return acc + item.mrpAtTime * (item.quantity / factor);
+                  }, 0);
+                  const totalCost = (sale.items || []).reduce((acc, item) => {
+                    const factor = item.conversionFactor || 1;
+                    return (
+                      acc + item.purchasePriceAtTime * (item.quantity / factor)
+                    );
+                  }, 0);
+                  const profit = (sale.totalAmount || 0) - totalCost;
+                  const profitPerc =
+                    (sale.totalAmount || 0) > 0
+                      ? (profit / sale.totalAmount) * 100
+                      : 0;
+                  return (
+                    <tr
+                      key={sale._id}
+                      className="hover:bg-slate-50/50 transition-all border-l-4 border-transparent hover:border-primary-500"
+                    >
+                      <td className="px-6 py-5">
+                        <p className="text-sm font-bold text-slate-800">
+                          {format(new Date(sale.date), "dd MMM yy")}
+                        </p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
+                          {sale.invoiceNumber}
+                        </p>
+                        <div className="mt-2 text-[8px] font-black uppercase tracking-[0.2em] inline-block px-2 py-0.5 rounded-md border">
+                          {sale.status === "paid" ? (
+                            <span className="text-emerald-600 bg-emerald-50 border-emerald-100">
+                              {t("billing.paid")}
+                            </span>
+                          ) : sale.status === "partial" ? (
+                            <span className="text-amber-600 bg-amber-50 border-amber-100">
+                              {t("billing.partial")}
+                            </span>
+                          ) : (
+                            <span className="text-rose-600 bg-rose-50 border-rose-100">
+                              {t("billing.pending")}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="font-bold text-slate-800">
+                          {sale.customerName}
+                        </p>
+                        {sale.customerPhone && (
+                          <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
+                            <Phone size={10} /> {sale.customerPhone}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="font-bold text-slate-800">
+                          ₹{(totalMrp || 0).toLocaleString()}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-medium">
+                          Total MRP
+                        </p>
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="font-black text-primary-700">
+                          ₹{(sale.totalAmount || 0).toLocaleString()}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-medium">
+                          Sale Price
+                        </p>
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="font-bold text-slate-600">
+                          ₹{(totalCost || 0).toLocaleString()}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-medium">
+                          Cost Price
+                        </p>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div
+                          className={`flex items-center gap-1 font-black ${profit >= 0 ? "text-emerald-600" : "text-rose-600"}`}
+                        >
+                          {profit >= 0 ? (
+                            <TrendingUp size={14} />
+                          ) : (
+                            <TrendingDown size={14} />
+                          )}
+                          {profit >= 0 ? "+" : ""}₹
+                          {Math.abs(profit).toLocaleString()}
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-medium">
+                          {t("billing.net_profit")}
+                        </p>
+                      </td>
+                      <td className="px-6 py-4">
+                        <p
+                          className={`font-black uppercase tracking-widest text-xs ${profit >= 0 ? "text-emerald-500" : "text-rose-500"}`}
+                        >
+                          {profitPerc.toFixed(1)}%
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-medium">
+                          {t("billing.margin")}
+                        </p>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 border border-slate-100">
+                            <Barcode size={14} />
+                          </div>
+                          <p className="font-black text-slate-800 tracking-tight">
+                            {(sale.items?.length || 0) +
+                              (sale.additionalItems?.length || 0)}
+                          </p>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleEdit(sale)}
+                            className="group relative p-2.5 bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white rounded-xl transition-all shadow-sm active:scale-95"
+                            title="Edit Sale"
+                          >
+                            <Receipt size={16} />
+                            <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                              Edit Sale
+                            </span>
+                          </button>
+                          <button
+                            onClick={() => handleDelete(sale._id!)}
+                            className="group relative p-2.5 bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white rounded-xl transition-all shadow-sm active:scale-95"
+                            title="Delete Sale"
+                          >
+                            <Trash2 size={16} />
+                            <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                              Delete Sale
+                            </span>
+                          </button>
+                          <button
+                            onClick={() => setPrintData(sale)}
+                            className="group relative p-2.5 bg-primary-50 text-primary-600 hover:bg-primary-600 hover:text-white rounded-xl transition-all shadow-sm active:scale-95"
+                            title="View / Print Invoice"
+                          >
+                            <Printer size={16} />
+                            <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                              {t("billing.view_invoice")}
+                            </span>
+                          </button>
+                          <button
+                            onClick={() => handleWhatsAppShare(sale)}
+                            className="group relative p-2.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-xl transition-all shadow-sm active:scale-95"
+                            title="Share on WhatsApp"
+                          >
+                            <MessageCircle size={16} fill="currentColor" />
+                            <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                              {t("billing.whatsapp_share")}
+                            </span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {filteredSales.length === 0 && (
+              <div className="text-center py-20">
+                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Receipt className="text-slate-300" size={28} />
+                </div>
+                <p className="text-slate-500 font-medium">
+                  {t("billing.no_sales_found")}
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Sale Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4 print:hidden">
           <div className="bg-white w-full max-w-6xl rounded-3xl shadow-2xl p-8 animate-in fade-in zoom-in duration-200 h-[90vh] flex flex-col">
             <div className="flex justify-between items-center mb-6 shrink-0">
               <h2 className="text-2xl font-black text-slate-800 tracking-tighter">
@@ -1214,50 +1227,24 @@ const Sales = () => {
                 </div>
               </div>
 
-              {/* Barcode Scanner Area */}
-              <div className="p-5 bg-gradient-to-br from-primary-50 to-white rounded-[2rem] space-y-4 border border-primary-100 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-primary-600">
-                    {t("inventory.barcode_optional")}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setIsScannerOpen(true)}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-primary-600/10 text-primary-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary-600 hover:text-white transition-all border border-primary-200"
-                  >
-                    <Scan size={14} /> {t("common.camera")}
-                  </button>
-                </div>
-                <div className="relative">
-                  <Barcode
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-primary-400"
-                    size={20}
-                  />
-                  <input
-                    ref={scannerInputRef}
-                    type="text"
-                    placeholder={t("inventory.barcode_placeholder")}
-                    className="w-full bg-white border-2 border-primary-100 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all placeholder:font-medium"
-                    value={hwScannerInput}
-                    onChange={(e) => setHwScannerInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleScan(hwScannerInput);
-                      }
-                    }}
-                  />
-                </div>
+              {/* Scan and Add Items Buttons */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  type="button"
+                  onClick={() => setItemsModalMode("scan")}
+                  className="flex-1 flex items-center justify-center gap-3 p-5 rounded-2xl bg-white border-2 border-primary-100 text-primary-600 font-black uppercase tracking-widest text-sm hover:bg-primary-50 transition-all shadow-sm active:scale-[0.98]"
+                >
+                  <Scan size={20} />{" "}
+                  {t("billing.scan_products") || "Scan Items"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setItemsModalMode("all")}
+                  className="flex-1 flex items-center justify-center gap-3 p-5 rounded-2xl bg-primary-600 text-white font-black uppercase tracking-widest text-sm hover:bg-primary-700 transition-all shadow-lg shadow-primary-200 active:scale-[0.98]"
+                >
+                  <ShoppingCart size={20} /> {t("billing.add_from_inventory")}
+                </button>
               </div>
-
-              {/* Add Items Button */}
-              <button
-                type="button"
-                onClick={() => setIsItemsModalOpen(true)}
-                className="w-full flex items-center justify-center gap-3 p-5 rounded-2xl bg-primary-600 text-white font-black uppercase tracking-widest text-sm hover:bg-primary-700 transition-all shadow-lg shadow-primary-200 active:scale-[0.98]"
-              >
-                <ShoppingCart size={20} /> {t("billing.add_from_inventory")}
-              </button>
 
               {/* Additional Charges Section (New) */}
               <div className="p-5 bg-amber-50 rounded-[2rem] border border-amber-100 space-y-3">
@@ -1444,7 +1431,6 @@ const Sales = () => {
                       className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
                     />
                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                      {t("inventory.low_stock_threshold")}{" "}
                       {/* Need better key? Using total items for now or adding roundoff */}
                       Round Off
                     </span>
@@ -1564,31 +1550,31 @@ const Sales = () => {
 
       {/* Invoice Preview Modal (Success or Table Action) */}
       {printData && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-0 md:p-10 animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-5xl h-full md:h-[90vh] md:rounded-[3rem] shadow-2xl flex flex-col md:flex-row overflow-hidden border border-white/20 relative">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-0 md:p-10 animate-in fade-in duration-300 print:static print:bg-white print:p-0 print:m-0 print:h-auto print:w-auto">
+          <div className="bg-white w-full max-w-5xl h-full md:h-[90vh] md:rounded-[3rem] shadow-2xl flex flex-col md:flex-row overflow-hidden border border-white/20 relative print:shadow-none print:border-none print:h-auto print:w-auto print:overflow-visible print:block">
             <button
               onClick={() => setPrintData(null)}
-              className="absolute top-6 right-6 p-3 bg-white/80 backdrop-blur-md rounded-full shadow-xl text-slate-400 hover:text-rose-500 hover:scale-110 transition-all z-[110] hidden md:flex items-center justify-center border border-slate-100"
+              className="absolute top-6 print:hidden right-6 p-3 bg-white/80 backdrop-blur-md rounded-full shadow-xl text-slate-400 hover:text-rose-500 hover:scale-110 transition-all z-[110] hidden md:flex items-center justify-center border border-slate-100"
             >
               <X size={24} />
             </button>
 
             {/* Preview Area */}
-            <div className="flex-1 bg-slate-50 p-4 md:p-8 overflow-y-auto custom-scrollbar flex flex-col items-center">
+            <div className="flex-1 bg-slate-50 p-4 md:p-8 overflow-y-auto custom-scrollbar flex flex-col items-center print:p-0 print:m-0 print:bg-white print:overflow-visible print:h-auto">
               <div className="md:hidden flex justify-between items-center w-full mb-4 px-2">
                 <h3 className="font-black text-slate-800 uppercase tracking-tighter text-lg">
                   Invoice Preview
                 </h3>
                 <button
                   onClick={() => setPrintData(null)}
-                  className="p-2 bg-white rounded-full shadow-sm text-slate-400"
+                  className="p-2 bg-white rounded-full print:hidden shadow-sm text-slate-400"
                 >
                   <X size={20} />
                 </button>
               </div>
 
               <div
-                className={`bg-white shadow-2xl transition-all duration-500 overflow-visible ${invoiceFormat === "thermal" ? "rounded-2xl md:rounded-[2rem] p-6 md:p-10 max-w-[80mm] w-full" : "w-[210mm] min-h-[297mm] scale-[0.45] md:scale-[0.55] lg:scale-[0.75] origin-top mb-[-120px] md:mb-[-150px] lg:mb-[-100px]"}`}
+                className={`bg-white shadow-2xl transition-all duration-500 overflow-visible print:shadow-none print:p-0 print:m-0 print:scale-100 print:w-auto print:max-w-none print:mb-0 print:origin-top-left ${invoiceFormat === "thermal" ? "rounded-2xl md:rounded-[2rem] p-6 md:p-10 max-w-[80mm] w-full" : "w-[210mm] min-h-[297mm] scale-[0.45] md:scale-[0.55] lg:scale-[0.75] origin-top mb-[-120px] md:mb-[-150px] lg:mb-[-100px]"}`}
               >
                 {invoiceFormat === "thermal" ? (
                   <PrintableInvoice
@@ -1646,35 +1632,28 @@ const Sales = () => {
                 @media print {
                     @page { 
                       size: ${invoiceFormat === "thermal" ? "80mm auto" : "A4"}; 
-                      margin: 0; 
+                      margin: 0 !important; 
+                    }
+                    html, body {
+                      height: auto !important;
+                      overflow: visible !important;
+                      margin: 0 !important;
+                      padding: 0 !important;
+                      background: white !important;
                     }
                     body { 
-                      margin: 0; 
-                      padding: 0; 
                       -webkit-print-color-adjust: exact !important; 
                       print-color-adjust: exact !important;
+                      image-rendering: crisp-edges;
+                      text-rendering: optimizeLegibility;
                     }
-                    body * { visibility: hidden !important; }
-                    #${invoiceFormat === "thermal" ? "printable-invoice" : "a4-invoice"}, 
-                    #${invoiceFormat === "thermal" ? "printable-invoice" : "a4-invoice"} * { 
-                      visibility: visible !important; 
-                    }
-                    #${invoiceFormat === "thermal" ? "printable-invoice" : "a4-invoice"} { 
-                      position: fixed; 
-                      left: 0; 
-                      top: 0; 
-                      width: ${invoiceFormat === "thermal" ? "80mm" : "210mm"} !important;
-                      margin: 0 !important;
-                      padding: ${invoiceFormat === "thermal" ? "10px" : "15mm"} !important;
-                      background: white !important;
-                      color: black !important;
-                    }
+                    .no-print { display: none !important; }
                 }
               `}</style>
             </div>
 
             {/* Actions Side/Bottom Panel */}
-            <div className="w-full md:w-[400px] bg-white p-8 md:p-12 flex flex-col justify-between border-t md:border-t-0 md:border-l border-slate-100">
+            <div className="w-full md:w-[400px] bg-white p-8 md:p-12 flex flex-col justify-between border-t md:border-t-0 md:border-l border-slate-100 print:hidden">
               <div className="hidden md:block">
                 <div className="w-16 h-16 bg-primary-50 text-primary-600 rounded-3xl flex items-center justify-center mb-6 shadow-inner">
                   <Receipt size={32} />
@@ -1756,7 +1735,7 @@ const Sales = () => {
       )}
 
       {/* Items Add Modal */}
-      {isItemsModalOpen && (
+      {itemsModalMode !== null && (
         <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
           <div
             className="bg-white w-full max-w-6xl rounded-3xl shadow-2xl animate-in fade-in zoom-in duration-200 flex flex-col"
@@ -1804,6 +1783,15 @@ const Sales = () => {
                   }}
                   autoFocus
                 />
+                {itemSearch && (
+                  <button
+                    onClick={() => setItemSearch("")}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 p-1.5 bg-slate-200 text-slate-600 rounded-full hover:bg-slate-300 transition-all z-20"
+                    type="button"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -2137,7 +2125,6 @@ const Sales = () => {
           </div>
         </div>
       )}
-
     </div>
   );
 };
