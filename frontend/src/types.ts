@@ -49,6 +49,46 @@ export interface Product {
   batchNumber?: string;
 }
 
+export interface PaginatedResponse<T> {
+  products: T[];
+  pagination: {
+    totalCount: number;
+    totalPages: number;
+    currentPage: number;
+    limit: number;
+  };
+  totalStockValue: number;
+}
+
+export interface PaginatedSalesResponse {
+  sales: Sale[];
+  pagination: {
+    totalCount: number;
+    totalPages: number;
+    currentPage: number;
+    limit: number;
+  };
+  summary: {
+    totalAmount: number;
+    totalPaid: number;
+    totalUnpaid: number;
+    totalProfit: number;
+  };
+}
+
+export interface PaginatedPurchasesResponse {
+  purchases: Purchase[];
+  pagination: {
+    totalCount: number;
+    totalPages: number;
+    currentPage: number;
+    limit: number;
+  };
+}
+
+
+
+
 export interface Customer {
   _id?: string;
   name: string;

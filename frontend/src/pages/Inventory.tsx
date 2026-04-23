@@ -1,5 +1,5 @@
-import React, { useState, useRef } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import {
@@ -21,7 +21,7 @@ import {
 import BarcodeScanner from "../components/BarcodeScanner";
 import JsBarcode from "jsbarcode";
 import axios from "axios";
-import type { Product } from "../types";
+import type { Product, PaginatedResponse } from "../types";
 import { useAuth } from "../context/AuthContext";
 import { InventorySkeleton } from "../components/Skeleton";
 import { useToast } from "../context/ToastContext";
@@ -55,23 +55,76 @@ const Inventory = () => {
   const { showToast } = useToast();
   const queryClient = useQueryClient();
 
-  // 1. Fetching logic with useQuery
+  // State Declarations
+  const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+  const [filterType, setFilterType] = useState<"all" | "low" | "out">("all");
+  const [sortBy, setSortBy] = useState<
+    "name" | "price-asc" | "price-desc" | "stock-asc" | "stock-desc"
+  >("name");
+
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // 1. Fetching logic with useInfiniteQuery
   const {
-    data: products = [],
+    data,
     isLoading: loading,
     isRefetching: refreshing,
-  } = useQuery<Product[]>({
-    queryKey: ["inventory"],
-    queryFn: async () => {
-      const res = await axios.get<Product[]>("/api/inventory", {
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery<PaginatedResponse<Product>>({
+    queryKey: ["inventory", debouncedSearchTerm, filterType, sortBy],
+    queryFn: async ({ pageParam = 1 }) => {
+      const res = await axios.get<PaginatedResponse<Product>>("/api/inventory", {
+        params: {
+          page: pageParam,
+          limit: 12,
+          search: debouncedSearchTerm,
+          filterType,
+          sortBy,
+        },
         headers: { Authorization: `Bearer ${user?.token}` },
       });
       return res.data;
     },
+    getNextPageParam: (lastPage) => {
+      if (lastPage.pagination.currentPage < lastPage.pagination.totalPages) {
+        return lastPage.pagination.currentPage + 1;
+      }
+      return undefined;
+    },
+    initialPageParam: 1,
     enabled: !!user?.token,
   });
 
-  const [searchTerm, setSearchTerm] = useState("");
+  const products = useMemo(() => {
+    return data?.pages.flatMap((page) => page.products) || [];
+  }, [data]);
+
+  // Infinite Scroll Observer
+  const observer = useRef<IntersectionObserver | null>(null);
+  const lastElementRef = useCallback(
+    (node: HTMLDivElement) => {
+      if (loading) return;
+      if (observer.current) observer.current.disconnect();
+      observer.current = new IntersectionObserver((entries) => {
+        if (entries[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      });
+      if (node) observer.current.observe(node);
+    },
+    [loading, hasNextPage, isFetchingNextPage, fetchNextPage],
+  );
+
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -101,10 +154,7 @@ const Inventory = () => {
   const [isContinuousMode, setIsContinuousMode] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
-  const [filterType, setFilterType] = useState<"all" | "low" | "out">("all");
-  const [sortBy, setSortBy] = useState<
-    "name" | "price-asc" | "price-desc" | "stock-asc" | "stock-desc"
-  >("name");
+
   const [printLabelData, setPrintLabelData] = useState<Product | null>(null);
   const [adjustmentType, setAdjustmentType] = useState<"add" | "reduce">("add");
   const [adjustmentValue, setAdjustmentValue] = useState("");
@@ -266,24 +316,8 @@ const Inventory = () => {
     saveMutation.mutate(data);
   };
 
-  const filteredProducts = products
-    .filter((p) => {
-      const matchesSearch =
-        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (p.barcode && p.barcode.includes(searchTerm));
-
-      if (filterType === "low")
-        return matchesSearch && p.stock <= p.minStockAlert && p.stock > 0;
-      if (filterType === "out") return matchesSearch && p.stock <= 0;
-      return matchesSearch;
-    })
-    .sort((a, b) => {
-      if (sortBy === "price-asc") return a.pricePerUnit - b.pricePerUnit;
-      if (sortBy === "price-desc") return b.pricePerUnit - a.pricePerUnit;
-      if (sortBy === "stock-asc") return a.stock - b.stock;
-      if (sortBy === "stock-desc") return b.stock - a.stock;
-      return a.name.localeCompare(b.name);
-    });
+  // Server-side filtering/sorting is already handled by useInfiniteQuery params
+  const filteredProducts = products;
 
   const handleScan = React.useCallback(
     (code: string) => {
@@ -295,11 +329,9 @@ const Inventory = () => {
   );
 
   // Summary Calculations
-  const totalItems = products.length;
-  const totalStockValue = products.reduce(
-    (sum, p) => sum + Number(p.stock) * Number(p.pricePerUnit),
-    0,
-  );
+  // Summary Calculations - Using global totals from the API
+  const totalItems = data?.pages[0]?.pagination.totalCount || 0;
+  const totalStockValue = data?.pages[0]?.totalStockValue || 0;
 
   const exportToCSV = () => {
     const headers = [
@@ -696,6 +728,7 @@ const Inventory = () => {
               key={product._id}
               className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group"
             >
+              {/* Product Card Content (unchanged) */}
               <div className="flex items-start justify-between mb-4">
                 <div
                   className={`p-3 rounded-xl ${isLowStock ? "bg-rose-50 text-rose-600" : "bg-primary-50 text-primary-600"}`}
@@ -809,6 +842,33 @@ const Inventory = () => {
           );
         })}
       </div>
+
+      {/* Infinite Scroll Trigger */}
+      <div
+        ref={lastElementRef}
+        className="h-20 flex items-center justify-center mt-4"
+      >
+        {isFetchingNextPage ? (
+          <div className="flex flex-col items-center gap-2">
+            <Loader2 className="animate-spin text-primary-600" size={32} />
+            <p className="text-xs font-black uppercase tracking-widest text-slate-400 animate-pulse">
+              Loading more products...
+            </p>
+          </div>
+        ) : hasNextPage ? (
+          <p className="text-xs font-bold text-slate-300 uppercase tracking-widest">
+            Scroll for more
+          </p>
+        ) : products.length > 0 ? (
+          <div className="flex flex-col items-center gap-2 opacity-40">
+            <div className="w-8 h-1 bg-slate-200 rounded-full" />
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+              End of inventory
+            </p>
+          </div>
+        ) : null}
+      </div>
+
 
       {filteredProducts.length === 0 && (
         <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">

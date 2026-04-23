@@ -6,7 +6,11 @@ import React, {
   useMemo,
 } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
   Plus,
@@ -40,7 +44,13 @@ import {
 import BarcodeScanner from "../components/BarcodeScanner";
 import CustomerSearch from "../components/CustomerSearch";
 import axios from "axios";
-import type { Sale, Product, Customer } from "../types";
+import type {
+  Sale,
+  Product,
+  Customer,
+  PaginatedResponse,
+  PaginatedSalesResponse,
+} from "../types";
 import { useAuth } from "../context/AuthContext";
 import { TableSkeleton, MetricsSkeleton } from "../components/Skeleton";
 import { useToast } from "../context/ToastContext";
@@ -143,6 +153,164 @@ const Sales = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // State Declarations (Moved to top)
+  const [filterSearch, setFilterSearch] = useState("");
+  const [debouncedFilterSearch, setDebouncedFilterSearch] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  const [itemSearch, setItemSearch] = useState("");
+  const [debouncedItemSearch, setDebouncedItemSearch] = useState("");
+
+  // Debounce search terms
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedFilterSearch(filterSearch), 500);
+    return () => clearTimeout(timer);
+  }, [filterSearch]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedItemSearch(itemSearch), 500);
+    return () => clearTimeout(timer);
+  }, [itemSearch]);
+
+  // Infinite Query for Sales
+  const {
+    data: salesData,
+    isLoading: salesLoading,
+    fetchNextPage: fetchNextSalesPage,
+    hasNextPage: hasNextSalesPage,
+    isFetchingNextPage: isFetchingNextSalesPage,
+  } = useInfiniteQuery<PaginatedSalesResponse>({
+    queryKey: ["sales", debouncedFilterSearch, startDate, endDate],
+    queryFn: async ({ pageParam = 1 }) => {
+      const res = await axios.get<PaginatedSalesResponse>(
+        "/api/transactions/sales",
+        {
+          params: {
+            page: pageParam,
+            limit: 20,
+            search: debouncedFilterSearch,
+            startDate,
+            endDate,
+          },
+          headers: { Authorization: `Bearer ${user?.token}` },
+        },
+      );
+      return res.data;
+    },
+    getNextPageParam: (lastPage) => {
+      if (lastPage.pagination.currentPage < lastPage.pagination.totalPages) {
+        return lastPage.pagination.currentPage + 1;
+      }
+      return undefined;
+    },
+    initialPageParam: 1,
+    enabled: !!user?.token,
+  });
+
+  const sales = useMemo(() => {
+    return salesData?.pages.flatMap((page) => page.sales) || [];
+  }, [salesData]);
+
+  const salesSummary = useMemo(() => {
+    return (
+      salesData?.pages[0]?.summary || {
+        totalAmount: 0,
+        totalPaid: 0,
+        totalUnpaid: 0,
+        totalProfit: 0,
+      }
+    );
+  }, [salesData]);
+
+  // Infinite Query for Inventory
+  const {
+    data: productsData,
+    isLoading: productsLoading,
+    fetchNextPage: fetchNextProductsPage,
+    hasNextPage: hasNextProductsPage,
+    isFetchingNextPage: isFetchingNextProductsPage,
+  } = useInfiniteQuery<PaginatedResponse<Product>>({
+    queryKey: ["inventory", debouncedItemSearch],
+    queryFn: async ({ pageParam = 1 }) => {
+      const res = await axios.get<PaginatedResponse<Product>>(
+        "/api/inventory",
+        {
+          params: {
+            page: pageParam,
+            limit: 20,
+            search: debouncedItemSearch,
+          },
+          headers: { Authorization: `Bearer ${user?.token}` },
+        },
+      );
+      return res.data;
+    },
+    getNextPageParam: (lastPage) => {
+      if (lastPage.pagination.currentPage < lastPage.pagination.totalPages) {
+        return lastPage.pagination.currentPage + 1;
+      }
+      return undefined;
+    },
+    initialPageParam: 1,
+    enabled: !!user?.token,
+  });
+
+  const products = useMemo(() => {
+    return productsData?.pages.flatMap((page) => page.products) || [];
+  }, [productsData]);
+
+  // Infinite Scroll Observers
+  const salesObserver = useRef<IntersectionObserver | null>(null);
+  const lastSaleElementRef = useCallback(
+    (node: HTMLTableRowElement) => {
+      if (salesLoading) return;
+      if (salesObserver.current) salesObserver.current.disconnect();
+      salesObserver.current = new IntersectionObserver((entries) => {
+        if (
+          entries[0]?.isIntersecting &&
+          hasNextSalesPage &&
+          !isFetchingNextSalesPage
+        ) {
+          fetchNextSalesPage();
+        }
+      });
+      if (node) salesObserver.current.observe(node);
+    },
+    [
+      salesLoading,
+      hasNextSalesPage,
+      isFetchingNextSalesPage,
+      fetchNextSalesPage,
+    ],
+  );
+
+  const productsObserver = useRef<IntersectionObserver | null>(null);
+  const lastProductElementRef = useCallback(
+    (node: HTMLTableRowElement) => {
+      if (productsLoading) return;
+
+
+      if (productsObserver.current) productsObserver.current.disconnect();
+      productsObserver.current = new IntersectionObserver((entries) => {
+        if (
+          entries[0]?.isIntersecting &&
+          hasNextProductsPage &&
+          !isFetchingNextProductsPage
+        ) {
+          fetchNextProductsPage();
+        }
+      });
+      if (node) productsObserver.current.observe(node);
+    },
+    [
+      productsLoading,
+      hasNextProductsPage,
+      isFetchingNextProductsPage,
+      fetchNextProductsPage,
+    ],
+  );
+
   useEffect(() => {
     if ((location.state as any)?.openModal) {
       setIsModalOpen(true);
@@ -150,31 +318,6 @@ const Sales = () => {
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
-
-  // Queries
-  const { data: sales = [], isLoading: salesLoading } = useQuery<Sale[]>({
-    queryKey: ["sales"],
-    queryFn: async () => {
-      const res = await axios.get<Sale[]>("/api/transactions/sales", {
-        headers: { Authorization: `Bearer ${user?.token}` },
-      });
-      return res.data;
-    },
-    enabled: !!user?.token,
-  });
-
-  const { data: products = [], isLoading: productsLoading } = useQuery<
-    Product[]
-  >({
-    queryKey: ["inventory"],
-    queryFn: async () => {
-      const res = await axios.get<Product[]>("/api/inventory", {
-        headers: { Authorization: `Bearer ${user?.token}` },
-      });
-      return res.data;
-    },
-    enabled: !!user?.token,
-  });
 
   const isInitialLoading =
     (salesLoading || productsLoading) &&
@@ -210,7 +353,7 @@ const Sales = () => {
   const [itemsModalMode, setItemsModalMode] = useState<"all" | "scan" | null>(
     null,
   );
-  const [itemSearch, setItemSearch] = useState("");
+
   const [itemQtyMap, setItemQtyMap] = useState<Record<string, string>>({});
   const [itemPriceMap, setItemPriceMap] = useState<Record<string, string>>({});
 
@@ -232,14 +375,16 @@ const Sales = () => {
 
   // Leave warning
   const [showLeaveWarning, setShowLeaveWarning] = useState(false);
-  const [pendingCloseAction, setPendingCloseAction] = useState<(() => void) | null>(null);
+  const [pendingCloseAction, setPendingCloseAction] = useState<
+    (() => void) | null
+  >(null);
 
   // Auto-print effect with sessionStorage guard to prevent duplicate prints across remounts
   useEffect(() => {
     if (printData && autoPrint && printData._id) {
-      const lastPrintedId = sessionStorage.getItem('last_auto_printed_id');
+      const lastPrintedId = sessionStorage.getItem("last_auto_printed_id");
       if (printData._id !== lastPrintedId) {
-        sessionStorage.setItem('last_auto_printed_id', printData._id);
+        sessionStorage.setItem("last_auto_printed_id", printData._id);
         const timer = setTimeout(() => {
           window.print();
         }, 1000);
@@ -249,9 +394,7 @@ const Sales = () => {
   }, [printData, autoPrint]);
 
   // Handle unsaved changes warning
-  const [filterSearch, setFilterSearch] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+
   const [showProfit, setShowProfit] = useState(false);
 
   const isFormDirty =
@@ -619,40 +762,14 @@ const Sales = () => {
     setItemsModalMode(null);
   };
 
-  // Filtered Sales
-  const filteredSales = sales.filter((sale) => {
-    const matchesSearch =
-      sale.customerName.toLowerCase().includes(filterSearch.toLowerCase()) ||
-      sale.invoiceNumber.toLowerCase().includes(filterSearch.toLowerCase()) ||
-      (sale.customerPhone && sale.customerPhone.includes(filterSearch));
-    const saleDate = new Date(sale.date).setHours(0, 0, 0, 0);
-    const start = startDate ? new Date(startDate).setHours(0, 0, 0, 0) : null;
-    const end = endDate ? new Date(endDate).setHours(0, 0, 0, 0) : null;
-    return (
-      matchesSearch &&
-      (!start || saleDate >= start) &&
-      (!end || saleDate <= end)
-    );
-  });
+  // Sales are already filtered by the backend
+  const filteredSales = sales;
 
-  // Summary metrics
-  const totalSales = filteredSales.reduce(
-    (a, s) => a + (s.totalAmount || 0),
-    0,
-  );
-  const totalPaid = filteredSales.reduce((a, s) => a + (s.amountPaid || 0), 0);
-  const totalUnpaid = filteredSales.reduce(
-    (a, s) => a + (s.balanceDue || 0),
-    0,
-  );
-  const totalNetProfit = filteredSales.reduce((a, s) => {
-    const cost = (s.items || []).reduce((acc, item) => {
-      const factor = item.conversionFactor || 1;
-      return acc + item.purchasePriceAtTime * (item.quantity / factor);
-    }, 0);
-    const charges = (s.additionalItems || []).reduce((acc, item) => acc + (Number(item.price) || 0), 0);
-    return a + (s.totalAmount - charges - (s.roundOffAmount || 0) - cost);
-  }, 0);
+  // Summary metrics from backend
+  const totalSales = salesSummary.totalAmount;
+  const totalPaid = salesSummary.totalPaid;
+  const totalUnpaid = salesSummary.totalUnpaid;
+  const totalNetProfit = salesSummary.totalProfit;
 
   // Export PDF
   const exportPDF = () => {
@@ -741,7 +858,7 @@ const Sales = () => {
 
   const handleCustomerSelect = (customer: Customer) => {
     setCustomerName(customer.name);
-    setCustomerPhone(customer.phone??"");
+    setCustomerPhone(customer.phone ?? "");
     setCustomerAddress(customer.address || "");
   };
   const handleAddNewCustomer = (query: string) => {
@@ -906,7 +1023,7 @@ const Sales = () => {
           <SummaryCard
             title={t("billing.total_unpaid")}
             value={`₹${totalUnpaid.toLocaleString()}`}
-            sub={`${filteredSales.filter((s) => s.status === "pending").length} ${t("billing.invoices")}`}
+            sub={`${salesData?.pages[0]?.pagination.totalCount || 0} ${t("billing.invoices")}`}
             color="rose"
           />
         </div>
@@ -1010,7 +1127,7 @@ const Sales = () => {
                 {t("billing.invoices")}
               </p>
               <p className="text-xl font-black text-white">
-                {filteredSales.length}
+                {salesData?.pages[0]?.pagination.totalCount || 0}
               </p>
             </div>
           </div>
@@ -1052,7 +1169,9 @@ const Sales = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {filteredSales.map((sale) => {
+                {sales.map((sale, index) => {
+                  const isLastElement = index === sales.length - 1;
+
                   const totalMrp = (sale.items || []).reduce((acc, item) => {
                     const factor = item.conversionFactor || 1;
                     return acc + item.mrpAtTime * (item.quantity / factor);
@@ -1063,18 +1182,26 @@ const Sales = () => {
                       acc + item.purchasePriceAtTime * (item.quantity / factor)
                     );
                   }, 0);
-                  const additionalChargesTotal = (sale.additionalItems || []).reduce(
-                    (acc, item) => acc + (Number(item.price) || 0),
-                    0,
-                  );
-                  const profit = (sale.totalAmount || 0) - additionalChargesTotal - (sale.roundOffAmount || 0) - totalCost;
+                  const additionalChargesTotal = (
+                    sale.additionalItems || []
+                  ).reduce((acc, item) => acc + (Number(item.price) || 0), 0);
+                  const profit =
+                    (sale.totalAmount || 0) -
+                    additionalChargesTotal -
+                    (sale.roundOffAmount || 0) -
+                    totalCost;
                   const profitPerc =
                     (sale.totalAmount || 0) > 0
-                      ? (profit / (sale.totalAmount - additionalChargesTotal - (sale.roundOffAmount || 0))) * 100
+                      ? (profit /
+                          (sale.totalAmount -
+                            additionalChargesTotal -
+                            (sale.roundOffAmount || 0))) *
+                        100
                       : 0;
                   return (
                     <tr
                       key={sale._id}
+                      ref={isLastElement ? lastSaleElementRef : null}
                       className="hover:bg-slate-50/50 transition-all border-l-4 border-transparent hover:border-primary-500"
                     >
                       <td className="px-6 py-5">
@@ -1220,6 +1347,17 @@ const Sales = () => {
                 })}
               </tbody>
             </table>
+            {isFetchingNextSalesPage && (
+              <div className="flex justify-center p-6 bg-slate-50/30">
+                <Loader2 className="animate-spin text-primary-600" size={24} />
+              </div>
+            )}
+            {!hasNextSalesPage && sales.length > 0 && (
+              <div className="text-center py-6 text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                End of transactions
+              </div>
+            )}
+
             {filteredSales.length === 0 && (
               <div className="text-center py-20">
                 <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -1392,9 +1530,14 @@ const Sales = () => {
                               +
                             </button>
                             <div className="flex items-center py-1 gap-2 px-4  bg-white border-2 border-slate-100 rounded-2xl hover:border-primary-500 transition-all group/price shadow-sm">
-                              <Edit size={14} className="text-slate-300 group-hover/price:text-primary-500 transition-colors" />
+                              <Edit
+                                size={14}
+                                className="text-slate-300 group-hover/price:text-primary-500 transition-colors"
+                              />
                               <div className="flex items-center gap-2 border-slate-100">
-                                <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{item.unit} × ₹</span>
+                                <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
+                                  {item.unit} × ₹
+                                </span>
                                 <input
                                   type="number"
                                   value={item.sellingPrice}
@@ -1934,109 +2077,121 @@ const Sales = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {filteredItems.map((p) => (
-                    <tr
-                      key={p._id}
-                      className={`hover:bg-primary-50/30 transition-colors ${itemQtyMap[p._id!] && Number(itemQtyMap[p._id!]) > 0 ? "bg-emerald-50/30" : ""}`}
-                    >
-                      <td className="px-4 py-3">
-                        <p className="font-bold text-slate-800 text-sm">
-                          {p.name}
-                        </p>
-                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
-                          {p.unit} · {p.batchNumber || "Default"}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3 text-sm font-black text-slate-600">
-                        {Number(p.stock).toFixed(2)}
-                      </td>
-                      <td className="px-4 py-3 text-sm font-bold text-slate-500">
-                        ₹{p.mrp || 0}
-                      </td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="number"
-                          className="w-24 bg-white border border-slate-200 rounded-xl p-2 text-sm font-bold focus:ring-2 focus:ring-primary-500"
-                          placeholder={p.pricePerUnit.toString()}
-                          value={itemPriceMap[p._id!] || ""}
-                          onChange={(e) =>
-                            setItemPriceMap((prev) => ({
-                              ...prev,
-                              [p._id!]: e.target.value,
-                            }))
-                          }
-                          onWheel={(e) => e.currentTarget.blur()}
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        {!itemQtyMap[p._id!] ||
-                        Number(itemQtyMap[p._id!]) === 0 ? (
-                          <button
-                            onClick={() => {
-                              setItemQtyMap((prev) => ({
-                                ...prev,
-                                [p._id!]: "1",
-                              }));
+                  {products.map((p, index) => {
+                    const isLastProduct = index === products.length - 1;
+                    return (
+                      <tr
+                        key={p._id}
+                        ref={isLastProduct ? lastProductElementRef : null}
+                        className={`hover:bg-primary-50/30 transition-colors ${itemQtyMap[p._id!] && Number(itemQtyMap[p._id!]) > 0 ? "bg-emerald-50/30" : ""}`}
+                      >
+                        <td className="px-4 py-3">
+                          <p className="font-bold text-slate-800 text-sm">
+                            {p.name}
+                          </p>
+                          <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
+                            {p.unit} · {p.batchNumber || "Default"}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3 text-sm font-black text-slate-600">
+                          {Number(p.stock).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-bold text-slate-500">
+                          ₹{p.mrp || 0}
+                        </td>
+                        <td className="px-4 py-3">
+                          <input
+                            type="number"
+                            className="w-24 bg-white border border-slate-200 rounded-xl p-2 text-sm font-bold focus:ring-2 focus:ring-primary-500"
+                            placeholder={p.pricePerUnit.toString()}
+                            value={itemPriceMap[p._id!] || ""}
+                            onChange={(e) =>
                               setItemPriceMap((prev) => ({
                                 ...prev,
-                                [p._id!]: p.pricePerUnit.toString(),
-                              }));
-                            }}
-                            className="flex items-center gap-2 px-6 py-2.5 bg-primary-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-primary-700 shadow-lg shadow-primary-100 transition-all active:scale-95"
-                          >
-                            <Plus size={14} /> Add
-                          </button>
-                        ) : (
-                          <div className="flex items-center bg-emerald-50 rounded-xl p-1 border border-emerald-100 w-fit">
-                            <button
-                              onClick={() =>
-                                setItemQtyMap((prev) => ({
-                                  ...prev,
-                                  [p._id!]: Math.max(
-                                    0,
-                                    Number(prev[p._id!]) - 1,
-                                  ).toString(),
-                                }))
-                              }
-                              className="w-8 h-8 flex items-center justify-center bg-white text-emerald-600 rounded-lg shadow-sm hover:bg-emerald-100 transition-all"
-                            >
-                              -
-                            </button>
-                            <span className="w-10 text-center font-black text-emerald-700 text-sm">
-                              {itemQtyMap[p._id!]}
-                            </span>
+                                [p._id!]: e.target.value,
+                              }))
+                            }
+                            onWheel={(e) => e.currentTarget.blur()}
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          {!itemQtyMap[p._id!] ||
+                          Number(itemQtyMap[p._id!]) === 0 ? (
                             <button
                               onClick={() => {
-                                const current = Number(itemQtyMap[p._id!]);
-                                if (current < p.stock) {
+                                setItemQtyMap((prev) => ({
+                                  ...prev,
+                                  [p._id!]: "1",
+                                }));
+                                setItemPriceMap((prev) => ({
+                                  ...prev,
+                                  [p._id!]: p.pricePerUnit.toString(),
+                                }));
+                              }}
+                              className="flex items-center gap-2 px-6 py-2.5 bg-primary-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-primary-700 shadow-lg shadow-primary-100 transition-all active:scale-95"
+                            >
+                              <Plus size={14} /> Add
+                            </button>
+                          ) : (
+                            <div className="flex items-center bg-emerald-50 rounded-xl p-1 border border-emerald-100 w-fit">
+                              <button
+                                onClick={() =>
                                   setItemQtyMap((prev) => ({
                                     ...prev,
-                                    [p._id!]: (current + 1).toString(),
-                                  }));
-                                } else {
-                                  showToast(
-                                    `Max stock reached: ${p.stock}`,
-                                    "error",
-                                  );
+                                    [p._id!]: Math.max(
+                                      0,
+                                      Number(prev[p._id!]) - 1,
+                                    ).toString(),
+                                  }))
                                 }
-                              }}
-                              className="w-8 h-8 flex items-center justify-center bg-primary-600 text-white rounded-lg shadow-sm hover:bg-primary-700 transition-all"
-                            >
-                              +
-                            </button>
-                          </div>
-                        )}
-                        {Number(itemQtyMap[p._id!] || 0) > p.stock && (
-                          <p className="text-[10px] font-black text-rose-600 uppercase tracking-tight mt-1 ml-1">
-                            Exceeds Stock
-                          </p>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                                className="w-8 h-8 flex items-center justify-center bg-white text-emerald-600 rounded-lg shadow-sm hover:bg-emerald-100 transition-all"
+                              >
+                                -
+                              </button>
+                              <span className="w-10 text-center font-black text-emerald-700 text-sm">
+                                {itemQtyMap[p._id!]}
+                              </span>
+                              <button
+                                onClick={() => {
+                                  const current = Number(itemQtyMap[p._id!]);
+                                  if (current < p.stock) {
+                                    setItemQtyMap((prev) => ({
+                                      ...prev,
+                                      [p._id!]: (current + 1).toString(),
+                                    }));
+                                  } else {
+                                    showToast(
+                                      `Max stock reached: ${p.stock}`,
+                                      "error",
+                                    );
+                                  }
+                                }}
+                                className="w-8 h-8 flex items-center justify-center bg-primary-600 text-white rounded-lg shadow-sm hover:bg-primary-700 transition-all"
+                              >
+                                +
+                              </button>
+                            </div>
+                          )}
+                          {Number(itemQtyMap[p._id!] || 0) > p.stock && (
+                            <p className="text-[10px] font-black text-rose-600 uppercase tracking-tight mt-1 ml-1">
+                              Exceeds Stock
+                            </p>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
-              {filteredItems.length === 0 && (
+              {isFetchingNextProductsPage && (
+                <div className="flex justify-center p-6">
+                  <Loader2
+                    className="animate-spin text-primary-600"
+                    size={24}
+                  />
+                </div>
+              )}
+              {products.length === 0 && !productsLoading && (
                 <div className="text-center py-16">
                   <ShoppingCart
                     className="text-slate-200 mx-auto mb-3"
@@ -2162,7 +2317,7 @@ const Sales = () => {
                     showToast("Customer name is required", "error");
                     return;
                   }
-                  
+
                   // Set local state is already done via inputs
                   // Close modal immediately like before
                   setIsNewCustomerModalOpen(false);

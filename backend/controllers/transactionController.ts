@@ -9,16 +9,72 @@ import mongoose from 'mongoose';
 
 // @desc    Get all sales
 // @route   GET /api/transactions/sales
+// @desc    Get all sales (Paginated)
+// @route   GET /api/transactions/sales
 export const getSales = async (req: AuthRequest, res: Response) => {
     try {
-        const sales = await Sale.find({ tenantId: req.tenantId })
-            .populate('items.productId', 'name unit')
-            .sort({ createdAt: -1 });
-        res.status(200).json(sales);
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 50;
+        const skip = (page - 1) * limit;
+
+        const search = req.query.search as string;
+        const startDate = req.query.startDate as string;
+        const endDate = req.query.endDate as string;
+
+        let query: any = { tenantId: req.tenantId };
+
+        if (search) {
+            query.$or = [
+                { customerName: { $regex: search, $options: 'i' } },
+                { invoiceNumber: { $regex: search, $options: 'i' } },
+                { customerPhone: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        if (startDate || endDate) {
+            query.date = {};
+            if (startDate) query.date.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                query.date.$lte = end;
+            }
+        }
+
+        const [sales, totalCount, totals] = await Promise.all([
+            Sale.find(query)
+                .populate('items.productId', 'name unit')
+                .sort({ date: -1, createdAt: -1 })
+                .skip(skip)
+                .limit(limit),
+            Sale.countDocuments(query),
+            Sale.aggregate([
+                { $match: query },
+                { $group: { 
+                    _id: null, 
+                    totalAmount: { $sum: "$totalAmount" },
+                    totalPaid: { $sum: "$amountPaid" },
+                    totalUnpaid: { $sum: "$balanceDue" },
+                    totalProfit: { $sum: "$totalProfit" }
+                }}
+            ])
+        ]);
+
+        res.status(200).json({
+            sales,
+            pagination: {
+                totalCount,
+                totalPages: Math.ceil(totalCount / limit),
+                currentPage: page,
+                limit
+            },
+            summary: totals[0] || { totalAmount: 0, totalPaid: 0, totalUnpaid: 0, totalProfit: 0 }
+        });
     } catch (err: any) {
         res.status(500).json({ message: err.message });
     }
 };
+
 
 // @desc    Process a new sale (decreases stock)
 // @route   POST /api/transactions/sales
@@ -365,14 +421,44 @@ export const deleteSale = async (req: AuthRequest, res: Response) => {
 
 // @desc    Get all purchases
 // @route   GET /api/transactions/purchases
+// @desc    Get all purchases (Paginated)
+// @route   GET /api/transactions/purchases
 export const getPurchases = async (req: AuthRequest, res: Response) => {
     try {
-        const purchases = await Purchase.find({ tenantId: req.tenantId }).populate('productId', 'name unit');
-        res.status(200).json(purchases);
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 50;
+        const skip = (page - 1) * limit;
+
+        const search = req.query.search as string;
+        let query: any = { tenantId: req.tenantId };
+
+        if (search) {
+            query.supplierName = { $regex: search, $options: 'i' };
+        }
+
+        const [purchases, totalCount] = await Promise.all([
+            Purchase.find(query)
+                .populate('productId', 'name unit')
+                .sort({ date: -1, createdAt: -1 })
+                .skip(skip)
+                .limit(limit),
+            Purchase.countDocuments(query)
+        ]);
+
+        res.status(200).json({
+            purchases,
+            pagination: {
+                totalCount,
+                totalPages: Math.ceil(totalCount / limit),
+                currentPage: page,
+                limit
+            }
+        });
     } catch (err: any) {
         res.status(500).json({ message: err.message });
     }
 };
+
 
 // @desc    Process a new purchase (increases stock)
 // @route   POST /api/transactions/purchases

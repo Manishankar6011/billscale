@@ -3,16 +3,71 @@ import { AuthRequest } from '../middleware/auth';
 import Product from '../models/Product';
 import Tenant from '../models/Tenant';
 
-// @desc    Get all products for a tenant
+// @desc    Get all products for a tenant (Paginated)
 // @route   GET /api/inventory
 export const getProducts = async (req: AuthRequest, res: Response) => {
     try {
-        const products = await Product.find({ tenantId: req.tenantId });
-        res.status(200).json(products);
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 50;
+        const skip = (page - 1) * limit;
+        
+        const search = req.query.search as string;
+        const filterType = req.query.filterType as string; // 'all', 'low', 'out'
+        const sortBy = req.query.sortBy as string;
+
+        let query: any = { tenantId: req.tenantId };
+
+        // 1. Search Logic
+        if (search) {
+            query.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { barcode: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        // 2. Filter Logic
+        if (filterType === 'low') {
+            query.$expr = { $lte: ["$stock", "$minStockAlert"] };
+            query.stock = { $gt: 0 };
+        } else if (filterType === 'out') {
+            query.stock = { $lte: 0 };
+        }
+
+        // 3. Sort Logic
+        let sort: any = { name: 1 };
+        if (sortBy === 'price-asc') sort = { pricePerUnit: 1 };
+        else if (sortBy === 'price-desc') sort = { pricePerUnit: -1 };
+        else if (sortBy === 'stock-asc') sort = { stock: 1 };
+        else if (sortBy === 'stock-desc') sort = { stock: -1 };
+
+        const [products, totalCount, totalStats] = await Promise.all([
+            Product.find(query)
+                .sort(sort)
+                .skip(skip)
+                .limit(limit),
+            Product.countDocuments(query),
+            Product.aggregate([
+                { $match: query },
+                { $group: { _id: null, totalValue: { $sum: { $multiply: ["$stock", "$pricePerUnit"] } } } }
+            ])
+        ]);
+
+        res.status(200).json({
+            products,
+            pagination: {
+                totalCount,
+                totalPages: Math.ceil(totalCount / limit),
+                currentPage: page,
+                limit
+            },
+            totalStockValue: totalStats[0]?.totalValue || 0
+        });
+
     } catch (err: any) {
         res.status(500).json({ message: err.message });
     }
 };
+
 
 // @desc    Add a new product
 // @route   POST /api/inventory
