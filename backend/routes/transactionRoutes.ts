@@ -1,5 +1,5 @@
 import express from 'express';
-import { getSales, processSale, getPurchases, processPurchase, updatePurchase, deletePurchase } from '../controllers/transactionController';
+import { getSales, processSale, updateSale, deleteSale, getPurchases, processPurchase, updatePurchase, deletePurchase } from '../controllers/transactionController';
 import { protect, checkSubscription } from '../middleware/auth';
 import tenant from '../middleware/tenant';
 
@@ -14,6 +14,8 @@ router.use(tenant);
 
 router.get('/sales', getSales);
 router.post('/sales', checkSubscription, processSale);
+router.put('/sales/:id', checkSubscription, updateSale);
+router.delete('/sales/:id', checkSubscription, deleteSale);
 router.get('/purchases', getPurchases);
 router.post('/purchases', checkSubscription, processPurchase);
 router.put('/purchases/:id', checkSubscription, updatePurchase);
