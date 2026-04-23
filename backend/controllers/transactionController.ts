@@ -168,6 +168,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
         tenant.nextInvoiceNumber = currentInvoiceNum + 1;
         await tenant.save({ session });
 
+        await sale.populate('items.productId', 'name unit');
         await session.commitTransaction();
         res.status(201).json(sale);
     } catch (err: any) {
@@ -299,6 +300,7 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
 
         await oldSale.save({ session });
 
+        await oldSale.populate('items.productId', 'name unit');
         await session.commitTransaction();
         res.json(oldSale);
     } catch (err: any) {

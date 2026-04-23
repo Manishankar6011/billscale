@@ -12,7 +12,8 @@ import {
   Settings,
   LogOut,
   UserRound,
-  Gift
+  Gift,
+  Plus
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/utils";
@@ -66,6 +67,14 @@ const Layout = () => {
             BuildMate ERP
           </span>
         </div>
+
+        <button
+          onClick={() => navigate("/dashboard/sales", { state: { openModal: true } })}
+          className="w-full mb-6 py-4 bg-primary-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-primary-200 hover:bg-primary-700 transition-all flex items-center justify-center gap-2 group shrink-0"
+        >
+          <Plus size={16} className="group-hover:rotate-90 transition-transform duration-300" />
+          Create Sales Invoice
+        </button>
 
         <nav className="flex-1 space-y-1">
           {navItems.map((item) => (
