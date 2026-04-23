@@ -1,4 +1,10 @@
-import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import React, {
+  useState,
+  useRef,
+  useCallback,
+  useEffect,
+  useMemo,
+} from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -28,6 +34,8 @@ import {
   ArrowLeft,
   ShoppingCart,
   Edit,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import BarcodeScanner from "../components/BarcodeScanner";
 import CustomerSearch from "../components/CustomerSearch";
@@ -229,6 +237,7 @@ const Sales = () => {
   const [filterSearch, setFilterSearch] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [showProfit, setShowProfit] = useState(false);
 
   const isFormDirty =
     cart.length > 0 ||
@@ -909,20 +918,32 @@ const Sales = () => {
         </div>
 
         {/* Net Profit summary bar */}
-        <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-3xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 text-white shadow-xl">
+        <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-3xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 text-white shadow-xl group relative overflow-hidden">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-white/10 rounded-2xl">
               <TrendingUp size={20} />
             </div>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
                 {t("billing.net_profit")}
+                <button
+                  onClick={() => setShowProfit(!showProfit)}
+                  className="p-1 hover:bg-white/10 rounded-lg transition-colors text-slate-400 hover:text-white"
+                >
+                  {showProfit ? <EyeOff size={12} /> : <Eye size={12} />}
+                </button>
               </p>
               <p
-                className={`text-2xl font-black tracking-tight ${totalNetProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}
+                className={`text-2xl font-black tracking-tight transition-all duration-300 ${showProfit ? (totalNetProfit >= 0 ? "text-emerald-400" : "text-rose-400") : "text-slate-600 blur-sm select-none"}`}
               >
-                {totalNetProfit >= 0 ? "+" : ""}₹
-                {Math.abs(totalNetProfit).toLocaleString()}
+                {showProfit ? (
+                  <>
+                    {totalNetProfit >= 0 ? "+" : ""}₹
+                    {Math.abs(totalNetProfit).toLocaleString()}
+                  </>
+                ) : (
+                  "₹ *****"
+                )}
               </p>
             </div>
           </div>
@@ -931,11 +952,19 @@ const Sales = () => {
               <p className="text-[10px] text-slate-400 uppercase tracking-widest">
                 {t("billing.margin")}
               </p>
-              <p className="text-xl font-black text-white">
-                {totalSales > 0
-                  ? ((totalNetProfit / totalSales) * 100).toFixed(1)
-                  : 0}
-                %
+              <p
+                className={`text-xl font-black transition-all duration-300 ${showProfit ? "text-white" : "text-slate-600 blur-sm select-none"}`}
+              >
+                {showProfit ? (
+                  <>
+                    {totalSales > 0
+                      ? ((totalNetProfit / totalSales) * 100).toFixed(1)
+                      : 0}
+                    %
+                  </>
+                ) : (
+                  "**%"
+                )}
               </p>
             </div>
             <div>
@@ -1264,48 +1293,6 @@ const Sales = () => {
                 </button>
               </div>
 
-              {/* Additional Charges Section (New) */}
-              <div className="p-5 bg-amber-50 rounded-[2rem] border border-amber-100 space-y-3">
-                <p className="text-[10px] font-black uppercase tracking-widest text-amber-600">
-                  {t("billing.additional_charges")}
-                </p>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="text"
-                    placeholder={t("billing.charge_name_placeholder")}
-                    className="flex-1 bg-white border border-amber-200 rounded-xl p-3 text-xs font-bold min-w-0"
-                    value={newChargeName}
-                    onChange={(e) => setNewChargeName(e.target.value)}
-                  />
-                  <div className="flex gap-2 sm:w-auto w-full">
-                    <input
-                      type="number"
-                      placeholder={t("common.total")}
-                      className="flex-1 sm:w-24 bg-white border border-amber-200 rounded-xl p-3 text-xs font-bold"
-                      value={newChargePrice}
-                      onChange={(e) => setNewChargePrice(e.target.value)}
-                      onWheel={(e) => e.currentTarget.blur()}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (newChargeName && newChargePrice) {
-                          setAdditionalItems((prev) => [
-                            ...prev,
-                            { name: newChargeName, price: newChargePrice },
-                          ]);
-                          setNewChargeName("");
-                          setNewChargePrice("");
-                        }
-                      }}
-                      className="p-3 bg-amber-500 text-white rounded-xl hover:bg-amber-600 shrink-0"
-                    >
-                      <Plus size={16} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
               {/* Cart List */}
               {(cart.length > 0 || additionalItems.length > 0) && (
                 <div className="space-y-2 border-y border-slate-100 py-4">
@@ -1424,7 +1411,47 @@ const Sales = () => {
                   ))}
                 </div>
               )}
-
+              {/* Additional Charges Section (New) */}
+              <div className="p-5 bg-amber-50 rounded-[2rem] border border-amber-100 space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-amber-600">
+                  {t("billing.additional_charges")}
+                </p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    placeholder={t("billing.charge_name_placeholder")}
+                    className="flex-1 bg-white border border-amber-200 rounded-xl p-3 text-xs font-bold min-w-0"
+                    value={newChargeName}
+                    onChange={(e) => setNewChargeName(e.target.value)}
+                  />
+                  <div className="flex gap-2 sm:w-auto w-full">
+                    <input
+                      type="number"
+                      placeholder={t("common.total")}
+                      className="flex-1 sm:w-24 bg-white border border-amber-200 rounded-xl p-3 text-xs font-bold"
+                      value={newChargePrice}
+                      onChange={(e) => setNewChargePrice(e.target.value)}
+                      onWheel={(e) => e.currentTarget.blur()}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (newChargeName && newChargePrice) {
+                          setAdditionalItems((prev) => [
+                            ...prev,
+                            { name: newChargeName, price: newChargePrice },
+                          ]);
+                          setNewChargeName("");
+                          setNewChargePrice("");
+                        }
+                      }}
+                      className="p-3 bg-amber-500 text-white rounded-xl hover:bg-amber-600 shrink-0"
+                    >
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                </div>
+              </div>
               {/* Payment & totals Section */}
               <div className="space-y-4 p-5 bg-slate-50 rounded-3xl">
                 <div className="flex items-center justify-between">
