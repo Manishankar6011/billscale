@@ -413,6 +413,7 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
                                                             value={item.purchasePrice}
                                                             onChange={e => handleCellChange(idx, 'purchasePrice', e.target.value)}
                                                             onKeyDown={e => handleKeyDown(e, idx, 'purchasePrice')}
+                                                            onWheel={(e) => e.currentTarget.blur()}
                                                         />
                                                     </td>
                                                     <td className="p-1">
@@ -423,6 +424,7 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
                                                             value={item.pricePerUnit}
                                                             onChange={e => handleCellChange(idx, 'pricePerUnit', e.target.value)}
                                                             onKeyDown={e => handleKeyDown(e, idx, 'pricePerUnit')}
+                                                            onWheel={(e) => e.currentTarget.blur()}
                                                         />
                                                     </td>
                                                     <td className="p-1">
@@ -433,6 +435,7 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
                                                             value={item.mrp}
                                                             onChange={e => handleCellChange(idx, 'mrp', e.target.value)}
                                                             onKeyDown={e => handleKeyDown(e, idx, 'mrp')}
+                                                            onWheel={(e) => e.currentTarget.blur()}
                                                         />
                                                     </td>
                                                     <td className="p-1">

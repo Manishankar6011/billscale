@@ -296,6 +296,7 @@ const Purchases = () => {
                                             placeholder="0"
                                             value={formData.quantity}
                                             onChange={(e) => setFormData({...formData, quantity: e.target.value})}
+                                            onWheel={(e) => e.currentTarget.blur()}
                                         />
                                     </div>
                                 </div>
@@ -310,6 +311,7 @@ const Purchases = () => {
                                             placeholder="0"
                                             value={formData.purchasePrice}
                                             onChange={(e) => setFormData({...formData, purchasePrice: e.target.value})}
+                                            onWheel={(e) => e.currentTarget.blur()}
                                         />
                                     </div>
                                     <div>
@@ -321,6 +323,7 @@ const Purchases = () => {
                                             placeholder="0"
                                             value={formData.sellingPrice}
                                             onChange={(e) => setFormData({...formData, sellingPrice: e.target.value})}
+                                            onWheel={(e) => e.currentTarget.blur()}
                                         />
                                     </div>
                                 </div>
@@ -335,6 +338,7 @@ const Purchases = () => {
                                             placeholder="0"
                                             value={formData.mrp}
                                             onChange={(e) => setFormData({...formData, mrp: e.target.value})}
+                                            onWheel={(e) => e.currentTarget.blur()}
                                         />
                                     </div>
                                     <div>

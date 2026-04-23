@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from "react";
+import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -443,6 +443,7 @@ const Sales = () => {
             ...prev,
             [product._id!]: product.pricePerUnit.toString(),
           }));
+          setItemSearch("");
           showToast(`${product.name} qty increased in list`, "success");
         } else {
           // If modal is NOT open, add to main cart directly
@@ -492,20 +493,30 @@ const Sales = () => {
   );
 
   // Item modal handlers
-  const filteredItems =
-    itemsModalMode === "scan"
-      ? products.filter(
-          (p) =>
-            Number(itemQtyMap[p._id!]) > 0 ||
-            (itemSearch &&
-              (p.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
-                (p.barcode && p.barcode.includes(itemSearch)))),
-        )
-      : products.filter(
-          (p) =>
-            p.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
-            (p.barcode && p.barcode.includes(itemSearch)),
-        );
+  // Item modal handlers optimized with useMemo
+  const filteredItems = useMemo(() => {
+    return (
+      itemsModalMode === "scan"
+        ? products.filter(
+            (p) =>
+              Number(itemQtyMap[p._id!]) > 0 ||
+              (itemSearch &&
+                (p.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
+                  (p.barcode && p.barcode.includes(itemSearch)))),
+          )
+        : products.filter(
+            (p) =>
+              p.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
+              (p.barcode && p.barcode.includes(itemSearch)),
+          )
+    ).sort((a, b) => {
+      const qtyA = Number(itemQtyMap[a._id!] || 0);
+      const qtyB = Number(itemQtyMap[b._id!] || 0);
+      if (qtyA > 0 && qtyB === 0) return -1;
+      if (qtyA === 0 && qtyB > 0) return 1;
+      return 0;
+    });
+  }, [products, itemsModalMode, itemSearch, itemQtyMap]);
 
   const addItemsFromModal = () => {
     const newItems: CartItem[] = [];
@@ -1266,6 +1277,7 @@ const Sales = () => {
                       className="flex-1 sm:w-24 bg-white border border-amber-200 rounded-xl p-3 text-xs font-bold"
                       value={newChargePrice}
                       onChange={(e) => setNewChargePrice(e.target.value)}
+                      onWheel={(e) => e.currentTarget.blur()}
                     />
                     <button
                       type="button"
@@ -1489,6 +1501,7 @@ const Sales = () => {
                       className="flex-1 bg-white border border-slate-200 rounded-2xl p-3 text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all min-w-0"
                       value={amountReceived}
                       onChange={(e) => setAmountReceived(e.target.value)}
+                      onWheel={(e) => e.currentTarget.blur()}
                     />
                     <button
                       type="button"
@@ -1561,7 +1574,7 @@ const Sales = () => {
 
             {/* Preview Area */}
             <div className="flex-1 bg-slate-50 p-4 md:p-8 overflow-y-auto custom-scrollbar flex flex-col items-center print:p-0 print:m-0 print:bg-white print:overflow-visible print:h-auto">
-              <div className="md:hidden flex justify-between items-center w-full mb-4 px-2">
+              <div className="md:hidden flex justify-between items-center w-full mb-4 px-2 print:hidden">
                 <h3 className="font-black text-slate-800 uppercase tracking-tighter text-lg">
                   Invoice Preview
                 </h3>
@@ -1848,6 +1861,7 @@ const Sales = () => {
                               [p._id!]: e.target.value,
                             }))
                           }
+                          onWheel={(e) => e.currentTarget.blur()}
                         />
                       </td>
                       <td className="px-4 py-3">
