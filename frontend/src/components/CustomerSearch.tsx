@@ -30,14 +30,14 @@ const CustomerSearch: React.FC<CustomerSearchProps> = ({ onSelect, onAddNew, ini
 
     useEffect(() => {
         const searchTimeout = setTimeout(async () => {
-            if (query.length >= 2) {
+            // Fetch if query is 2+ chars OR if query is empty (to get recent)
+            if (query.length >= 2 || query === '') {
                 setLoading(true);
                 try {
                     const res = await axios.get(`/api/customers/search?query=${query}`, {
                         headers: { Authorization: `Bearer ${user?.token}` }
                     });
                     setResults(res.data);
-                    setIsOpen(true);
                 } catch (err) {
                     console.error('Customer search error:', err);
                 } finally {
@@ -64,15 +64,20 @@ const CustomerSearch: React.FC<CustomerSearchProps> = ({ onSelect, onAddNew, ini
                     value={query}
                     onChange={(e) => {
                         setQuery(e.target.value);
-                        if (e.target.value === '') setIsOpen(false);
+                        setIsOpen(true);
                     }}
-                    onFocus={() => query.length >= 2 && setIsOpen(true)}
+                    onFocus={() => setIsOpen(true)}
                 />
             </div>
 
             {isOpen && (
                 <div className="absolute z-[100] w-full mt-2 bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
                     <div className="max-h-60 overflow-y-auto custom-scrollbar">
+                        {query === '' && results.length > 0 && (
+                            <div className="px-4 py-3 bg-slate-50 border-b border-slate-100">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Recent Customers</p>
+                            </div>
+                        )}
                         {loading ? (
                             <div className="p-4 text-center text-slate-400 text-xs font-bold uppercase tracking-widest animate-pulse">
                                 Searching...

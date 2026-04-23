@@ -8,11 +8,13 @@ import Customer from '../models/Customer';
 export const searchCustomers = async (req: AuthRequest, res: Response) => {
     try {
         const { query } = req.query;
+        const tenantId = req.tenantId;
+        
         if (!query) {
-            return res.status(200).json([]);
+            const recentCustomers = await Customer.find({ tenantId }).sort({ createdAt: -1 }).limit(10);
+            return res.status(200).json(recentCustomers);
         }
 
-        const tenantId = req.tenantId;
         const customers = await Customer.find({
             tenantId,
             $or: [
