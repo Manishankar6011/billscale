@@ -33,127 +33,133 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
     const totalItems = (sale.items?.length || 0) + (sale.additionalItems?.length || 0);
 
     return (
-        <div id="printable-invoice" className={`${isPreview ? 'block shadow-inner' : 'hidden print:block'} bg-white text-black p-4 w-full max-w-[80mm] mx-auto font-mono text-[11px] leading-tight`}>
+        <div id="printable-invoice" className={`${isPreview ? 'block shadow-md' : 'hidden print:block'} bg-white text-black p-2 w-full max-w-[80mm] mx-auto font-sans text-[12px] leading-tight`}>
             {/* Header */}
-            <div className="text-center border-b border-black pb-4 mb-4">
+            <div className="text-center border-b-2 border-black pb-3 mb-3">
                 {companyLogo && (
-                    <img src={companyLogo} alt="Company Logo" className="h-12 mx-auto mb-2 object-contain" />
+                    <img src={companyLogo} alt="Company Logo" className="h-14 mx-auto mb-2 object-contain" />
                 )}
-                <h1 className="text-xl font-bold uppercase tracking-tighter">{businessName}</h1>
-                {ownerName && <p className="text-[9px] italic mt-1">Proprietor: {ownerName}</p>}
-                <div className="mt-3 space-y-0.5 text-[10px]">
-                    {companyPhone && <p>Phone: {companyPhone}</p>}
+                <h1 className="text-xl font-bold uppercase tracking-tight">{businessName}</h1>
+                {ownerName && <p className="text-[10px] font-bold mt-0.5">Proprietor: {ownerName}</p>}
+                <div className="mt-2 space-y-0.5 text-[11px] font-medium">
+                    {companyPhone && <p>Contact: {companyPhone}</p>}
                     {companyEmail && <p>Email: {companyEmail}</p>}
-                    {companyAddress && <p className="text-[9px] whitespace-pre-wrap">{companyAddress}</p>}
-                    {!companyPhone && <p>Phone: {sale.businessPhone || '+91 98765 43210'}</p>}
+                    {companyAddress && <p className="text-[10px] uppercase">{companyAddress}</p>}
                 </div>
             </div>
 
             {/* Invoice Info */}
-            <div className="flex justify-between mb-4 border-b border-black pb-2">
+            <div className="flex justify-between mb-3 text-[11px]">
                 <div className="space-y-0.5">
-                    <p className="font-bold">Bill To:</p>
-                    <p>{sale.customerName || 'Cash Customer'}</p>
-                    {sale.customerPhone && <p>{sale.customerPhone}</p>}
+                    <p className="font-bold w-fit mb-1 tracking-widest uppercase">BILL TO :</p>
+                    <p className="font-bold text-sm uppercase">{sale.customerName || 'Cash Customer'}</p>
+                    {sale.customerPhone && <p className="font-medium">{sale.customerPhone}</p>}
                 </div>
                 <div className="text-right space-y-0.5">
-                    <p><span className="font-bold">Inv #:</span> {sale.invoiceNumber}</p>
-                    <p><span className="font-bold">Date:</span> {format(new Date(sale.date), 'dd/MM/yy')}</p>
+                    <p className="font-bold uppercase tracking-tighter">Tax Invoice</p>
+                    <p><span className="font-bold">INV:</span> {sale.invoiceNumber}</p>
+                    <p><span className="font-bold">DATE:</span> {format(new Date(sale.date), 'dd-MMM-yyyy')}</p>
                 </div>
             </div>
 
             {/* Items Table */}
-            <table className="w-full mb-4">
+            <table className="w-full mb-3 border-t border-black">
                 <thead>
-                    <tr className="border-b border-black text-left">
-                        <th className="py-1">Description</th>
+                    <tr className="border-b-2 border-black text-left font-bold text-[10px] uppercase">
+                        <th className="py-1">Items</th>
                         <th className="py-1 text-center">Qty</th>
-                        <th className="py-1 text-right">Rate</th>
-                        <th className="py-1 text-right">Amt</th>
+                        <th className="py-1 text-right">Price</th>
+                        <th className="py-1 text-right">Total</th>
                     </tr>
                 </thead>
-                <tbody className="divide-y divide-black/10">
+                <tbody className="font-medium">
                     {(sale.items || []).map((item: any, i: number) => (
-                        <tr key={i}>
-                            <td className="py-1">
-                                <p className="truncate max-w-[28mm]">{item.productId?.name || 'Item'}</p>
-                                <p className="text-[8px] opacity-70">MRP: ₹{item.mrpAtTime || 0}</p>
+                        <tr key={i} className="border-b border-black/10">
+                            <td className="py-2 pr-1">
+                                <p className="font-bold text-[11px] leading-none mb-1">{item.productId?.name || 'Item'}</p>
+                                <p className="text-[9px]">MRP: ₹{item.mrpAtTime || 0} | Unit: {item.unit}</p>
                             </td>
-                            <td className="py-1 text-center">{item.quantity}</td>
-                            <td className="py-1 text-right">{(item.sellingPrice || 0).toFixed(0)}</td>
-                            <td className="py-1 text-right">{((item.quantity || 0) * (item.sellingPrice || 0)).toFixed(0)}</td>
+                            <td className="py-2 text-center font-bold">{item.quantity}</td>
+                            <td className="py-2 text-right">{(item.sellingPrice || 0).toFixed(0)}</td>
+                            <td className="py-2 text-right font-bold">{((item.quantity || 0) * (item.sellingPrice || 0)).toFixed(0)}</td>
                         </tr>
                     ))}
                     {(sale.additionalItems || []).map((item: any, i: number) => (
-                        <tr key={`add-${i}`} className="italic">
-                            <td className="py-1 truncate max-w-[28mm]">{item.name}</td>
-                            <td className="py-1 text-center">1</td>
-                            <td className="py-1 text-right">{(item.price || 0).toFixed(0)}</td>
-                            <td className="py-1 text-right">{(item.price || 0).toFixed(0)}</td>
+                        <tr key={`add-${i}`} className="border-b border-black/10 italic">
+                            <td className="py-2 font-bold text-[11px]">{item.name}</td>
+                            <td className="py-2 text-center">1</td>
+                            <td className="py-2 text-right">{(item.price || 0).toFixed(0)}</td>
+                            <td className="py-2 text-right font-bold">{(item.price || 0).toFixed(0)}</td>
                         </tr>
                     ))}
                 </tbody>
             </table>
 
-            {/* Totals */}
-            <div className="border-t border-black pt-2 space-y-1">
-                <div className="flex justify-between items-center text-[10px]">
+            {/* Totals Section */}
+            <div className="border-t-2 border-black pt-2 space-y-1">
+                <div className="flex justify-between items-center text-[11px]">
                     <span>Subtotal:</span>
-                    <span>₹{(sale.totalAmount - (sale.roundOffAmount || 0)).toLocaleString()}</span>
+                    <span className="font-bold">₹{(sale.totalAmount - (sale.roundOffAmount || 0)).toLocaleString()}</span>
                 </div>
                 {roundOffAmount !== undefined && roundOffAmount !== 0 && (
-                    <div className="flex justify-between items-center text-[10px]">
+                    <div className="flex justify-between items-center text-[11px]">
                         <span>Round Off:</span>
-                        <span>{roundOffAmount >= 0 ? '+' : ''}{roundOffAmount.toFixed(2)}</span>
+                        <span className="font-bold">{roundOffAmount >= 0 ? '+' : ''}{roundOffAmount.toFixed(2)}</span>
                     </div>
                 )}
-                <div className="flex justify-between items-center text-[13px] font-bold border-t border-black/20 pt-1">
+                <div className="flex justify-between items-center text-[15px] font-black border-y-2 border-black py-2 my-1">
                     <span>GRAND TOTAL:</span>
                     <span>₹{(sale.totalAmount || 0).toLocaleString()}</span>
                 </div>
 
-                {/* Payment Breakdown (Partial Payments) */}
+                {/* Balance & Payment Details */}
                 {(sale.amountPaid !== undefined && sale.amountPaid < sale.totalAmount) && (
-                    <div className="border-y border-black/10 py-1 my-1 space-y-0.5">
+                    <div className="bg-black/5 p-1 rounded space-y-0.5">
                         <div className="flex justify-between items-center text-[11px]">
-                            <span>Paid:</span>
-                            <span>₹{(sale.amountPaid || 0).toLocaleString()}</span>
+                            <span>Amount Paid:</span>
+                            <span className="font-bold">₹{(sale.amountPaid || 0).toLocaleString()}</span>
                         </div>
-                        <div className="flex justify-between items-center text-[11px] font-bold">
-                            <span>Balance:</span>
+                        <div className="flex justify-between items-center text-[12px] font-black">
+                            <span>Balance Due:</span>
                             <span>₹{(sale.balanceDue || 0).toLocaleString()}</span>
                         </div>
                     </div>
                 )}
 
                 {changeAmount !== undefined && changeAmount > 0 && (
-                    <div className="flex justify-between items-center text-[11px] border-t border-black/10 pt-1">
-                        <span>Received:</span>
-                        <span>₹{(sale.amountPaid || (sale.totalAmount + changeAmount)).toLocaleString()}</span>
+                    <div className="flex justify-between items-center text-[11px] pt-1">
+                        <span>Received Amount:</span>
+                        <span className="font-bold">₹{(sale.amountPaid || (sale.totalAmount + changeAmount)).toLocaleString()}</span>
                     </div>
                 )}
                 {changeAmount !== undefined && changeAmount > 0 && (
-                    <div className="flex justify-between items-center text-[12px] font-bold">
-                        <span>Change:</span>
+                    <div className="flex justify-between items-center text-[13px] font-black border-t border-black/20 pt-1">
+                        <span>Change Return:</span>
                         <span>₹{changeAmount.toFixed(0)}</span>
                     </div>
                 )}
 
-                <div className="text-[9px] uppercase tracking-tighter text-center mt-4">
-                    <p className="border-y border-black/10 py-1">Items: {totalItems} | {sale.paymentMode || 'CASH'}</p>
+                {/* Footer Notes */}
+                <div className="text-center mt-6 space-y-2 pt-2">
+                    <p className="text-[10px] font-bold border-y border-black py-1">Items: {totalItems} | MODE: {sale.paymentMode?.toUpperCase() || 'CASH'}</p>
+                    
                     {signature && (
-                        <div className="mt-4 flex flex-col items-end">
-                            <img src={signature} alt="Signature" className="h-8 object-contain mb-1 mix-blend-multiply" />
-                            <p className="text-[7px] border-t border-black/10 pt-1 w-24 text-center">Auth. Signatory</p>
+                        <div className="flex flex-col items-center mt-4">
+                            <p className="text-[8px] mb-1 font-bold uppercase tracking-widest">Authorized Signature</p>
+                            <img src={signature} alt="Signature" className="h-10 object-contain mb-1 mix-blend-multiply" />
+                            <div className="w-32 border-t border-black"></div>
                         </div>
                     )}
-                    <p className="mt-4 font-bold text-xs tracking-widest">!!! THANK YOU !!!</p>
-                    <p className="italic lowercase mt-1 text-[8px]">visit again for quality building materials</p>
+                    
+                    <div className="mt-4">
+                        <p className="font-black text-sm tracking-widest uppercase">Thank You!</p>
+                        <p className="italic text-[9px] mt-1 font-medium">Please visit us again for quality materials.</p>
+                    </div>
                 </div>
             </div>
 
-            {/* Bottom Margin for Thermal Printers */}
-            <div className="h-10"></div>
+            {/* Margin for cutter */}
+            <div className="h-12 border-t border-dashed border-black/20 mt-4"></div>
         </div>
     );
 };

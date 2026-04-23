@@ -1,4 +1,5 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
@@ -130,6 +131,16 @@ const Sales = () => {
   const { user } = useAuth();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if ((location.state as any)?.openModal) {
+      setIsModalOpen(true);
+      // Clear location state to prevent modal reopening on refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   // Queries
   const { data: sales = [], isLoading: salesLoading } = useQuery<Sale[]>({
@@ -158,7 +169,6 @@ const Sales = () => {
 
   const loading = salesLoading || productsLoading;
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form State
   const [customerName, setCustomerName] = useState("");
@@ -171,9 +181,7 @@ const Sales = () => {
   const [invoiceFormat, setInvoiceFormat] = useState<"thermal" | "a4">(
     "thermal",
   );
-  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
-  const [selectedSaleForPreview, setSelectedSaleForPreview] =
-    useState<Sale | null>(null);
+
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
 
   // Round-off & change calculator
@@ -1127,7 +1135,7 @@ const Sales = () => {
       {/* Sale Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-8 animate-in fade-in zoom-in duration-200 h-[90vh] flex flex-col">
+          <div className="bg-white w-full max-w-6xl rounded-3xl shadow-2xl p-8 animate-in fade-in zoom-in duration-200 h-[90vh] flex flex-col">
             <div className="flex justify-between items-center mb-6 shrink-0">
               <h2 className="text-2xl font-black text-slate-800 tracking-tighter">
                 {selectedSaleForEdit ? "Edit Sale" : t("billing.new_sale")}
@@ -1636,10 +1644,31 @@ const Sales = () => {
               </div>
               <style>{`
                 @media print {
-                    @page { size: ${invoiceFormat === "thermal" ? "80mm auto" : "A4"}; margin: ${invoiceFormat === "thermal" ? "0" : "15mm"}; }
+                    @page { 
+                      size: ${invoiceFormat === "thermal" ? "80mm auto" : "A4"}; 
+                      margin: 0; 
+                    }
+                    body { 
+                      margin: 0; 
+                      padding: 0; 
+                      -webkit-print-color-adjust: exact !important; 
+                      print-color-adjust: exact !important;
+                    }
                     body * { visibility: hidden !important; }
-                    #${invoiceFormat === "thermal" ? "printable-invoice" : "a4-invoice"}, #${invoiceFormat === "thermal" ? "printable-invoice" : "a4-invoice"} * { visibility: visible !important; }
-                    #${invoiceFormat === "thermal" ? "printable-invoice" : "a4-invoice"} { position: absolute; left: 0; top: 0; display: block !important; width: 100% !important; }
+                    #${invoiceFormat === "thermal" ? "printable-invoice" : "a4-invoice"}, 
+                    #${invoiceFormat === "thermal" ? "printable-invoice" : "a4-invoice"} * { 
+                      visibility: visible !important; 
+                    }
+                    #${invoiceFormat === "thermal" ? "printable-invoice" : "a4-invoice"} { 
+                      position: fixed; 
+                      left: 0; 
+                      top: 0; 
+                      width: ${invoiceFormat === "thermal" ? "80mm" : "210mm"} !important;
+                      margin: 0 !important;
+                      padding: ${invoiceFormat === "thermal" ? "10px" : "15mm"} !important;
+                      background: white !important;
+                      color: black !important;
+                    }
                 }
               `}</style>
             </div>
