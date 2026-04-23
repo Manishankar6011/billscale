@@ -247,6 +247,7 @@ const Salary = () => {
                     placeholder="₹ 0.00"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
+                    onWheel={(e) => e.currentTarget.blur()}
                   />
                 </div>
                 <div className="space-y-2">

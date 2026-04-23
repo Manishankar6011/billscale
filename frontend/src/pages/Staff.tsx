@@ -317,6 +317,7 @@ const StaffPage = () => {
                                         placeholder="0"
                                         value={formData.salaryAmount}
                                         onChange={(e) => setFormData({...formData, salaryAmount: e.target.value})}
+                                        onWheel={(e) => e.currentTarget.blur()}
                                     />
                                 </div>
                                 <div>

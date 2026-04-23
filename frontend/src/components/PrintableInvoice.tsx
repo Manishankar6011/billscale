@@ -58,38 +58,38 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                 <div className="text-right space-y-0.5">
                     <p className="font-bold uppercase tracking-tighter">Tax Invoice</p>
                     <p><span className="font-bold">INV:</span> {sale.invoiceNumber}</p>
-                    <p><span className="font-bold">DATE:</span> {format(new Date(sale.date), 'dd-MMM-yyyy')}</p>
+                    <p><span className="font-bold">DATE:</span> {format(new Date(sale.createdAt || sale.date || new Date()), 'dd-MMM-yyyy hh:mm a')}</p>
                 </div>
             </div>
 
             {/* Items Table */}
-            <table className="w-full mb-3 border-t border-black">
+            <table className="w-full mb-3 border-t-2 border-black">
                 <thead>
-                    <tr className="border-b-2 border-black text-left font-bold text-[10px] uppercase">
+                    <tr className="border-b-2 border-black text-left font-black text-[11px] uppercase">
                         <th className="py-1">Items</th>
                         <th className="py-1 text-center">Qty</th>
                         <th className="py-1 text-right">Price</th>
                         <th className="py-1 text-right">Total</th>
                     </tr>
                 </thead>
-                <tbody className="font-medium">
+                <tbody className="font-bold">
                     {(sale.items || []).map((item: any, i: number) => (
                         <tr key={i} className="border-b border-black border-dashed">
                             <td className="py-2 pr-1">
-                                <p className="font-bold text-[11px] leading-none mb-1">{item.productId?.name || 'Item'}</p>
-                                <p className="text-[9px]">MRP: ₹{item.mrpAtTime || 0} | Unit: {item.unit}</p>
+                                <p className="font-black text-[12px] leading-tight mb-1">{item.productId?.name || 'Item'}</p>
+                                <p className="text-[10px] font-bold">MRP: ₹{item.mrpAtTime || 0} | Unit: {item.unit}</p>
                             </td>
-                            <td className="py-2 text-center font-bold">{item.quantity}</td>
+                            <td className="py-2 text-center font-black">{item.quantity}</td>
                             <td className="py-2 text-right">{(item.sellingPrice || 0).toFixed(0)}</td>
-                            <td className="py-2 text-right font-bold">{((item.quantity || 0) * (item.sellingPrice || 0)).toFixed(0)}</td>
+                            <td className="py-2 text-right font-black">{((item.quantity || 0) * (item.sellingPrice || 0)).toFixed(0)}</td>
                         </tr>
                     ))}
                     {(sale.additionalItems || []).map((item: any, i: number) => (
                         <tr key={`add-${i}`} className="border-b border-black border-dashed italic">
-                            <td className="py-2 font-bold text-[11px]">{item.name}</td>
+                            <td className="py-2 font-black text-[12px]">{item.name}</td>
                             <td className="py-2 text-center">1</td>
                             <td className="py-2 text-right">{(item.price || 0).toFixed(0)}</td>
-                            <td className="py-2 text-right font-bold">{(item.price || 0).toFixed(0)}</td>
+                            <td className="py-2 text-right font-black">{(item.price || 0).toFixed(0)}</td>
                         </tr>
                     ))}
                 </tbody>
@@ -97,29 +97,29 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
 
             {/* Totals Section */}
             <div className="border-t-2 border-black pt-2 space-y-1">
-                <div className="flex justify-between items-center text-[11px]">
+                <div className="flex justify-between items-center text-[12px] font-bold">
                     <span>Subtotal:</span>
-                    <span className="font-bold">₹{(sale.totalAmount - (sale.roundOffAmount || 0)).toLocaleString()}</span>
+                    <span className="font-black">₹{(sale.totalAmount - (sale.roundOffAmount || 0)).toLocaleString()}</span>
                 </div>
                 {roundOffAmount !== undefined && roundOffAmount !== 0 && (
-                    <div className="flex justify-between items-center text-[11px]">
+                    <div className="flex justify-between items-center text-[12px] font-bold">
                         <span>Round Off:</span>
-                        <span className="font-bold">{roundOffAmount >= 0 ? '+' : ''}{roundOffAmount.toFixed(2)}</span>
+                        <span className="font-black">{roundOffAmount >= 0 ? '+' : ''}{roundOffAmount.toFixed(2)}</span>
                     </div>
                 )}
-                <div className="flex justify-between items-center text-[15px] font-black border-y-2 border-black py-2 my-1">
+                <div className="flex justify-between items-center text-[16px] font-black border-y-2 border-black py-2 my-1">
                     <span>GRAND TOTAL:</span>
                     <span>₹{(sale.totalAmount || 0).toLocaleString()}</span>
                 </div>
 
                 {/* Balance & Payment Details */}
                 {(sale.amountPaid !== undefined && sale.amountPaid < sale.totalAmount) && (
-                    <div className="border border-black p-1 space-y-0.5">
-                        <div className="flex justify-between items-center text-[11px]">
+                    <div className="border-2 border-black p-1 space-y-0.5">
+                        <div className="flex justify-between items-center text-[12px] font-bold">
                             <span>Amount Paid:</span>
-                            <span className="font-bold">₹{(sale.amountPaid || 0).toLocaleString()}</span>
+                            <span className="font-black">₹{(sale.amountPaid || 0).toLocaleString()}</span>
                         </div>
-                        <div className="flex justify-between items-center text-[12px] font-black">
+                        <div className="flex justify-between items-center text-[13px] font-black">
                             <span>Balance Due:</span>
                             <span>₹{(sale.balanceDue || 0).toLocaleString()}</span>
                         </div>
@@ -127,13 +127,13 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                 )}
 
                 {changeAmount !== undefined && changeAmount > 0 && (
-                    <div className="flex justify-between items-center text-[11px] pt-1">
+                    <div className="flex justify-between items-center text-[12px] font-bold pt-1">
                         <span>Received Amount:</span>
-                        <span className="font-bold">₹{(sale.amountPaid || (sale.totalAmount + changeAmount)).toLocaleString()}</span>
+                        <span className="font-black">₹{(sale.amountPaid || (sale.totalAmount + changeAmount)).toLocaleString()}</span>
                     </div>
                 )}
                 {changeAmount !== undefined && changeAmount > 0 && (
-                    <div className="flex justify-between items-center text-[13px] font-black border-t border-black border-dashed pt-1">
+                    <div className="flex justify-between items-center text-[14px] font-black border-t-2 border-black border-dashed pt-1">
                         <span>Change Return:</span>
                         <span>₹{changeAmount.toFixed(0)}</span>
                     </div>
@@ -141,7 +141,7 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
 
                 {/* Footer Notes */}
                 <div className="text-center mt-6 space-y-2 pt-2">
-                    <p className="text-[10px] font-bold border-y border-black py-1">Items: {totalItems} | MODE: {sale.paymentMode?.toUpperCase() || 'CASH'}</p>
+                    <p className="text-[11px] font-black border-y-2 border-black py-1">Items: {totalItems} | MODE: {sale.paymentMode?.toUpperCase() || 'CASH'}</p>
                     
                     {signature && (
                         <div className="flex flex-col items-center mt-4">

@@ -16,6 +16,7 @@ import {
   FileSpreadsheet,
   Filter,
   ArrowUpDown,
+  X,
 } from "lucide-react";
 import BarcodeScanner from "../components/BarcodeScanner";
 import JsBarcode from "jsbarcode";
@@ -105,6 +106,8 @@ const Inventory = () => {
     "name" | "price-asc" | "price-desc" | "stock-asc" | "stock-desc"
   >("name");
   const [printLabelData, setPrintLabelData] = useState<Product | null>(null);
+  const [adjustmentType, setAdjustmentType] = useState<"add" | "reduce">("add");
+  const [adjustmentValue, setAdjustmentValue] = useState("");
   const barcodePreviewRef = useRef<SVGSVGElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
@@ -136,6 +139,8 @@ const Inventory = () => {
       barcode: "",
       batchNumber: "",
     });
+    setAdjustmentType("add");
+    setAdjustmentValue("");
   };
 
   const generateBarcode = () => {
@@ -240,9 +245,17 @@ const Inventory = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    let finalStock = Number(formData.stock);
+    if (editingId && adjustmentValue) {
+      const adj = Number(adjustmentValue);
+      finalStock =
+        adjustmentType === "add" ? finalStock + adj : finalStock - adj;
+    }
+
     const data = {
       ...formData,
-      stock: Number(formData.stock),
+      stock: finalStock,
       minStockAlert: Number(formData.minStockAlert),
       pricePerUnit: Number(formData.pricePerUnit),
       purchasePrice: Number(formData.purchasePrice),
@@ -612,6 +625,14 @@ const Inventory = () => {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm("")}
+              className="absolute right-4 p-1.5 bg-slate-100 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
+            >
+              <X size={16} />
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
@@ -804,7 +825,7 @@ const Inventory = () => {
       {/* Add Product Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-8 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto custom-scrollbar">
+          <div className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl p-8 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto custom-scrollbar border border-white/20">
             <div className="flex justify-between items-center mb-8">
               <h2 className="text-2xl font-black text-slate-800 tracking-tighter">
                 {editingId
@@ -879,22 +900,88 @@ const Inventory = () => {
                     />
                   )}
                 </div>
-                <div>
+                <div className="space-y-1">
                   <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
                     {t("inventory.stock")}
                   </label>
                   <input
                     required
                     type="number"
-                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold"
+                    disabled={!!editingId}
+                    className={`w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold ${editingId ? "opacity-70 cursor-not-allowed" : ""}`}
                     placeholder="0"
                     value={formData.stock}
                     onChange={(e) =>
                       setFormData({ ...formData, stock: e.target.value })
                     }
+                    onWheel={(e) => e.currentTarget.blur()}
                   />
                 </div>
               </div>
+              {/* Stock Adjustment Section (New Location) */}
+              {editingId && (
+                <div className="p-6 bg-slate-50 rounded-[2.5rem] border-2 border-slate-100 space-y-5 animate-in slide-in-from-bottom-4 duration-500">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-primary-600 shadow-sm">
+                        <RefreshCw size={16} />
+                      </div>
+                      <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                        Stock Adjustment
+                      </h3>
+                    </div>
+                    <div className="px-3 py-1 bg-primary-50 rounded-full text-[9px] font-black uppercase tracking-widest text-primary-600 border border-primary-100">
+                      Edit Mode
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-8 items-center bg-white p-5 rounded-3xl border-2 border-slate-100 shadow-sm">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                        Current Stock
+                      </span>
+                      <span className="text-2xl font-black tracking-tighter text-slate-700">
+                        {formData.stock}{" "}
+                        <span className="text-[10px] font-bold text-slate-400 ml-1 italic font-sans">
+                          {formData.unit}
+                        </span>
+                      </span>
+                    </div>
+                    <div className="flex flex-col text-right">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                        Updated Stock
+                      </span>
+                      <span
+                        className={`text-2xl font-black tracking-tighter ${Number(formData.stock) + (adjustmentType === "add" ? Number(adjustmentValue || 0) : -Number(adjustmentValue || 0)) >= 0 ? "text-emerald-600" : "text-rose-600"}`}
+                      >
+                        {Number(formData.stock) +
+                          (adjustmentType === "add"
+                            ? Number(adjustmentValue || 0)
+                            : -Number(adjustmentValue || 0))}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 bg-white p-2 rounded-[1.5rem] border-2 border-slate-200 focus-within:border-primary-500 transition-all shadow-sm">
+                    <select
+                      className="bg-slate-50 text-slate-700 border-r border-slate-200 px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none cursor-pointer hover:bg-slate-100 rounded-l-xl"
+                      value={adjustmentType}
+                      onChange={(e) => setAdjustmentType(e.target.value as any)}
+                    >
+                      <option value="add">Add (+)</option>
+                      <option value="reduce">Reduce (-)</option>
+                    </select>
+                    <input
+                      type="number"
+                      className="flex-1 bg-transparent text-slate-800 px-4 py-2 text-md font-black outline-none placeholder:text-slate-300 tracking-tight"
+                      placeholder="Enter Quantity to adjust..."
+                      value={adjustmentValue}
+                      onChange={(e) => setAdjustmentValue(e.target.value)}
+                      onWheel={(e) => e.currentTarget.blur()}
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Pricing Section */}
               <div className="p-6 bg-primary-50/50 rounded-[2rem] border border-primary-100 space-y-5">
@@ -924,6 +1011,7 @@ const Inventory = () => {
                           purchasePrice: e.target.value,
                         })
                       }
+                      onWheel={(e) => e.currentTarget.blur()}
                     />
                   </div>
                   <div>
@@ -942,6 +1030,7 @@ const Inventory = () => {
                           pricePerUnit: e.target.value,
                         })
                       }
+                      onWheel={(e) => e.currentTarget.blur()}
                     />
                   </div>
                   <div className="col-span-2">
@@ -957,6 +1046,7 @@ const Inventory = () => {
                       onChange={(e) =>
                         setFormData({ ...formData, mrp: e.target.value })
                       }
+                      onWheel={(e) => e.currentTarget.blur()}
                     />
                   </div>
                 </div>
@@ -1011,6 +1101,7 @@ const Inventory = () => {
                         minStockAlert: e.target.value,
                       })
                     }
+                    onWheel={(e) => e.currentTarget.blur()}
                   />
                 </div>
                 <div className="col-span-1">

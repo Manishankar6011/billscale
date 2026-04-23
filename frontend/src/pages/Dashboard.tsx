@@ -33,6 +33,7 @@ import {
   AlertCircle,
   Receipt,
   ArrowUpCircle,
+  Search,
 } from "lucide-react";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
@@ -278,12 +279,19 @@ const Dashboard = () => {
 
   const [selectedSale, setSelectedSale] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [transactionSearch, setTransactionSearch] = useState("");
 
   const handleRefresh = async () => {
     setRefreshing(true);
     await refetch();
     setRefreshing(false);
   };
+
+  const filteredActivity = (recentActivity || []).filter((act: any) => 
+    act.customerName?.toLowerCase().includes(transactionSearch.toLowerCase()) ||
+    act.invoiceNumber?.toLowerCase().includes(transactionSearch.toLowerCase()) ||
+    act.amount?.toString().includes(transactionSearch)
+  );
 
   const error = queryError ? (queryError as any).response?.data?.message || "Failed to load dashboard" : null;
 
@@ -499,311 +507,123 @@ const Dashboard = () => {
       {error ? (
         <ErrorState message={error} onRetry={() => refetch()} />
       ) : (
-        <>
-          {/* Metrics Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* 1. Period Sales */}
-            <MetricCard
-              title={`${getFilterLabel()} ${t("common.sales")}`}
-              subtitle={t("dashboard.revenue")}
-              value={`₹${stats?.periodSales?.toLocaleString() || 0}`}
-              icon={<TrendingUp size={24} />}
-              trend={stats?.salesTrend}
-              color="emerald"
-            />
-
-            {/* 2. Period Profit */}
-            <MetricCard
-              title={`${getFilterLabel()} ${t("dashboard.profit")}`}
-              subtitle={t("dashboard.growth_analysis")}
-              value={`₹${stats?.periodProfit?.toLocaleString() || 0}`}
-              icon={<ArrowUpCircle size={24} />}
-              trend={stats?.profitTrend}
-              color="primary"
-            />
-
-            {/* 3. Period Expenses */}
-            <MetricCard
-              title={`${getFilterLabel()} ${t("dashboard.expenses")}`}
-              subtitle={t("dashboard.budget_vs_spending")}
-              value={`₹${stats?.periodExpenses?.toLocaleString() || 0}`}
-              icon={<Receipt size={24} />}
-              trend={stats?.expensesTrend}
-              color="amber"
-            />
-
-            {/* 4. To Collect */}
-            <MetricCard
-              title={t("dashboard.to_collect")}
-              subtitle={t("billing.receivable")}
-              value={`₹${stats?.toCollect?.toLocaleString() || 0}`}
-              icon={<Clock size={24} />}
-              trend={t("billing.pending")}
-              color="indigo"
-            />
-
-            {/* 5. To Pay */}
-            <MetricCard
-              title={t("dashboard.to_pay")}
-              subtitle={t("billing.payable")}
-              value={`₹${stats?.toPay?.toLocaleString() || 0}`}
-              icon={<HandCoins size={24} />}
-              trend={t("billing.pending")}
-              color="indigo"
-            />
-
-            {/* 6. Stock Value */}
-            <MetricCard
-              title={t("dashboard.stock_value")}
-              subtitle={t("dashboard.stats.monthly_revenue")}
-              value={`₹${stats?.stockValue?.toLocaleString() || 0}`}
-              icon={<Package size={24} />}
-              trend={
-                stats?.lowStockCount > 0
-                  ? `${stats?.lowStockCount} items low`
-                  : t("dashboard.all_clear")
-              }
-              color="blue"
-            />
-
-            {/* 7. Estimated Balance */}
-            <MetricCard
-              title={t("dashboard.est_balance")}
-              subtitle={t("dashboard.stats.monthly_revenue")}
-              value={`₹${stats?.estimatedBalance?.toLocaleString() || 0}`}
-              icon={<Wallet size={24} />}
-              trend="Real-time"
-              color="emerald"
-            />
-
-            {/* 8. Staff Attendance */}
-            <MetricCard
-              title={t("dashboard.staff_present")}
-              subtitle={`${stats?.presentToday || 0}/${stats?.totalStaff || 0} active today`}
-              value={(stats?.presentToday || 0).toString()}
-              icon={<Users size={24} />}
-              trend={stats?.presentToday > 0 ? "Active" : "N/A"}
-              color="slate"
-            />
-
-            {/* 9. Critical Alerts */}
-            <MetricCard
-              title={t("dashboard.system_alerts")}
-              subtitle={`${alerts?.length || 0} items need attention`}
-              value={(alerts?.length || 0).toString()}
-              icon={<AlertTriangle size={24} />}
-              trend={alerts?.length > 0 ? t("dashboard.action_reqd") : t("dashboard.all_clear")}
-              color={alerts?.length > 0 ? "amber" : "emerald"}
-            />
-          </div>
-
-          <div className="mt-12 space-y-8">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Revenue & Profit Trend */}
-              <div className="bg-white/70 backdrop-blur-md rounded-[3rem] border border-white/40 shadow-xl p-8 group hover:shadow-2xl transition-all duration-500">
-                <div className="flex items-center justify-between mb-8">
-                  <div>
-                    <h3 className="text-xl font-black text-slate-800 tracking-tight">
-                      {t("dashboard.revenue_profit_trend")}
-                    </h3>
-                    <p className="text-slate-400 text-sm font-medium">
-                      {t("dashboard.growth_analysis")}
-                    </p>
-                  </div>
-                  <div className="p-3 bg-primary-50 text-primary-600 rounded-2xl">
-                    <TrendingUp size={24} />
-                  </div>
-                </div>
-                <div className="h-[320px] w-full relative">
-                  {chartData.length === 0 ? (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300">
-                      <TrendingUp size={48} className="mb-2 opacity-20" />
-                      <p className="text-[10px] font-black uppercase tracking-widest">
-                        {t("dashboard.no_data")}
-                      </p>
-                    </div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-                        <defs>
-                          <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#0284c7" stopOpacity={0.3} />
-                            <stop offset="95%" stopColor="#0284c7" stopOpacity={0} />
-                          </linearGradient>
-                          <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                            <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                          </linearGradient>
-                          <filter id="shadow" height="200%">
-                            <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="blur" />
-                            <feOffset in="blur" dx="0" dy="4" result="offsetBlur" />
-                            <feComponentTransfer>
-                              <feFuncA type="linear" slope="0.3" />
-                            </feComponentTransfer>
-                            <feMerge>
-                              <feMergeNode />
-                              <feMergeNode in="SourceGraphic" />
-                            </feMerge>
-                          </filter>
-                        </defs>
-                        <CartesianGrid vertical={false} stroke="#E2E8F0" strokeDasharray="3 3" opacity={0.4} />
-                        <XAxis
-                          dataKey="date"
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{ fill: "#94a3b8", fontSize: 10, fontWeight: 900 }}
-                          dy={15}
-                          tickFormatter={(str) => {
-                            const d = new Date(str.replace(" ", "T"));
-                            if (timeRange === "today" || timeRange === "yesterday") {
-                              return d.getHours() + ":00";
-                            }
-                            return timeRange === "year"
-                              ? d.toLocaleDateString("en-US", { month: "short" })
-                              : d.getDate().toString();
-                          }}
-                        />
-                        <YAxis 
-                          hide 
-                          axisLine={false}
-                          tickLine={false}
-                        />
-                        <Tooltip
-                          content={<CustomTooltip timeRange={timeRange} />}
-                          cursor={{ stroke: '#E2E8F0', strokeWidth: 2, strokeDasharray: '5 5' }}
-                        />
-                        <Area
-                          type="monotone"
-                          name={t("dashboard.revenue")}
-                          dataKey="revenue"
-                          stroke="#0284c7"
-                          strokeWidth={4}
-                          fillOpacity={1}
-                          fill="url(#colorRev)"
-                          activeDot={{ r: 8, strokeWidth: 0, fill: '#0284c7', className: 'animate-pulse' }}
-                          dot={false}
-                          animationDuration={1500}
-                        />
-                        <Area
-                          type="monotone"
-                          name={t("dashboard.profit")}
-                          dataKey="profit"
-                          stroke="#10b981"
-                          strokeWidth={4}
-                          fillOpacity={1}
-                          fill="url(#colorProfit)"
-                          activeDot={{ r: 8, strokeWidth: 0, fill: '#10b981', className: 'animate-pulse' }}
-                          dot={false}
-                          animationDuration={2000}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  )}
-                </div>
+        <div className="space-y-12 pb-12">
+          {/* Recent Transactions (Top) */}
+          <div className="bg-white/70 backdrop-blur-md rounded-[3rem] border border-white/40 shadow-xl shadow-slate-200/50 overflow-hidden group hover:shadow-2xl transition-all duration-500">
+            <div className="p-8 border-b border-slate-100/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-3">
+                  <ArrowRightLeft className="text-primary-500" size={28} />
+                  {t("dashboard.recent_transactions")}
+                </h2>
+                <p className="text-slate-400 text-sm font-medium">
+                  {t("dashboard.showing_latest")}
+                </p>
               </div>
-
-              {/* Revenue vs Expenses */}
-              <div className="bg-white/70 backdrop-blur-md rounded-[3rem] border border-white/40 shadow-xl p-8 group hover:shadow-2xl transition-all duration-500">
-                <div className="flex items-center justify-between mb-8">
-                  <div>
-                    <h3 className="text-xl font-black text-slate-800 tracking-tight">
-                      {t("dashboard.revenue_vs_expenses")}
-                    </h3>
-                    <p className="text-slate-400 text-sm font-medium">
-                      {t("dashboard.budget_vs_spending")}
-                    </p>
-                  </div>
-                  <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl">
-                    <Receipt size={24} />
-                  </div>
-                </div>
-                <div className="h-[320px] w-full relative text-slate-900 font-bold">
-                  {chartData.length === 0 ? (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300">
-                      <Receipt size={48} className="mb-2 opacity-20" />
-                      <p className="text-[10px] font-black uppercase tracking-widest">
-                        {t("dashboard.no_data")}
-                      </p>
-                    </div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-                        <CartesianGrid
-                          vertical={false}
-                          stroke="#E2E8F0"
-                          strokeDasharray="3 3"
-                          opacity={0.4}
-                        />
-                        <XAxis
-                          dataKey="date"
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{ fill: "#94a3b8", fontSize: 10, fontWeight: 900 }}
-                          dy={15}
-                          tickFormatter={(str) => {
-                            const d = new Date(str.replace(" ", "T"));
-                            if (timeRange === "today" || timeRange === "yesterday") {
-                              return d.getHours() + ":00";
-                            }
-                            return timeRange === "year"
-                              ? d.toLocaleDateString("en-US", { month: "short" })
-                              : d.getDate().toString();
-                          }}
-                        />
-                        <YAxis hide />
-                        <Tooltip
-                          content={<CustomTooltip timeRange={timeRange} />}
-                          cursor={{ fill: '#F8FAFC', opacity: 0.4 }}
-                        />
-                        <Bar
-                          name={t("dashboard.revenue")}
-                          dataKey="revenue"
-                          fill="#0284c7"
-                          radius={[10, 10, 0, 0]}
-                          barSize={18}
-                          animationDuration={1500}
-                        />
-                        <Bar
-                          name={t("dashboard.expenses")}
-                          dataKey="expenses"
-                          fill="#f59e0b"
-                          radius={[10, 10, 0, 0]}
-                          barSize={18}
-                          animationDuration={2000}
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
+              <div className="flex items-center gap-3 w-full md:w-auto">
+                <div className="relative flex-1 md:w-64 group">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={16} />
+                  <input 
+                    type="text"
+                    placeholder="Search invoices, customers..."
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 pl-11 pr-4 text-sm font-bold focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all outline-none"
+                    value={transactionSearch}
+                    onChange={(e) => setTransactionSearch(e.target.value)}
+                  />
+                  {transactionSearch && (
+                    <button
+                      onClick={() => setTransactionSearch("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 bg-slate-200 text-slate-500 hover:text-rose-600 rounded-lg transition-colors"
+                    >
+                      <X size={14} />
+                    </button>
                   )}
                 </div>
+                <button className="p-3.5 bg-slate-50 text-slate-400 rounded-2xl hover:bg-primary-50 hover:text-primary-600 transition-all border border-slate-100">
+                  <Filter size={20} />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 h-[450px] overflow-y-auto custom-scrollbar bg-slate-50/30">
+              <div className="space-y-3">
+                {filteredActivity.map((activity: any, idx: number) => (
+                  <ActivityItem
+                    key={activity.id || idx}
+                    activity={activity}
+                    onClick={() => setSelectedSale(activity)}
+                  />
+                ))}
+                {filteredActivity.length === 0 && (
+                  <div className="py-24 text-center">
+                    <div className="w-20 h-20 bg-white shadow-xl shadow-slate-100 text-slate-200 rounded-[2rem] flex items-center justify-center mx-auto mb-6 animate-pulse">
+                      <Banknote size={40} />
+                    </div>
+                    <h3 className="text-lg font-black text-slate-800 mb-1">No transactions found</h3>
+                    <p className="text-slate-400 font-medium tracking-tight">
+                      Try adjusting your search terms
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-
-          {/* Sales Report Block (matching reference image) */}
-          <div className="mt-8 bg-white/70 backdrop-blur-md rounded-[3rem] border border-white/40 shadow-xl p-8 group hover:shadow-2xl transition-all duration-500">
-            <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-8">
+          {/* Sales & Profit Report (Clean Area Chart) */}
+          <div className="bg-white/70 backdrop-blur-md rounded-[3rem] border border-white/40 shadow-xl p-8 group hover:shadow-2xl transition-all duration-500 relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity pointer-events-none">
+              <TrendingUp size={140} />
+            </div>
+            
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10 relative z-10">
               <div>
-                <h3 className="text-2xl font-black text-slate-800 tracking-tight">{t("dashboard.sales_report")}</h3>
-                <p className="text-slate-400 text-sm font-medium mt-1">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-100">
+                    <TrendingUp size={20} />
+                  </div>
+                  <h3 className="text-2xl font-black text-slate-800 tracking-tight">{t("dashboard.sales_report")}</h3>
+                </div>
+                <p className="text-slate-400 text-sm font-medium ml-1">
                   {chartData.length > 0
                     ? `${new Date(chartData[0]?.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} to ${new Date(chartData[chartData.length - 1]?.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`
                     : t("dashboard.no_data")
                   }
                 </p>
               </div>
-              <div className="flex items-start gap-8 text-right">
-                <div>
-                  <p className="text-slate-400 text-xs font-medium mb-1">{t("dashboard.today")} {t("common.sales")}</p>
-                  <p className="text-3xl font-black text-slate-800 tracking-tighter">₹{(stats?.periodSales || 0).toLocaleString()}</p>
-                </div>
-                <div className="pl-8 border-l border-slate-100">
-                  <p className="text-slate-400 text-xs font-medium mb-1">{t("billing.invoices")}</p>
-                  <p className="text-3xl font-black text-slate-800 tracking-tighter">{stats?.invoiceCount || 0}</p>
-                </div>
+              
+              <div className="flex flex-col md:flex-row items-center gap-6">
+                 {/* Period Selector */}
+                 <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/60">
+                    {["today", "yesterday", "week", "month", "year"].map((range) => (
+                      <button
+                        key={range}
+                        onClick={() => setTimeRange(range)}
+                        className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all duration-200 ${
+                          timeRange === range
+                            ? "bg-white text-emerald-600 shadow-sm"
+                            : "text-slate-400 hover:text-slate-600"
+                        }`}
+                      >
+                        {t(`dashboard.${range}`)}
+                      </button>
+                    ))}
+                 </div>
+
+                 {/* Legend */}
+                 <div className="flex items-center gap-4 text-xs font-bold">
+                    <div className="flex items-center gap-2">
+                       <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                       <span className="text-slate-500">{t("dashboard.revenue")}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                       <div className="w-3 h-3 rounded-full bg-primary-500"></div>
+                       <span className="text-slate-500">{t("dashboard.profit")}</span>
+                    </div>
+                 </div>
               </div>
             </div>
-            <div className="h-[300px] w-full relative">
+
+            <div className="h-[400px] w-full relative z-10">
               {chartData.length === 0 ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300">
                   <TrendingUp size={48} className="mb-2 opacity-20" />
@@ -811,20 +631,24 @@ const Dashboard = () => {
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 30 }}>
                     <defs>
                       <linearGradient id="colorSalesGreen" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#22c55e" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="#22c55e" stopOpacity={0.02} />
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0.02} />
+                      </linearGradient>
+                      <linearGradient id="colorProfitBlue" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.02} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid vertical={false} stroke="#E2E8F0" strokeDasharray="3 3" opacity={0.4} />
+                    <CartesianGrid vertical={false} stroke="#E2E8F0" strokeDasharray="5 5" opacity={0.3} />
                     <XAxis
                       dataKey="date"
                       axisLine={false}
                       tickLine={false}
                       tick={{ fill: "#94a3b8", fontSize: 11, fontWeight: 900 }}
-                      dy={15}
+                      dy={20}
                       tickFormatter={(str) => {
                         const d = new Date(str.replace(" ", "T"));
                         if (timeRange === "today" || timeRange === "yesterday") return d.getHours() + ":00";
@@ -842,19 +666,31 @@ const Dashboard = () => {
                     />
                     <Tooltip
                       content={<CustomTooltip timeRange={timeRange} />}
-                      cursor={{ stroke: '#E2E8F0', strokeWidth: 2, strokeDasharray: '5 5' }}
+                      cursor={{ stroke: '#E2E8F0', strokeWidth: 2, strokeDasharray: '8 8', opacity: 0.2 }}
                     />
                     <Area
                       type="monotone"
                       name={t("dashboard.revenue")}
                       dataKey="revenue"
-                      stroke="#16a34a"
-                      strokeWidth={3}
+                      stroke="#10b981"
+                      strokeWidth={4}
                       fillOpacity={1}
                       fill="url(#colorSalesGreen)"
-                      activeDot={{ r: 7, strokeWidth: 0, fill: '#16a34a' }}
+                      activeDot={{ r: 8, strokeWidth: 4, stroke: '#fff', fill: '#10b981' }}
                       dot={false}
-                      animationDuration={1500}
+                      animationDuration={2000}
+                    />
+                    <Area
+                      type="monotone"
+                      name={t("dashboard.profit")}
+                      dataKey="profit"
+                      stroke="#3b82f6"
+                      strokeWidth={4}
+                      fillOpacity={1}
+                      fill="url(#colorProfitBlue)"
+                      activeDot={{ r: 8, strokeWidth: 4, stroke: '#fff', fill: '#3b82f6' }}
+                      dot={false}
+                      animationDuration={2500}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -862,76 +698,133 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start mt-8">
-            {/* Recent Transactions Activity */}
-            <div className="lg:col-span-8 bg-white/70 backdrop-blur-md rounded-[3rem] border border-white/40 shadow-xl shadow-slate-200/50 overflow-hidden group hover:shadow-2xl transition-all duration-500">
-              <div className="p-8 border-b border-slate-100/60 flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-3">
-                    <ArrowRightLeft className="text-primary-500" size={24} />
-                    {t("dashboard.recent_transactions")}
-                  </h2>
-                  <p className="text-slate-400 text-sm font-medium">
-                    {t("dashboard.showing_latest")}
-                  </p>
-                </div>
-                <button className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-primary-50 hover:text-primary-600 transition-all border border-slate-100">
-                  <Filter size={20} />
-                </button>
-              </div>
+          {/* Metrics Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <MetricCard
+              title={`${getFilterLabel()} ${t("common.sales")}`}
+              subtitle={t("dashboard.revenue")}
+              value={`₹${stats?.periodSales?.toLocaleString() || 0}`}
+              icon={<TrendingUp size={24} />}
+              trend={stats?.salesTrend}
+              color="emerald"
+            />
+            <MetricCard
+              title={`${getFilterLabel()} ${t("dashboard.profit")}`}
+              subtitle={t("dashboard.growth_analysis")}
+              value={`₹${stats?.periodProfit?.toLocaleString() || 0}`}
+              icon={<ArrowUpCircle size={24} />}
+              trend={stats?.profitTrend}
+              color="primary"
+            />
+            <MetricCard
+              title={`${getFilterLabel()} ${t("dashboard.expenses")}`}
+              subtitle={t("dashboard.budget_vs_spending")}
+              value={`₹${stats?.periodExpenses?.toLocaleString() || 0}`}
+              icon={<Receipt size={24} />}
+              trend={stats?.expensesTrend}
+              color="amber"
+            />
+            <MetricCard
+              title={t("dashboard.to_collect")}
+              subtitle={t("billing.receivable")}
+              value={`₹${stats?.toCollect?.toLocaleString() || 0}`}
+              icon={<Clock size={24} />}
+              trend={t("billing.pending")}
+              color="indigo"
+            />
+            <MetricCard
+              title={t("dashboard.to_pay")}
+              subtitle={t("billing.payable")}
+              value={`₹${stats?.toPay?.toLocaleString() || 0}`}
+              icon={<HandCoins size={24} />}
+              trend={t("billing.pending")}
+              color="indigo"
+            />
+            <MetricCard
+              title={t("dashboard.stock_value")}
+              subtitle={t("dashboard.stats.monthly_revenue")}
+              value={`₹${stats?.stockValue?.toLocaleString() || 0}`}
+              icon={<Package size={24} />}
+              trend={stats?.lowStockCount > 0 ? `${stats?.lowStockCount} items low` : t("dashboard.all_clear")}
+              color="blue"
+            />
+            <MetricCard
+              title={t("dashboard.est_balance")}
+              subtitle={t("dashboard.stats.monthly_revenue")}
+              value={`₹${stats?.estimatedBalance?.toLocaleString() || 0}`}
+              icon={<Wallet size={24} />}
+              trend="Real-time"
+              color="emerald"
+            />
+            <MetricCard
+              title={t("dashboard.staff_present")}
+              subtitle={`${stats?.presentToday || 0}/${stats?.totalStaff || 0} active today`}
+              value={(stats?.presentToday || 0).toString()}
+              icon={<Users size={24} />}
+              trend={stats?.presentToday > 0 ? "Active" : "N/A"}
+              color="slate"
+            />
+            <MetricCard
+              title={t("dashboard.system_alerts")}
+              subtitle={`${alerts?.length || 0} items need attention`}
+              value={(alerts?.length || 0).toString()}
+              icon={<AlertTriangle size={24} />}
+              trend={alerts?.length > 0 ? t("dashboard.action_reqd") : t("dashboard.all_clear")}
+              color={alerts?.length > 0 ? "amber" : "emerald"}
+            />
+          </div>
 
-              <div className="p-4">
-                <div className="space-y-2">
-                  {(recentActivity || []).map((activity: any, idx: number) => (
-                    <ActivityItem
-                      key={activity.id || idx}
-                      activity={activity}
-                      onClick={() => setSelectedSale(activity)}
-                    />
-                  ))}
-                  {(recentActivity || []).length === 0 && (
-                    <div className="py-12 text-center">
-                      <div className="w-16 h-16 bg-slate-50 text-slate-200 rounded-3xl flex items-center justify-center mx-auto mb-4">
-                        <Banknote size={32} />
-                      </div>
-                      <p className="text-slate-400 font-bold">
-                        {t("dashboard.no_transactions")}
-                      </p>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div className="lg:col-span-8">
+              <div className="bg-white/70 backdrop-blur-md rounded-[3rem] border border-white/40 shadow-xl p-8 h-full">
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <h3 className="text-xl font-black text-slate-800 tracking-tight">{t("dashboard.revenue_vs_expenses")}</h3>
+                    <p className="text-slate-400 text-sm font-medium">{t("dashboard.budget_vs_spending")}</p>
+                  </div>
+                  <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl">
+                    <Receipt size={24} />
+                  </div>
+                </div>
+                <div className="h-[350px] w-full relative">
+                  {chartData.length === 0 ? (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300">
+                      <Receipt size={48} className="mb-2 opacity-20" />
+                      <p className="text-[10px] font-black uppercase tracking-widest">{t("dashboard.no_data")}</p>
                     </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <CartesianGrid vertical={false} stroke="#E2E8F0" strokeDasharray="3 3" opacity={0.4} />
+                        <XAxis dataKey="date" hide />
+                        <YAxis hide />
+                        <Tooltip content={<CustomTooltip timeRange={timeRange} />} cursor={{ fill: '#F8FAFC', opacity: 0.4 }} />
+                        <Bar name={t("dashboard.revenue")} dataKey="revenue" fill="#0284c7" radius={[6, 6, 0, 0]} barSize={12} />
+                        <Bar name={t("dashboard.expenses")} dataKey="expenses" fill="#f59e0b" radius={[6, 6, 0, 0]} barSize={12} />
+                      </BarChart>
+                    </ResponsiveContainer>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Alerts Logic Sidebar if needed, or other info */}
-            <div className="lg:col-span-4 space-y-8">
+            <div className="lg:col-span-4">
               {alerts.length > 0 && (
-                <div className="bg-rose-50/80 backdrop-blur-md rounded-[2.5rem] p-8 border border-rose-100 shadow-xl shadow-rose-100/50">
+                <div className="bg-rose-50/80 backdrop-blur-md rounded-[2.5rem] p-8 border border-rose-100 shadow-xl shadow-rose-100/50 h-full">
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-rose-700 font-black uppercase tracking-widest text-xs flex items-center gap-2">
                       <AlertTriangle size={18} />
                       {t("dashboard.critical_alerts")}
                     </h2>
-                    <span className="px-2 py-1 bg-rose-200/50 text-rose-700 rounded-lg text-[10px] font-black">
-                      {alerts.length}
-                    </span>
+                    <span className="px-2 py-1 bg-rose-200/50 text-rose-700 rounded-lg text-[10px] font-black">{alerts.length}</span>
                   </div>
-                  <div className="space-y-4">
+                  <div className="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
                     {alerts.map((alert: any, i: number) => (
-                      <div
-                        key={i}
-                        className="flex gap-4 p-4 bg-white/60 rounded-2xl border border-rose-100 group hover:bg-white transition-all"
-                      >
-                        <div className="shrink-0 p-2 bg-rose-100 text-rose-600 rounded-xl h-fit">
-                          <Package size={18} />
-                        </div>
+                      <div key={i} className="flex gap-4 p-4 bg-white/60 rounded-2xl border border-rose-100 group hover:bg-white transition-all">
+                        <div className="shrink-0 p-2 bg-rose-100 text-rose-600 rounded-xl h-fit"><Package size={18} /></div>
                         <div>
-                          <p className="text-sm font-black text-slate-800 tracking-tight">
-                            {alert.title}
-                          </p>
-                          <p className="text-xs text-rose-600 font-medium">
-                            {alert.message}
-                          </p>
+                          <p className="text-sm font-black text-slate-800 tracking-tight">{alert.title}</p>
+                          <p className="text-xs text-rose-600 font-medium">{alert.message}</p>
                         </div>
                       </div>
                     ))}
@@ -940,7 +833,7 @@ const Dashboard = () => {
               )}
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
