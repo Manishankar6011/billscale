@@ -85,7 +85,7 @@ const StaffPage = () => {
         setEditingId(staff._id!);
         setFormData({
             name: staff.name,
-            phone: staff.phone,
+            phone: staff.phone || '',
             role: staff.role,
             salaryType: staff.salaryType,
             salaryAmount: staff.salaryAmount.toString(),
@@ -107,7 +107,7 @@ const StaffPage = () => {
     const filteredStaff = staffList.filter(staff => 
         staff.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         staff.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        staff.phone.includes(searchTerm)
+        staff.phone?.includes(searchTerm)
     );
 
     if (loading) return <TableSkeleton rows={10} />;

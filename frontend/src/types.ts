@@ -52,7 +52,7 @@ export interface Product {
 export interface Customer {
   _id?: string;
   name: string;
-  phone: string;
+  phone?: string;
   email?: string;
   address?: string;
 }
@@ -60,7 +60,7 @@ export interface Customer {
 export interface Staff {
   _id?: string;
   name: string;
-  phone: string;
+  phone?: string;
   role: string;
   salaryType: "monthly" | "daily";
   salaryAmount: number;

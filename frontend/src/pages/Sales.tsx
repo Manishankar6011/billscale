@@ -176,7 +176,10 @@ const Sales = () => {
     enabled: !!user?.token,
   });
 
-  const loading = salesLoading || productsLoading;
+  const isInitialLoading =
+    (salesLoading || productsLoading) &&
+    sales.length === 0 &&
+    products.length === 0;
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Form State
@@ -229,11 +232,21 @@ const Sales = () => {
 
   // Leave warning
   const [showLeaveWarning, setShowLeaveWarning] = useState(false);
-  const [pendingCloseAction, setPendingCloseAction] = useState<
-    (() => void) | null
-  >(null);
+  const [pendingCloseAction, setPendingCloseAction] = useState<(() => void) | null>(null);
+  const lastPrintedId = useRef<string | null>(null);
 
-  // Filter State
+  // Auto-print effect
+  useEffect(() => {
+    if (printData && autoPrint && printData._id && printData._id !== lastPrintedId.current) {
+      lastPrintedId.current = printData._id;
+      const timer = setTimeout(() => {
+        window.print();
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [printData, autoPrint]);
+
+  // Handle unsaved changes warning
   const [filterSearch, setFilterSearch] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -312,7 +325,6 @@ const Sales = () => {
       showToast(t("billing.sale_recorded"), "success");
       if (autoPrint && newSale) {
         setPrintData(newSale);
-        setTimeout(() => window.print(), 500);
       }
       setIsModalOpen(false);
       queryClient.invalidateQueries({ queryKey: ["sales"] });
@@ -342,7 +354,6 @@ const Sales = () => {
       showToast(t("billing.sale_updated"), "success");
       if (autoPrint && res.data) {
         setPrintData(res.data);
-        setTimeout(() => window.print(), 500);
       }
       setIsModalOpen(false);
       setSelectedSaleForEdit(null);
@@ -373,6 +384,30 @@ const Sales = () => {
     },
     onError: (err: any) => {
       showToast(err.response?.data?.message || "Error deleting sale", "error");
+    },
+  });
+
+  const createCustomerMutation = useMutation({
+    mutationFn: async (data: Partial<Customer>) => {
+      return axios.post<Customer>("/api/customers", data, {
+        headers: { Authorization: `Bearer ${user?.token}` },
+      });
+    },
+    onSuccess: (res) => {
+      showToast("Customer saved to database!", "success");
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      setIsNewCustomerModalOpen(false);
+    },
+    onError: (err: any) => {
+      // If customer already exists, we just close and apply locally
+      if (err.response?.status === 400) {
+        setIsNewCustomerModalOpen(false);
+      } else {
+        showToast(
+          err.response?.data?.message || "Error saving customer",
+          "error",
+        );
+      }
     },
   });
 
@@ -613,7 +648,8 @@ const Sales = () => {
       const factor = item.conversionFactor || 1;
       return acc + item.purchasePriceAtTime * (item.quantity / factor);
     }, 0);
-    return a + (s.totalAmount - cost);
+    const charges = (s.additionalItems || []).reduce((acc, item) => acc + (Number(item.price) || 0), 0);
+    return a + (s.totalAmount - charges - (s.roundOffAmount || 0) - cost);
   }, 0);
 
   // Export PDF
@@ -703,7 +739,7 @@ const Sales = () => {
 
   const handleCustomerSelect = (customer: Customer) => {
     setCustomerName(customer.name);
-    setCustomerPhone(customer.phone);
+    setCustomerPhone(customer.phone??"");
     setCustomerAddress(customer.address || "");
   };
   const handleAddNewCustomer = (query: string) => {
@@ -769,7 +805,7 @@ const Sales = () => {
     }
   };
 
-  if (loading)
+  if (isInitialLoading)
     return (
       <div className="space-y-6">
         <MetricsSkeleton />
@@ -1025,10 +1061,14 @@ const Sales = () => {
                       acc + item.purchasePriceAtTime * (item.quantity / factor)
                     );
                   }, 0);
-                  const profit = (sale.totalAmount || 0) - totalCost;
+                  const additionalChargesTotal = (sale.additionalItems || []).reduce(
+                    (acc, item) => acc + (Number(item.price) || 0),
+                    0,
+                  );
+                  const profit = (sale.totalAmount || 0) - additionalChargesTotal - (sale.roundOffAmount || 0) - totalCost;
                   const profitPerc =
                     (sale.totalAmount || 0) > 0
-                      ? (profit / sale.totalAmount) * 100
+                      ? (profit / (sale.totalAmount - additionalChargesTotal - (sale.roundOffAmount || 0))) * 100
                       : 0;
                   return (
                     <tr
@@ -1232,7 +1272,7 @@ const Sales = () => {
                     onAddNew={handleAddNewCustomer}
                     initialValue={customerName}
                   />
-                  {customerPhone && (
+                  {(customerName || customerPhone) && (
                     <div className="mt-2 p-3 bg-primary-50 rounded-2xl border border-primary-100 flex items-center justify-between animate-in slide-in-from-top-1 duration-200">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 bg-white text-primary-600 rounded-lg flex items-center justify-center">
@@ -1243,7 +1283,7 @@ const Sales = () => {
                             {customerName}
                           </p>
                           <p className="text-[10px] font-medium text-slate-400">
-                            {customerPhone}
+                            {customerPhone || "No mobile number"}
                           </p>
                         </div>
                       </div>
@@ -1621,7 +1661,7 @@ const Sales = () => {
               </div>
 
               <div
-                className={`bg-white shadow-2xl transition-all duration-500 overflow-visible print:shadow-none print:p-0 print:m-0 print:scale-100 print:w-auto print:max-w-none print:mb-0 print:origin-top-left ${invoiceFormat === "thermal" ? "rounded-2xl md:rounded-[2rem] p-6 md:p-10 max-w-[80mm] w-full" : "w-[210mm] min-h-[297mm] scale-[0.45] md:scale-[0.55] lg:scale-[0.75] origin-top mb-[-120px] md:mb-[-150px] lg:mb-[-100px]"}`}
+                className={`bg-white shadow-2xl transition-all duration-500 overflow-visible print:shadow-none print:p-0 print:m-0 print:scale-100 print:w-auto print:max-w-none print:mb-0 print:origin-top-left ${invoiceFormat === "thermal" ? "rounded-2xl md:rounded-[2rem] p-6 md:p-10 max-w-[85mm] w-full" : "w-[210mm] min-h-[297mm] scale-[0.45] md:scale-[0.55] lg:scale-[0.75] origin-top mb-[-120px] md:mb-[-150px] lg:mb-[-100px]"}`}
               >
                 {invoiceFormat === "thermal" ? (
                   <PrintableInvoice
@@ -2097,8 +2137,24 @@ const Sales = () => {
                 </div>
               </div>
               <button
-                onClick={() => setIsNewCustomerModalOpen(false)}
-                className="w-full py-5 bg-primary-600 text-white rounded-[2rem] font-black uppercase tracking-widest text-sm shadow-xl shadow-primary-200 hover:bg-primary-700 transition-all mt-4"
+                onClick={() => {
+                  if (!customerName) {
+                    showToast("Customer name is required", "error");
+                    return;
+                  }
+                  
+                  // Set local state is already done via inputs
+                  // Close modal immediately like before
+                  setIsNewCustomerModalOpen(false);
+
+                  // Save to DB in background
+                  createCustomerMutation.mutate({
+                    name: customerName,
+                    phone: customerPhone.trim() || "",
+                    address: customerAddress.trim() || "",
+                  });
+                }}
+                className="w-full py-5 bg-primary-600 text-white rounded-[2rem] font-black uppercase tracking-widest text-sm shadow-xl shadow-primary-200 hover:bg-primary-700 transition-all mt-4 flex items-center justify-center gap-2"
               >
                 Done & Apply
               </button>

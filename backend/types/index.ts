@@ -53,7 +53,7 @@ export interface IProduct extends Document {
 export interface ICustomer extends Document {
   tenantId: Types.ObjectId;
   name: string;
-  phone: string;
+  phone?: string;
   email?: string;
   address?: string;
   createdAt: Date;
@@ -108,7 +108,7 @@ export interface ISale extends Document {
 export interface IStaff extends Document {
   tenantId: Types.ObjectId;
   name: string;
-  phone: string;
+  phone?: string;
   role: string;
   salaryType: "monthly" | "daily";
   salaryAmount: number;

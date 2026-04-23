@@ -33,7 +33,7 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
     const totalItems = (sale.items?.length || 0) + (sale.additionalItems?.length || 0);
 
     return (
-        <div id="printable-invoice" className={`${isPreview ? 'block shadow-md' : 'hidden print:block'} bg-white text-black p-2 w-full max-w-[80mm] mx-auto font-sans text-[12px] leading-tight`}>
+        <div id="printable-invoice" className={`${isPreview ? 'block shadow-md' : 'hidden print:block'} bg-white text-black p-2 w-full max-w-[85mm] mx-auto font-sans text-[12px] leading-tight`}>
             {/* Header */}
             <div className="text-center border-b-2 border-black pb-3 mb-3">
                 {companyLogo && (
@@ -76,8 +76,8 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                     {(sale.items || []).map((item: any, i: number) => (
                         <tr key={i} className="border-b border-black border-dashed">
                             <td className="py-2 pr-1">
-                                <p className="font-black text-[12px] leading-tight mb-1">{item.productId?.name || 'Item'}</p>
-                                <p className="text-[10px] font-bold">MRP: ₹{item.mrpAtTime || 0} | Unit: {item.unit}</p>
+                                <p className="font-black text-[12px] leading-tight mb-1">{i + 1}. {item.productId?.name || 'Item'}</p>
+                                <p className="text-[10px] font-bold ml-4">MRP: ₹{item.mrpAtTime || 0} | Unit: {item.unit}</p>
                             </td>
                             <td className="py-2 text-center font-black">{item.quantity}</td>
                             <td className="py-2 text-right">{(item.sellingPrice || 0).toFixed(2)}</td>
@@ -86,7 +86,7 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                     ))}
                     {(sale.additionalItems || []).map((item: any, i: number) => (
                         <tr key={`add-${i}`} className="border-b border-black border-dashed italic">
-                            <td className="py-2 font-black text-[12px]">{item.name}</td>
+                            <td className="py-2 font-black text-[12px]">{(sale.items?.length || 0) + i + 1}. {item.name}</td>
                             <td className="py-2 text-center">1</td>
                             <td className="py-2 text-right">{(item.price || 0).toFixed(2)}</td>
                             <td className="py-2 text-right font-black">{(item.price || 0).toFixed(2)}</td>

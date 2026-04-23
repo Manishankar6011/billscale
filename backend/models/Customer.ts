@@ -32,7 +32,13 @@ const customerSchema: Schema = new mongoose.Schema({
     }
 });
 
-// Compound index to ensure phone is unique per tenant
-customerSchema.index({ tenantId: 1, phone: 1 }, { unique: true, sparse: true });
+// Compound index to ensure phone is unique per tenant, but only if phone is provided
+customerSchema.index(
+    { tenantId: 1, phone: 1 },
+    { 
+        unique: true, 
+        partialFilterExpression: { phone: { $type: "string" } } 
+    }
+);
 
 export default mongoose.model<ICustomer>('Customer', customerSchema);

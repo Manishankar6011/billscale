@@ -126,12 +126,11 @@ export const processSale = async (req: AuthRequest, res: Response) => {
             await product.save({ session });
         }
 
-        // Add additional items to totalAmount
+        // Add additional items to totalAmount (Exclude from Profit)
         if (additionalItems && Array.isArray(additionalItems)) {
             for (const item of additionalItems) {
                 const chargePrice = Number(item.price) || 0;
                 totalAmount += chargePrice;
-                totalProfit += chargePrice;
             }
         }
 
