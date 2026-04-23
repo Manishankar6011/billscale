@@ -161,6 +161,8 @@ const Sales = () => {
 
   const [itemSearch, setItemSearch] = useState("");
   const [debouncedItemSearch, setDebouncedItemSearch] = useState("");
+  const [scannedProducts, setScannedProducts] = useState<Product[]>([]);
+  const [itemsModalMode, setItemsModalMode] = useState<"all" | "scan" | null>(null);
 
   // Debounce search terms
   useEffect(() => {
@@ -259,8 +261,21 @@ const Sales = () => {
   });
 
   const products = useMemo(() => {
-    return productsData?.pages.flatMap((page) => page.products) || [];
-  }, [productsData]);
+    // If in scan mode and no search query, show ONLY scanned items
+    if (itemsModalMode === "scan" && !itemSearch) {
+      return scannedProducts;
+    }
+
+    const flatProducts = productsData?.pages.flatMap((page) => page.products) || [];
+    // Combine scanned products and query results, avoiding duplicates
+    const combined = [...scannedProducts];
+    flatProducts.forEach(p => {
+      if (!combined.find(s => s._id === p._id)) {
+        combined.push(p);
+      }
+    });
+    return combined;
+  }, [productsData, scannedProducts, itemsModalMode, itemSearch]);
 
   // Infinite Scroll Observers
   const salesObserver = useRef<IntersectionObserver | null>(null);
@@ -291,7 +306,8 @@ const Sales = () => {
   const lastProductElementRef = useCallback(
     (node: HTMLTableRowElement) => {
       if (productsLoading) return;
-
+      // Don't trigger infinite scroll if we are in "scan only" mode (showing just scanned items)
+      if (itemsModalMode === "scan" && !itemSearch) return;
 
       if (productsObserver.current) productsObserver.current.disconnect();
       productsObserver.current = new IntersectionObserver((entries) => {
@@ -310,6 +326,8 @@ const Sales = () => {
       hasNextProductsPage,
       isFetchingNextProductsPage,
       fetchNextProductsPage,
+      itemsModalMode,
+      itemSearch,
     ],
   );
 
@@ -351,10 +369,7 @@ const Sales = () => {
     { name: string; price: string }[]
   >([]);
 
-  // Item-Add modal (new)
-  const [itemsModalMode, setItemsModalMode] = useState<"all" | "scan" | null>(
-    null,
-  );
+  // Item-Add modal (removed itemsModalMode from here)
 
   const [itemQtyMap, setItemQtyMap] = useState<Record<string, string>>({});
   const [itemPriceMap, setItemPriceMap] = useState<Record<string, string>>({});
@@ -424,12 +439,14 @@ const Sales = () => {
     if (hasSelectedItems) {
       setPendingCloseAction(() => () => {
         setItemsModalMode(null);
+        setScannedProducts([]);
         setItemQtyMap({});
         setItemPriceMap({});
       });
       setShowLeaveWarning(true);
     } else {
       setItemsModalMode(null);
+      setScannedProducts([]);
     }
   };
 
@@ -443,6 +460,7 @@ const Sales = () => {
     setAmountReceived("");
     setRoundOff(false);
     setPaymentStatus("pending");
+    setScannedProducts([]);
   };
 
   const closeModal = () => {
@@ -615,7 +633,7 @@ const Sales = () => {
   };
 
   const handleScan = useCallback(
-    (code: string) => {
+    async (code: string) => {
       const trimmedCode = code.trim();
       if (!trimmedCode) return;
 
@@ -623,70 +641,81 @@ const Sales = () => {
         setItemSearch(trimmedCode);
       }
 
-      const matches = products.filter((p) => p.barcode === trimmedCode);
-      if (matches.length === 0) {
-        showToast(`Product with barcode ${trimmedCode} not found`, "error");
-        return;
+      // Try local search first
+      let product = products.find((p) => p.barcode === trimmedCode);
+
+      if (!product) {
+        try {
+          const res = await axios.get(`/api/inventory/barcode/${trimmedCode}`, {
+            headers: { Authorization: `Bearer ${user?.token}` },
+          });
+          product = res.data;
+        } catch (err) {
+          showToast(`Product with barcode ${trimmedCode} not found`, "error");
+          return;
+        }
       }
-      if (matches.length === 1) {
-        const product = matches[0]!;
+
+      if (product) {
+        setIsScannerOpen(false);
+        setHwScannerInput("");
+        const pid = product._id!;
 
         if (itemsModalMode !== null) {
-          // If modal is open, increment the qty in the modal's map
+          // Add to scannedProducts so it appears at top
+          setScannedProducts(prev => {
+            const others = prev.filter(p => p._id !== pid);
+            return [product!, ...others];
+          });
           setItemQtyMap((prev) => ({
             ...prev,
-            [product._id!]: (Number(prev[product._id!] || 0) + 1).toString(),
+            [pid]: (Number(prev[pid] || 0) + 1).toString(),
           }));
           setItemPriceMap((prev) => ({
             ...prev,
-            [product._id!]: product.pricePerUnit.toString(),
+            [pid]: product!.pricePerUnit.toString(),
           }));
           setItemSearch("");
           showToast(`${product.name} qty increased in list`, "success");
         } else {
-          // If modal is NOT open, add to main cart directly
           setCart((prev) => {
-            const existing = prev.find(
-              (item) => item.productId === product._id,
-            );
-            if (existing) {
-              return prev.map((item) =>
-                item.productId === product._id
-                  ? { ...item, quantity: item.quantity + 1 }
-                  : item,
-              );
+            const existingIndex = prev.findIndex((item) => item.productId === pid);
+            if (existingIndex !== -1) {
+              // Move existing item to top and increment qty
+              const item = prev[existingIndex]!;
+              const others = prev.filter((_, idx) => idx !== existingIndex);
+              return [{ ...item, quantity: item.quantity + 1 }, ...others];
             }
+            // Add new item to top
             return [
-              ...prev,
               {
-                productId: product._id!,
-                name: product.name,
+                productId: pid,
+                name: product!.name,
                 quantity: 1,
-                sellingPrice: product.pricePerUnit,
-                purchasePrice: product.purchasePrice,
-                mrp: product.mrp,
-                unit: product.unit,
+                unit: product!.unit,
                 conversionFactor: 1,
+                sellingPrice: product!.pricePerUnit,
+                purchasePrice: product!.purchasePrice,
+                mrp: product!.mrp || 0,
               },
+              ...prev,
             ];
           });
-          showToast(`${product.name} quantity increased`, "success");
+          showToast(`${product.name} added to cart`, "success");
         }
-        setIsScannerOpen(false);
-        setHwScannerInput("");
-      } else {
-        setMatchingProducts(matches);
-        setIsScannerOpen(false);
       }
     },
     [
       products,
+      user?.token,
       showToast,
       itemsModalMode,
       setItemQtyMap,
       setItemPriceMap,
       setItemSearch,
       setCart,
+      setIsScannerOpen,
+      setHwScannerInput,
     ],
   );
 

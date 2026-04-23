@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import Customer from '../models/Customer';
@@ -29,14 +30,57 @@ export const searchCustomers = async (req: AuthRequest, res: Response) => {
     }
 };
 
-// @desc    Get all customers
+// @desc    Get all customers with stats
 // @route   GET /api/customers
 // @access  Private
 export const getCustomers = async (req: AuthRequest, res: Response) => {
     try {
-        const tenantId = req.tenantId;
-        const customers = await Customer.find({ tenantId }).sort({ createdAt: -1 });
-        res.status(200).json(customers);
+        const tenantId = new mongoose.Types.ObjectId(req.tenantId as string);
+        
+        // Use aggregation to get customers and their stats from Sales
+        const customersWithStats = await Customer.aggregate([
+            { $match: { tenantId } },
+            {
+                $lookup: {
+                    from: 'sales',
+                    let: { custPhone: '$phone', custName: '$name' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $and: [
+                                        { $eq: ['$tenantId', tenantId] },
+                                        {
+                                            $or: [
+                                                { $and: [{ $ne: ['$$custPhone', null] }, { $eq: ['$customerPhone', '$$custPhone'] }] },
+                                                { $and: [{ $eq: ['$$custPhone', null] }, { $eq: ['$customerName', '$$custName'] }] }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    ],
+                    as: 'sales'
+                }
+            },
+            {
+                $project: {
+                    name: 1,
+                    phone: 1,
+                    address: 1,
+                    totalSales: { $size: '$sales' },
+                    totalAmount: { $sum: '$sales.totalAmount' },
+                    totalPaid: { $sum: '$sales.amountPaid' },
+                    totalDue: { $sum: '$sales.balanceDue' },
+                    lastSaleDate: { $max: '$sales.date' },
+                    invoiceCount: { $size: '$sales' }
+                }
+            },
+            { $sort: { totalAmount: -1 } }
+        ]);
+
+        res.status(200).json(customersWithStats);
     } catch (err: any) {
         res.status(500).json({ message: err.message });
     }

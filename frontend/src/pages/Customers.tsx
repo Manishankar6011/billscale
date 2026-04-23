@@ -31,49 +31,13 @@ interface CustomerData {
 const Customers = () => {
   const { user } = useAuth();
   const { showToast } = useToast();
-  const { data: customers = [], isLoading: loading } = useQuery({
+  const { data: customers = [], isLoading: loading } = useQuery<CustomerData[]>({
     queryKey: ["customers"],
     queryFn: async () => {
-      const res = await axios.get("/api/transactions/sales", {
+      const res = await axios.get("/api/customers", {
         headers: { Authorization: `Bearer ${user?.token}` },
       });
-      const sales: any[] = res.data;
-
-      // Aggregate by customer phone or name
-      const map = new Map<string, CustomerData>();
-      sales.forEach((sale) => {
-        const key = sale.customerPhone || sale.customerName;
-        if (!map.has(key)) {
-          map.set(key, {
-            _id: key,
-            name: sale.customerName,
-            phone: sale.customerPhone || "",
-            address: sale.customerAddress || "",
-            totalSales: 0,
-            totalAmount: 0,
-            totalPaid: 0,
-            totalDue: 0,
-            lastSaleDate: sale.date,
-            invoiceCount: 0,
-          });
-        }
-        const c = map.get(key)!;
-        c.totalSales += 1;
-        c.invoiceCount += 1;
-        c.totalAmount += sale.totalAmount || 0;
-        if (sale.status === "paid") {
-          c.totalPaid += sale.totalAmount || 0;
-        } else {
-          c.totalDue += sale.totalAmount || 0;
-        }
-        if (!c.lastSaleDate || new Date(sale.date) > new Date(c.lastSaleDate)) {
-          c.lastSaleDate = sale.date;
-        }
-      });
-
-      return Array.from(map.values()).sort(
-        (a, b) => b.totalAmount - a.totalAmount,
-      );
+      return res.data;
     },
     enabled: !!user?.token,
   });

@@ -70,6 +70,25 @@ export const getProducts = async (req: AuthRequest, res: Response) => {
     }
 };
 
+// @desc    Get product by barcode
+// @route   GET /api/inventory/barcode/:barcode
+export const getProductByBarcode = async (req: AuthRequest, res: Response) => {
+    try {
+        const { barcode } = req.params;
+        const tenantId = new mongoose.Types.ObjectId(req.tenantId as string);
+        
+        const product = await Product.findOne({ tenantId, barcode: barcode.trim() });
+        
+        if (!product) {
+            return res.status(404).json({ message: 'Product not found' });
+        }
+        
+        res.status(200).json(product);
+    } catch (err: any) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
 
 // @desc    Add a new product
 // @route   POST /api/inventory
