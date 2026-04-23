@@ -219,6 +219,8 @@ const Sales = () => {
         totalPaid: 0,
         totalUnpaid: 0,
         totalProfit: 0,
+        paidCount: 0,
+        pendingCount: 0,
       }
     );
   }, [salesData]);
@@ -1011,21 +1013,24 @@ const Sales = () => {
           <SummaryCard
             title={t("billing.total_sales")}
             value={`₹${totalSales.toLocaleString()}`}
-            sub={`${filteredSales.length} ${t("billing.invoices")}`}
+            sub={`${salesData?.pages[0]?.pagination.totalCount || 0} ${t("billing.invoices")}`}
             color="purple"
           />
+
           <SummaryCard
             title={t("billing.total_paid")}
             value={`₹${totalPaid.toLocaleString()}`}
-            sub={`${filteredSales.filter((s) => s.status === "paid").length} ${t("billing.invoices")}`}
+            sub={`${salesSummary.paidCount || 0} ${t("billing.invoices")}`}
             color="emerald"
           />
+
           <SummaryCard
             title={t("billing.total_unpaid")}
             value={`₹${totalUnpaid.toLocaleString()}`}
-            sub={`${salesData?.pages[0]?.pagination.totalCount || 0} ${t("billing.invoices")}`}
+            sub={`${salesSummary.pendingCount || 0} ${t("billing.invoices")}`}
             color="rose"
           />
+
         </div>
 
         {/* Filters */}
@@ -1042,7 +1047,7 @@ const Sales = () => {
               <input
                 type="text"
                 className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-12 pr-4 text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all"
-                placeholder={t("placeholders.search_sales")}
+                placeholder={t("billing.search_sales_placeholder")}
                 value={filterSearch}
                 onChange={(e) => setFilterSearch(e.target.value)}
               />

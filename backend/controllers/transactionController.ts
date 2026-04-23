@@ -21,7 +21,8 @@ export const getSales = async (req: AuthRequest, res: Response) => {
         const startDate = req.query.startDate as string;
         const endDate = req.query.endDate as string;
 
-        let query: any = { tenantId: req.tenantId };
+        const tenantId = new mongoose.Types.ObjectId(req.tenantId as string);
+        let query: any = { tenantId };
 
         if (search) {
             query.$or = [
@@ -55,7 +56,9 @@ export const getSales = async (req: AuthRequest, res: Response) => {
                     totalAmount: { $sum: "$totalAmount" },
                     totalPaid: { $sum: "$amountPaid" },
                     totalUnpaid: { $sum: "$balanceDue" },
-                    totalProfit: { $sum: "$totalProfit" }
+                    totalProfit: { $sum: "$totalProfit" },
+                    paidCount: { $sum: { $cond: [{ $eq: ["$status", "paid"] }, 1, 0] } },
+                    pendingCount: { $sum: { $cond: [{ $eq: ["$status", "pending"] }, 1, 0] } }
                 }}
             ])
         ]);
@@ -430,7 +433,8 @@ export const getPurchases = async (req: AuthRequest, res: Response) => {
         const skip = (page - 1) * limit;
 
         const search = req.query.search as string;
-        let query: any = { tenantId: req.tenantId };
+        const tenantId = new mongoose.Types.ObjectId(req.tenantId as string);
+        let query: any = { tenantId };
 
         if (search) {
             query.supplierName = { $regex: search, $options: 'i' };

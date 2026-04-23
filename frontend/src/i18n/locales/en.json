@@ -254,6 +254,8 @@
         "new_sale": "New Sale",
         "search_sales": "Search Invoice / Customer",
         "search_sales_placeholder": "Name, Phone, Invoice...",
+        "search_purchases": "Search Purchases",
+        "search_purchases_placeholder": "Search by supplier...",
         "date_from": "From Date",
         "date_to": "To Date",
         "items_in_cart": "Items in your cart",

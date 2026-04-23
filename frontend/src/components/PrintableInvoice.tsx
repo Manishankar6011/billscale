@@ -58,7 +58,17 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                 <div className="text-right space-y-0.5">
                     <p className="font-bold uppercase tracking-tighter">Tax Invoice</p>
                     <p><span className="font-bold">INV:</span> {sale.invoiceNumber}</p>
-                    <p><span className="font-bold">DATE:</span> {format(new Date(sale.createdAt || sale.date || new Date()), 'dd-MMM-yyyy hh:mm a')}</p>
+                    <p><span className="font-bold">DATE:</span> {(() => {
+                        const d = new Date(sale.date || sale.createdAt || new Date());
+                        const c = sale.createdAt ? new Date(sale.createdAt) : null;
+                        
+                        // If same day, use createdAt to show actual time
+                        if (c && format(d, 'yyyy-MM-dd') === format(c, 'yyyy-MM-dd')) {
+                            return format(c, 'dd-MMM-yyyy hh:mm a');
+                        }
+                        // Otherwise use the selected date (time will be 12:00 AM if not specified)
+                        return format(d, 'dd-MMM-yyyy');
+                    })()}</p>
                 </div>
             </div>
 

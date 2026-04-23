@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import Product from '../models/Product';
@@ -15,7 +16,8 @@ export const getProducts = async (req: AuthRequest, res: Response) => {
         const filterType = req.query.filterType as string; // 'all', 'low', 'out'
         const sortBy = req.query.sortBy as string;
 
-        let query: any = { tenantId: req.tenantId };
+        const tenantId = new mongoose.Types.ObjectId(req.tenantId as string);
+        let query: any = { tenantId };
 
         // 1. Search Logic
         if (search) {

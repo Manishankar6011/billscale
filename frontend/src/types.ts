@@ -73,6 +73,8 @@ export interface PaginatedSalesResponse {
     totalPaid: number;
     totalUnpaid: number;
     totalProfit: number;
+    paidCount: number;
+    pendingCount: number;
   };
 }
 

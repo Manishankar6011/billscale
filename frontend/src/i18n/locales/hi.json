@@ -251,6 +251,8 @@
         "new_sale": "नई बिक्री",
         "search_sales": "चालान / ग्राहक खोजें",
         "search_sales_placeholder": "नाम, फोन, चालान...",
+        "search_purchases": "खरीदारी खोजें",
+        "search_purchases_placeholder": "सप्लायर द्वारा खोजें...",
         "date_from": "इस तारीख से",
         "date_to": "इस तारीख तक",
         "items_in_cart": "कार्ट में आइटम",
