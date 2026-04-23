@@ -381,7 +381,10 @@ const Dashboard = () => {
                         key={i}
                         className="text-sm text-slate-600 hover:bg-slate-50/50 transition-colors"
                       >
-                        <td className="px-6 py-4 font-bold text-slate-800">
+                        <td className="px-6 py-4 font-bold text-slate-800 flex items-center gap-2">
+                          <span className="w-5 h-5 flex items-center justify-center bg-slate-100 text-slate-400 rounded text-[10px] font-black">
+                            {i + 1}
+                          </span>
                           {item.productId?.name || "Item"}
                         </td>
                         <td className="px-6 py-4">
@@ -400,7 +403,10 @@ const Dashboard = () => {
                           key={`add-${i}`}
                           className="text-sm text-slate-600 hover:bg-slate-50/50 transition-colors"
                         >
-                          <td className="px-6 py-4 font-bold text-slate-800">
+                          <td className="px-6 py-4 font-bold text-slate-800 flex items-center gap-2">
+                            <span className="w-5 h-5 flex items-center justify-center bg-amber-50 text-amber-400 rounded text-[10px] font-black">
+                              {(selectedSale.items?.length || 0) + i + 1}
+                            </span>
                             {item.name}
                           </td>
                           <td className="px-6 py-4">1</td>
@@ -416,22 +422,30 @@ const Dashboard = () => {
               </div>
 
               {/* Status and Total */}
-              <div className="flex justify-between items-center bg-slate-50 p-6 rounded-[2rem]">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                    {t("dashboard.status")}
-                  </p>
-                  <span
-                    className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase ring-1 ${
-                      selectedSale.status === "paid"
-                        ? "bg-emerald-50 text-emerald-600 ring-emerald-100"
-                        : "bg-amber-50 text-amber-600 ring-amber-100"
-                    }`}
-                  >
-                    {selectedSale.status}
-                  </span>
+              <div className="bg-slate-50 p-6 rounded-[2rem] space-y-4">
+                {typeof selectedSale.roundOffAmount === 'number' && selectedSale.roundOffAmount !== 0 && (
+                  <div className="flex justify-between items-center text-sm font-bold text-slate-500 italic">
+                    <span>Round Off:</span>
+                    <span>{selectedSale.roundOffAmount > 0 ? '+' : ''}{selectedSale.roundOffAmount.toFixed(2)}</span>
+                  </div>
+                )}
                 </div>
-                <div className="text-right">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                      {t("dashboard.status")}
+                    </p>
+                    <span
+                      className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase ring-1 ${
+                        selectedSale.status === "paid"
+                          ? "bg-emerald-50 text-emerald-600 ring-emerald-100"
+                          : "bg-amber-50 text-amber-600 ring-amber-100"
+                      }`}
+                    >
+                      {selectedSale.status}
+                    </span>
+                  </div>
+                  <div className="text-right">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
                     {t("common.total")}
                   </p>

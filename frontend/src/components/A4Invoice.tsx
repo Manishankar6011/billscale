@@ -120,15 +120,15 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                 <div className="w-full max-w-sm space-y-3">
                     <div className="flex justify-between text-black font-bold text-base">
                         <span>Items Subtotal</span>
-                        <span>₹{((sale.items || []).reduce((acc: number, item: any) => acc + (item.quantity * item.sellingPrice), 0)).toFixed(0)}</span>
+                        <span>₹{((sale.items || []).reduce((acc: number, item: any) => acc + (item.quantity * item.sellingPrice), 0)).toFixed(2)}</span>
                     </div>
                     {(sale.additionalItems || []).length > 0 && (
                         <div className="flex justify-between text-black font-bold text-base">
                             <span>Service & Charges</span>
-                            <span>₹{((sale.additionalItems || []).reduce((acc: number, item: any) => acc + Number(item.price), 0)).toFixed(0)}</span>
+                            <span>₹{((sale.additionalItems || []).reduce((acc: number, item: any) => acc + Number(item.price), 0)).toFixed(2)}</span>
                         </div>
                     )}
-                    {sale.roundOffAmount !== 0 && (
+                    {typeof sale.roundOffAmount === 'number' && sale.roundOffAmount !== 0 && (
                         <div className="flex justify-between text-black font-bold italic">
                             <span>Round Off</span>
                             <span>{sale.roundOffAmount > 0 ? '+' : ''}{sale.roundOffAmount.toFixed(2)}</span>

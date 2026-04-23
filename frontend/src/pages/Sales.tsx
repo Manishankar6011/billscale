@@ -27,6 +27,7 @@ import {
   AlertCircle,
   ArrowLeft,
   ShoppingCart,
+  Edit,
 } from "lucide-react";
 import BarcodeScanner from "../components/BarcodeScanner";
 import CustomerSearch from "../components/CustomerSearch";
@@ -398,10 +399,16 @@ const Sales = () => {
         purchasePriceAtTime: i.purchasePrice,
         mrpAtTime: i.mrp,
       })),
-      additionalItems: additionalItems.map((i) => ({
-        name: i.name,
-        price: Number(i.price),
-      })),
+      additionalItems: [
+        ...additionalItems.map((i) => ({
+          name: i.name,
+          price: Number(i.price) || 0,
+        })),
+        // Include pending charge if name and price are both present
+        ...(newChargeName && newChargePrice
+          ? [{ name: newChargeName, price: Number(newChargePrice) || 0 }]
+          : []),
+      ],
       paymentMode,
       date: (date || new Date().toISOString().split("T")[0]) as string,
       status: paymentStatus,
@@ -1308,8 +1315,8 @@ const Sales = () => {
                       className="flex items-center justify-between text-sm bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="p-2 bg-primary-50 text-primary-600 rounded-xl">
-                          <Barcode size={16} />
+                        <div className="w-8 h-8 flex items-center justify-center bg-primary-50 text-primary-600 rounded-xl font-black text-xs">
+                          {idx + 1}
                         </div>
                         <div>
                           <p className="font-bold text-slate-800 tracking-tight">
@@ -1385,8 +1392,8 @@ const Sales = () => {
                       className="flex items-center justify-between text-sm bg-amber-50/30 p-4 rounded-2xl border border-amber-100/50 shadow-sm"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="p-2 bg-amber-100 text-amber-600 rounded-xl">
-                          <IndianRupee size={16} />
+                        <div className="w-8 h-8 flex items-center justify-center bg-amber-100 text-amber-600 rounded-xl font-black text-xs">
+                          {cart.length + idx + 1}
                         </div>
                         <div>
                           <p className="font-bold text-slate-800">
@@ -1701,7 +1708,17 @@ const Sales = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+                <div className="grid grid-cols-1 gap-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleEdit(printData);
+                      setPrintData(null);
+                    }}
+                    className="w-full py-4 bg-amber-50 text-amber-600 rounded-[1.5rem] font-black uppercase tracking-widest text-xs hover:bg-amber-100 transition-all flex items-center justify-center gap-3 border border-amber-200 shadow-sm"
+                  >
+                    <Edit size={18} /> {t("common.edit")} Bill
+                  </button>
                   <button
                     type="button"
                     onClick={() => window.print()}
@@ -2018,7 +2035,7 @@ const Sales = () => {
               </div>
               <div>
                 <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 px-1">
-                  Mobile Number
+                  Mobile Number (Optional)
                 </label>
                 <div className="relative">
                   <Phone

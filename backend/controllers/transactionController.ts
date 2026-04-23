@@ -66,17 +66,27 @@ export const processSale = async (req: AuthRequest, res: Response) => {
         const processedItems = [];
 
         // 1. Handle Customer Auto-Creation/Linking
-        if (customerPhone) {
-            const existingCustomer = await Customer.findOne({ 
-                tenantId: req.tenantId, 
-                phone: customerPhone 
-            }).session(session);
+        if (customerPhone || customerName) {
+            let existingCustomer;
+            if (customerPhone) {
+                existingCustomer = await Customer.findOne({ 
+                    tenantId: req.tenantId, 
+                    phone: customerPhone 
+                }).session(session);
+            } else {
+                // Match by name if phone is missing
+                existingCustomer = await Customer.findOne({
+                    tenantId: req.tenantId,
+                    name: customerName,
+                    $or: [{ phone: "" }, { phone: { $exists: false } }, { phone: null }]
+                }).session(session);
+            }
 
-            if (!existingCustomer) {
+            if (!existingCustomer && customerName) {
                 const newCustomer = new Customer({
                     tenantId: req.tenantId,
                     name: customerName,
-                    phone: customerPhone,
+                    phone: customerPhone || undefined,
                     address: customerAddress
                 });
                 await newCustomer.save({ session });
@@ -119,8 +129,9 @@ export const processSale = async (req: AuthRequest, res: Response) => {
         // Add additional items to totalAmount
         if (additionalItems && Array.isArray(additionalItems)) {
             for (const item of additionalItems) {
-                totalAmount += Number(item.price);
-                totalProfit += Number(item.price);
+                const chargePrice = Number(item.price) || 0;
+                totalAmount += chargePrice;
+                totalProfit += chargePrice;
             }
         }
 
@@ -217,17 +228,26 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
         const processedItems = [];
 
         // 2. Handle Customer
-        if (customerPhone) {
-            const existingCustomer = await Customer.findOne({ 
-                tenantId: req.tenantId, 
-                phone: customerPhone 
-            }).session(session);
+        if (customerPhone || customerName) {
+            let existingCustomer;
+            if (customerPhone) {
+                existingCustomer = await Customer.findOne({ 
+                    tenantId: req.tenantId, 
+                    phone: customerPhone 
+                }).session(session);
+            } else {
+                existingCustomer = await Customer.findOne({
+                    tenantId: req.tenantId,
+                    name: customerName,
+                    $or: [{ phone: "" }, { phone: { $exists: false } }, { phone: null }]
+                }).session(session);
+            }
 
-            if (!existingCustomer) {
+            if (!existingCustomer && customerName) {
                 const newCustomer = new Customer({
                     tenantId: req.tenantId,
                     name: customerName,
-                    phone: customerPhone,
+                    phone: customerPhone || undefined,
                     address: customerAddress
                 });
                 await newCustomer.save({ session });
@@ -268,8 +288,9 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
 
         if (additionalItems && Array.isArray(additionalItems)) {
             for (const item of additionalItems) {
-                totalAmount += Number(item.price);
-                totalProfit += Number(item.price);
+                const chargePrice = Number(item.price) || 0;
+                totalAmount += chargePrice;
+                totalProfit += chargePrice;
             }
         }
 

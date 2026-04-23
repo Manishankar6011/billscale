@@ -80,16 +80,16 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                                 <p className="text-[10px] font-bold">MRP: ₹{item.mrpAtTime || 0} | Unit: {item.unit}</p>
                             </td>
                             <td className="py-2 text-center font-black">{item.quantity}</td>
-                            <td className="py-2 text-right">{(item.sellingPrice || 0).toFixed(0)}</td>
-                            <td className="py-2 text-right font-black">{((item.quantity || 0) * (item.sellingPrice || 0)).toFixed(0)}</td>
+                            <td className="py-2 text-right">{(item.sellingPrice || 0).toFixed(2)}</td>
+                            <td className="py-2 text-right font-black">{((item.quantity || 0) * (item.sellingPrice || 0)).toFixed(2)}</td>
                         </tr>
                     ))}
                     {(sale.additionalItems || []).map((item: any, i: number) => (
                         <tr key={`add-${i}`} className="border-b border-black border-dashed italic">
                             <td className="py-2 font-black text-[12px]">{item.name}</td>
                             <td className="py-2 text-center">1</td>
-                            <td className="py-2 text-right">{(item.price || 0).toFixed(0)}</td>
-                            <td className="py-2 text-right font-black">{(item.price || 0).toFixed(0)}</td>
+                            <td className="py-2 text-right">{(item.price || 0).toFixed(2)}</td>
+                            <td className="py-2 text-right font-black">{(item.price || 0).toFixed(2)}</td>
                         </tr>
                     ))}
                 </tbody>
@@ -101,10 +101,10 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                     <span>Subtotal:</span>
                     <span className="font-black">₹{(sale.totalAmount - (sale.roundOffAmount || 0)).toLocaleString()}</span>
                 </div>
-                {roundOffAmount !== undefined && roundOffAmount !== 0 && (
-                    <div className="flex justify-between items-center text-[12px] font-bold">
+                {typeof sale.roundOffAmount === 'number' && sale.roundOffAmount !== 0 && (
+                    <div className="flex justify-between items-center text-[11px] font-bold italic text-slate-600">
                         <span>Round Off:</span>
-                        <span className="font-black">{roundOffAmount >= 0 ? '+' : ''}{roundOffAmount.toFixed(2)}</span>
+                        <span>{sale.roundOffAmount >= 0 ? '+' : ''}{sale.roundOffAmount.toFixed(2)}</span>
                     </div>
                 )}
                 <div className="flex justify-between items-center text-[16px] font-black border-y-2 border-black py-2 my-1">

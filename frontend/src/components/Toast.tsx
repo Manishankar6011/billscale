@@ -11,7 +11,7 @@ export const ToastContainer: React.FC = () => {
     const { toasts, removeToast } = useToast();
 
     return (
-        <div className="fixed top-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none w-full max-w-sm">
+        <div className="fixed top-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none w-full max-w-sm print:hidden">
             <AnimatePresence>
                 {toasts.map((toast) => (
                     <motion.div

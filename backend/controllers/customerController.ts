@@ -49,15 +49,17 @@ export const createCustomer = async (req: AuthRequest, res: Response) => {
         const tenantId = req.tenantId;
 
         // Check if phone already exists for this tenant
-        const existingCustomer = await Customer.findOne({ tenantId, phone });
-        if (existingCustomer) {
-            return res.status(400).json({ message: 'Customer with this phone number already exists' });
+        if (phone) {
+            const existingCustomer = await Customer.findOne({ tenantId, phone });
+            if (existingCustomer) {
+                return res.status(400).json({ message: 'Customer with this phone number already exists' });
+            }
         }
 
         const customer = new Customer({
             tenantId,
             name,
-            phone,
+            phone: phone || undefined,
             email,
             address
         });
