@@ -233,16 +233,18 @@ const Sales = () => {
   // Leave warning
   const [showLeaveWarning, setShowLeaveWarning] = useState(false);
   const [pendingCloseAction, setPendingCloseAction] = useState<(() => void) | null>(null);
-  const lastPrintedId = useRef<string | null>(null);
 
-  // Auto-print effect
+  // Auto-print effect with sessionStorage guard to prevent duplicate prints across remounts
   useEffect(() => {
-    if (printData && autoPrint && printData._id && printData._id !== lastPrintedId.current) {
-      lastPrintedId.current = printData._id;
-      const timer = setTimeout(() => {
-        window.print();
-      }, 800);
-      return () => clearTimeout(timer);
+    if (printData && autoPrint && printData._id) {
+      const lastPrintedId = sessionStorage.getItem('last_auto_printed_id');
+      if (printData._id !== lastPrintedId) {
+        sessionStorage.setItem('last_auto_printed_id', printData._id);
+        const timer = setTimeout(() => {
+          window.print();
+        }, 1000);
+        return () => clearTimeout(timer);
+      }
     }
   }, [printData, autoPrint]);
 
@@ -1389,10 +1391,28 @@ const Sales = () => {
                             >
                               +
                             </button>
-                            <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest ml-1">
-                              {item.unit} × ₹
-                              {item.sellingPrice.toLocaleString()}
-                            </span>
+                            <div className="flex items-center py-1 gap-2 px-4  bg-white border-2 border-slate-100 rounded-2xl hover:border-primary-500 transition-all group/price shadow-sm">
+                              <Edit size={14} className="text-slate-300 group-hover/price:text-primary-500 transition-colors" />
+                              <div className="flex items-center gap-2 border-slate-100">
+                                <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{item.unit} × ₹</span>
+                                <input
+                                  type="number"
+                                  value={item.sellingPrice}
+                                  onChange={(e) => {
+                                    const val = Number(e.target.value);
+                                    setCart((prev) =>
+                                      prev.map((it, i) =>
+                                        i === idx
+                                          ? { ...it, sellingPrice: val }
+                                          : it,
+                                      ),
+                                    );
+                                  }}
+                                  onWheel={(e) => e.currentTarget.blur()}
+                                  className="w-20 bg-transparent py-2 px-2  p-0 rounded-md border-slate-100 focus:ring-0 text-sm font-black hover:border-primary-500"
+                                />
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>

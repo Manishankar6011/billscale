@@ -1,4 +1,4 @@
-import React from "react";
+import { Suspense, lazy } from "react";
 import {
   Routes,
   Route,
@@ -6,29 +6,38 @@ import {
 } from "react-router-dom";
 import { ToastProvider } from "./context/ToastContext";
 import { ToastContainer } from "./components/Toast";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import Dashboard from "./pages/Dashboard";
-import Inventory from "./pages/Inventory";
-import Purchases from "./pages/Purchases";
-import Sales from "./pages/Sales";
-import Staff from "./pages/Staff";
-import Attendance from "./pages/Attendance";
-import Salary from "./pages/Salary";
-import Ledger from "./pages/Ledger";
-import Settings from "./pages/Settings";
-import Customers from "./pages/Customers";
-import ReferAndEarn from "./pages/ReferAndEarn";
 import { useAuth } from "./context/AuthContext";
-import Landing from "./pages/Landing";
 import Layout from "./components/Layout";
-import Pricing from "./pages/Pricing";
-import Success from "./pages/Success";
-import { ResetPassword } from "./pages/ResetPassword";
-import PublicInvoice from "./pages/PublicInvoice";
-import Contact from "./pages/Contact";
-import Privacy from "./pages/Privacy";
-import Terms from "./pages/Terms";
+import { Loader2 } from "lucide-react";
+
+// Lazy Loaded Components
+const Login = lazy(() => import("./pages/Login"));
+const Register = lazy(() => import("./pages/Register"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Inventory = lazy(() => import("./pages/Inventory"));
+const Purchases = lazy(() => import("./pages/Purchases"));
+const Sales = lazy(() => import("./pages/Sales"));
+const Staff = lazy(() => import("./pages/Staff"));
+const Attendance = lazy(() => import("./pages/Attendance"));
+const Salary = lazy(() => import("./pages/Salary"));
+const Ledger = lazy(() => import("./pages/Ledger"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Customers = lazy(() => import("./pages/Customers"));
+const ReferAndEarn = lazy(() => import("./pages/ReferAndEarn"));
+const Landing = lazy(() => import("./pages/Landing"));
+const Pricing = lazy(() => import("./pages/Pricing"));
+const Success = lazy(() => import("./pages/Success"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword").then(m => ({ default: m.ResetPassword })));
+const PublicInvoice = lazy(() => import("./pages/PublicInvoice"));
+const Contact = lazy(() => import("./pages/Contact"));
+const Privacy = lazy(() => import("./pages/Privacy"));
+const Terms = lazy(() => import("./pages/Terms"));
+
+const PageLoader = () => (
+  <div className="flex items-center justify-center min-h-screen bg-slate-50">
+    <Loader2 className="w-10 h-10 text-primary-600 animate-spin" />
+  </div>
+);
 
 const App: React.FC = () => {
   const { user } = useAuth();
@@ -36,37 +45,39 @@ const App: React.FC = () => {
   return (
     <ToastProvider>
       <ToastContainer />
-      <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/reset-password/:token" element={<ResetPassword />} />
-        <Route path="/public-invoice/:id" element={<PublicInvoice />} />
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/reset-password/:token" element={<ResetPassword />} />
+          <Route path="/public-invoice/:id" element={<PublicInvoice />} />
 
-        <Route
-          path="/dashboard"
-          element={user ? <Layout /> : <Navigate to="/login" />}
-        >
-          <Route index element={<Dashboard />} />
-          <Route path="inventory" element={<Inventory />} />
-          <Route path="purchases" element={<Purchases />} />
-          <Route path="sales" element={<Sales />} />
-          <Route path="staff" element={<Staff />} />
-          <Route path="attendance" element={<Attendance />} />
-          <Route path="salary" element={<Salary />} />
-          <Route path="ledger" element={<Ledger />} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="customers" element={<Customers />} />
-          <Route path="referral" element={<ReferAndEarn />} />
-          <Route path="pricing" element={<Pricing />} />
-          <Route path="success" element={<Success />} />
-          <Route path="contact" element={<Contact />} />
-          <Route path="privacy" element={<Privacy />} />
-          <Route path="terms" element={<Terms />} />
-        </Route>
+          <Route
+            path="/dashboard"
+            element={user ? <Layout /> : <Navigate to="/login" />}
+          >
+            <Route index element={<Dashboard />} />
+            <Route path="inventory" element={<Inventory />} />
+            <Route path="purchases" element={<Purchases />} />
+            <Route path="sales" element={<Sales />} />
+            <Route path="staff" element={<Staff />} />
+            <Route path="attendance" element={<Attendance />} />
+            <Route path="salary" element={<Salary />} />
+            <Route path="ledger" element={<Ledger />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="customers" element={<Customers />} />
+            <Route path="referral" element={<ReferAndEarn />} />
+            <Route path="pricing" element={<Pricing />} />
+            <Route path="success" element={<Success />} />
+            <Route path="contact" element={<Contact />} />
+            <Route path="privacy" element={<Privacy />} />
+            <Route path="terms" element={<Terms />} />
+          </Route>
 
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     </ToastProvider>
   );
 };
