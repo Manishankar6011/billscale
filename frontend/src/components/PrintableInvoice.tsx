@@ -74,7 +74,7 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                 </thead>
                 <tbody className="font-medium">
                     {(sale.items || []).map((item: any, i: number) => (
-                        <tr key={i} className="border-b border-black/10">
+                        <tr key={i} className="border-b border-black border-dashed">
                             <td className="py-2 pr-1">
                                 <p className="font-bold text-[11px] leading-none mb-1">{item.productId?.name || 'Item'}</p>
                                 <p className="text-[9px]">MRP: ₹{item.mrpAtTime || 0} | Unit: {item.unit}</p>
@@ -85,7 +85,7 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                         </tr>
                     ))}
                     {(sale.additionalItems || []).map((item: any, i: number) => (
-                        <tr key={`add-${i}`} className="border-b border-black/10 italic">
+                        <tr key={`add-${i}`} className="border-b border-black border-dashed italic">
                             <td className="py-2 font-bold text-[11px]">{item.name}</td>
                             <td className="py-2 text-center">1</td>
                             <td className="py-2 text-right">{(item.price || 0).toFixed(0)}</td>
@@ -114,7 +114,7 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
 
                 {/* Balance & Payment Details */}
                 {(sale.amountPaid !== undefined && sale.amountPaid < sale.totalAmount) && (
-                    <div className="bg-black/5 p-1 rounded space-y-0.5">
+                    <div className="border border-black p-1 space-y-0.5">
                         <div className="flex justify-between items-center text-[11px]">
                             <span>Amount Paid:</span>
                             <span className="font-bold">₹{(sale.amountPaid || 0).toLocaleString()}</span>
@@ -133,7 +133,7 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                     </div>
                 )}
                 {changeAmount !== undefined && changeAmount > 0 && (
-                    <div className="flex justify-between items-center text-[13px] font-black border-t border-black/20 pt-1">
+                    <div className="flex justify-between items-center text-[13px] font-black border-t border-black border-dashed pt-1">
                         <span>Change Return:</span>
                         <span>₹{changeAmount.toFixed(0)}</span>
                     </div>
@@ -158,8 +158,8 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                 </div>
             </div>
 
-            {/* Margin for cutter */}
-            <div className="h-12 border-t border-dashed border-black/20 mt-4"></div>
+            {/* Margin for cutter - Reduced to prevent extra page */}
+            <div className="h-6 border-t border-dashed border-black mt-2"></div>
         </div>
     );
 };
