@@ -58,6 +58,8 @@ export interface PaginatedResponse<T> {
     limit: number;
   };
   totalStockValue: number;
+  totalSellingValue: number;
+  totalPurchaseValue: number;
 }
 
 export interface PaginatedSalesResponse {

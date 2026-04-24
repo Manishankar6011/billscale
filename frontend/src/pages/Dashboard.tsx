@@ -260,6 +260,7 @@ const Dashboard = () => {
   const { user } = useAuth();
   const { showToast } = useToast();
   const [timeRange, setTimeRange] = useState("today");
+  const [stockValueDisplay, setStockValueDisplay] = useState<"purchase" | "sell">("purchase");
   const { data: dashboardData, isLoading: loading, error: queryError, refetch } = useQuery({
     queryKey: ['dashboard-stats', timeRange],
     queryFn: async () => {
@@ -321,8 +322,8 @@ const Dashboard = () => {
       {/* Invoice Modal */}
       {selectedSale && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-white rounded-[3rem] w-full max-w-2xl overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-300 border border-white/20">
-            <div className="p-10">
+          <div className="bg-white rounded-[3rem] w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-300 border border-white/20 flex flex-col">
+            <div className="p-10 overflow-y-auto flex-1 custom-scrollbar">
               {/* Modal Header */}
               <div className="flex justify-between items-start mb-8">
                 <div>
@@ -756,14 +757,26 @@ const Dashboard = () => {
               trend={t("billing.pending")}
               color="indigo"
             />
-            <MetricCard
-              title={t("dashboard.stock_value")}
-              subtitle={t("dashboard.stats.monthly_revenue")}
-              value={`₹${stats?.stockValue?.toLocaleString() || 0}`}
-              icon={<Package size={24} />}
-              trend={stats?.lowStockCount > 0 ? `${stats?.lowStockCount} items low` : t("dashboard.all_clear")}
-              color="blue"
-            />
+            <div className="relative group">
+              <MetricCard
+                title={t("dashboard.stock_value")}
+                subtitle={`${stockValueDisplay === "purchase" ? "At Purchase Price" : "At Selling Price"}`}
+                value={`₹${(stockValueDisplay === "purchase" ? stats?.stockValue : stats?.stockSellingValue)?.toLocaleString() || 0}`}
+                icon={<Package size={24} />}
+                trend={stats?.lowStockCount > 0 ? `${stats?.lowStockCount} items low` : t("dashboard.all_clear")}
+                color="blue"
+              />
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setStockValueDisplay(stockValueDisplay === "purchase" ? "sell" : "purchase");
+                }}
+                className="absolute top-8 right-8 p-2 bg-white/80 backdrop-blur-md border border-slate-100 rounded-xl shadow-sm hover:bg-white hover:shadow-md transition-all z-20 text-slate-400 hover:text-primary-600"
+                title="Toggle Purchase/Selling Value"
+              >
+                <RefreshCw size={14} className={stockValueDisplay === "sell" ? "rotate-180 transition-transform" : "transition-transform"} />
+              </button>
+            </div>
             <MetricCard
               title={t("dashboard.est_balance")}
               subtitle={t("dashboard.stats.monthly_revenue")}

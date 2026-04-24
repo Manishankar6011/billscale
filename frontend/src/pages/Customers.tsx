@@ -61,8 +61,8 @@ const Customers = () => {
     <div className="space-y-6">
       {/* Customer Detail side panel */}
       {selected && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center sm:justify-end p-0 sm:p-4">
-          <div className="bg-white w-full sm:max-w-md h-full sm:h-auto sm:max-h-[90vh] sm:rounded-3xl shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg max-h-[90vh] rounded-3xl shadow-2xl flex flex-col animate-in zoom-in duration-300">
             <div className="flex items-center justify-between p-6 border-b border-slate-100">
               <div>
                 <h3 className="text-xl font-black text-slate-800">

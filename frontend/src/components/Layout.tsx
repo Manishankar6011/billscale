@@ -58,7 +58,7 @@ const Layout = () => {
   return (
     <div className="flex flex-col min-h-screen lg:flex-row">
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-slate-100 p-6 fixed h-full overflow-y-auto print:hidden">
+      <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-slate-100 p-6 fixed h-full overflow-y-auto print:hidden z-40">
         <div className="mb-10 flex items-center gap-3">
           <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center text-white shadow-lg">
             <span className="text-xl font-bold italic">B</span>
@@ -167,7 +167,7 @@ const Layout = () => {
       </nav>
 
       {/* Main Content */}
-      <main className="flex-1 lg:ml-64 p-4 lg:p-10 pb-24 lg:pb-10 min-h-screen flex flex-col">
+      <main className="flex-1 lg:ml-64 p-4 lg:p-10 pb-24 lg:pb-10 min-h-screen flex flex-col min-w-0">
         {/* Subscription Alert Banner */}
         {(isExpired || (isAboutToExpire && !isExpired)) && (
           <div className={cn(

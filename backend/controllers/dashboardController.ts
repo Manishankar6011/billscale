@@ -133,7 +133,13 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
             ]),
             Product.aggregate([
                 { $match: { tenantId } },
-                { $group: { _id: null, total: { $sum: { $multiply: ["$stock", "$purchasePrice"] } } } }
+                { 
+                    $group: { 
+                        _id: null, 
+                        totalPurchaseValue: { $sum: { $multiply: ["$stock", "$purchasePrice"] } },
+                        totalSellingValue: { $sum: { $multiply: ["$stock", "$pricePerUnit"] } }
+                    } 
+                }
             ]),
             // Lifetime totals for Balance
             Sale.aggregate([
@@ -258,7 +264,8 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
                 todaySales,
                 toCollect: toCollectAgg[0]?.total || 0,
                 toPay: (toPayAgg[0]?.total || 0) + totalPendingSalary,
-                stockValue: stockValueAgg[0]?.total || 0,
+                stockValue: stockValueAgg[0]?.totalPurchaseValue || 0,
+                stockSellingValue: stockValueAgg[0]?.totalSellingValue || 0,
                 estimatedBalance,
                 lowStockCount: lowStockProducts.length,
                 presentToday: staffPresentToday,

@@ -20,9 +20,18 @@ export const getSales = async (req: AuthRequest, res: Response) => {
         const search = req.query.search as string;
         const startDate = req.query.startDate as string;
         const endDate = req.query.endDate as string;
+        const status = req.query.status as string;
 
         const tenantId = new mongoose.Types.ObjectId(req.tenantId as string);
         let query: any = { tenantId };
+
+        if (status && status !== 'all') {
+            if (status === 'unpaid') {
+                query.status = { $in: ['pending', 'partial'] };
+            } else {
+                query.status = status;
+            }
+        }
 
         if (search) {
             query.$or = [

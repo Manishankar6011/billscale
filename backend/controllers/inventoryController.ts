@@ -50,7 +50,13 @@ export const getProducts = async (req: AuthRequest, res: Response) => {
             Product.countDocuments(query),
             Product.aggregate([
                 { $match: query },
-                { $group: { _id: null, totalValue: { $sum: { $multiply: ["$stock", "$pricePerUnit"] } } } }
+                { 
+                    $group: { 
+                        _id: null, 
+                        totalPurchaseValue: { $sum: { $multiply: ["$stock", "$purchasePrice"] } },
+                        totalSellingValue: { $sum: { $multiply: ["$stock", "$pricePerUnit"] } }
+                    } 
+                }
             ])
         ]);
 
@@ -62,7 +68,8 @@ export const getProducts = async (req: AuthRequest, res: Response) => {
                 currentPage: page,
                 limit
             },
-            totalStockValue: totalStats[0]?.totalValue || 0
+            totalSellingValue: totalStats[0]?.totalSellingValue || 0,
+            totalPurchaseValue: totalStats[0]?.totalPurchaseValue || 0
         });
 
     } catch (err: any) {

@@ -52,8 +52,18 @@ export const getCustomers = async (req: AuthRequest, res: Response) => {
                                         { $eq: ['$tenantId', tenantId] },
                                         {
                                             $or: [
-                                                { $and: [{ $ne: ['$$custPhone', null] }, { $eq: ['$customerPhone', '$$custPhone'] }] },
-                                                { $and: [{ $eq: ['$$custPhone', null] }, { $eq: ['$customerName', '$$custName'] }] }
+                                                { 
+                                                    $and: [
+                                                        { $ne: [{ $ifNull: ['$$custPhone', ""] }, ""] }, 
+                                                        { $eq: ['$customerPhone', '$$custPhone'] }
+                                                    ] 
+                                                },
+                                                { 
+                                                    $and: [
+                                                        { $eq: [{ $ifNull: ['$$custPhone', ""] }, ""] }, 
+                                                        { $eq: [{ $toLower: { $ifNull: ['$customerName', ""] } }, { $toLower: { $ifNull: ['$$custName', ""] } }] }
+                                                    ] 
+                                                }
                                             ]
                                         }
                                     ]

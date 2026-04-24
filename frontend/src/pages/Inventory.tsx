@@ -1,5 +1,15 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import {
@@ -82,16 +92,19 @@ const Inventory = () => {
   } = useInfiniteQuery<PaginatedResponse<Product>>({
     queryKey: ["inventory", debouncedSearchTerm, filterType, sortBy],
     queryFn: async ({ pageParam = 1 }) => {
-      const res = await axios.get<PaginatedResponse<Product>>("/api/inventory", {
-        params: {
-          page: pageParam,
-          limit: 12,
-          search: debouncedSearchTerm,
-          filterType,
-          sortBy,
+      const res = await axios.get<PaginatedResponse<Product>>(
+        "/api/inventory",
+        {
+          params: {
+            page: pageParam,
+            limit: 12,
+            search: debouncedSearchTerm,
+            filterType,
+            sortBy,
+          },
+          headers: { Authorization: `Bearer ${user?.token}` },
         },
-        headers: { Authorization: `Bearer ${user?.token}` },
-      });
+      );
       return res.data;
     },
     getNextPageParam: (lastPage) => {
@@ -124,10 +137,9 @@ const Inventory = () => {
     [loading, hasNextPage, isFetchingNextPage, fetchNextPage],
   );
 
-
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const [formData, setFormData] = useState<{
     name: string;
     unit: string;
@@ -158,8 +170,15 @@ const Inventory = () => {
   const [printLabelData, setPrintLabelData] = useState<Product | null>(null);
   const [adjustmentType, setAdjustmentType] = useState<"add" | "reduce">("add");
   const [adjustmentValue, setAdjustmentValue] = useState("");
-  const barcodePreviewRef = useRef<SVGSVGElement>(null);
+
   const nameInputRef = useRef<HTMLInputElement>(null);
+
+  const [isBarcodePrintModalOpen, setIsBarcodePrintModalOpen] = useState(false);
+  const [barcodePrintCount, setBarcodePrintCount] = useState(40);
+  const [selectedBarcodeProduct, setSelectedBarcodeProduct] =
+    useState<Product | null>(null);
+
+  const [stockValueDisplay, setStockValueDisplay] = useState<"purchase" | "sell">("purchase");
 
   const isFormDirty = !!(
     formData.name ||
@@ -331,7 +350,9 @@ const Inventory = () => {
   // Summary Calculations
   // Summary Calculations - Using global totals from the API
   const totalItems = data?.pages[0]?.pagination.totalCount || 0;
-  const totalStockValue = data?.pages[0]?.totalStockValue || 0;
+  const totalSellingValue = data?.pages[0]?.totalSellingValue || 0;
+  const totalPurchaseValue = data?.pages[0]?.totalPurchaseValue || 0;
+  const totalStockValue = stockValueDisplay === "purchase" ? totalPurchaseValue : totalSellingValue;
 
   const exportToCSV = () => {
     const headers = [
@@ -502,6 +523,92 @@ const Inventory = () => {
     setIsExportOpen(false);
   };
 
+  const generateBarcodePDF = (product: Product, count: number) => {
+    const doc = new jsPDF("p", "mm", "a4");
+    const canvas = document.createElement("canvas");
+
+    // Generate barcode image once
+    JsBarcode(canvas, product.barcode || "", {
+      format: "CODE128",
+      width: 2,
+      height: 40,
+      displayValue: true,
+      fontSize: 14,
+      fontOptions: "bold",
+    });
+    const barcodeImg = canvas.toDataURL("image/png");
+
+    const marginX = 7;
+    const marginY = 10;
+    const itemWidth = 48;
+    const itemHeight = 25;
+    const gapX = 2;
+    const gapY = 2;
+
+    const cols = 4;
+    const rows = 11;
+    const itemsPerPage = cols * rows;
+
+    for (let i = 0; i < count; i++) {
+      if (i > 0 && i % itemsPerPage === 0) {
+        doc.addPage();
+      }
+
+      const pageIdx = i % itemsPerPage;
+      const col = pageIdx % cols;
+      const row = Math.floor(pageIdx / cols);
+
+      const x = marginX + col * (itemWidth + gapX);
+      const y = marginY + row * (itemHeight + gapY);
+
+      // Sticker Border
+      doc.setDrawColor(240);
+      doc.setLineWidth(0.1);
+      doc.roundedRect(x, y, itemWidth, itemHeight, 1, 1, "S");
+
+      // Content
+      doc.setTextColor(0);
+
+      // Business Name
+      doc.setFontSize(5);
+      doc.setFont("helvetica", "bold");
+      const bName = (user?.companyName || "BuildMate ERP").toUpperCase();
+      doc.text(bName, x + itemWidth / 2, y + 4, { align: "center" });
+
+      // Product Name
+      doc.setFontSize(7);
+      const pName =
+        product.name.length > 28
+          ? product.name.substring(0, 25) + "..."
+          : product.name;
+      doc.text(pName, x + itemWidth / 2, y + 8, { align: "center" });
+
+      // Price
+      doc.setFontSize(8);
+      doc.text(`Rs. ${product.pricePerUnit}`, x + itemWidth / 2, y + 12, {
+        align: "center",
+      });
+
+      // Barcode
+      doc.addImage(
+        barcodeImg,
+        "PNG",
+        x + 5,
+        y + 13,
+        itemWidth - 10,
+        itemHeight - 14,
+      );
+    }
+
+    // Open in new tab for printing or download directly
+    const blob = doc.output("blob");
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+    doc.save(`${product.name}_Barcodes.pdf`);
+    showToast(`${count} Barcodes generated successfully!`, "success");
+    setIsBarcodePrintModalOpen(false);
+  };
+
   if (loading) return <InventorySkeleton />;
 
   return (
@@ -632,18 +739,27 @@ const Inventory = () => {
             </h4>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
-          <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
-            <div className="text-xl font-black italic">₹</div>
+        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
+              <div className="text-xl font-black italic">₹</div>
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                {stockValueDisplay === "purchase" ? "Purchase" : "Selling"} {t("common.stock_value")}
+              </p>
+              <h4 className="text-2xl font-black text-emerald-600">
+                ₹{totalStockValue.toLocaleString()}
+              </h4>
+            </div>
           </div>
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              {t("common.stock_value")}
-            </p>
-            <h4 className="text-2xl font-black text-emerald-600">
-              ₹{totalStockValue.toLocaleString()}
-            </h4>
-          </div>
+          <button
+            onClick={() => setStockValueDisplay(stockValueDisplay === "purchase" ? "sell" : "purchase")}
+            className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border border-slate-100 flex items-center gap-2"
+          >
+            <RefreshCw size={12} className={stockValueDisplay === "sell" ? "rotate-180 transition-transform" : "transition-transform"} />
+            {stockValueDisplay === "purchase" ? "Switch to Sell" : "Switch to Purchase"}
+          </button>
         </div>
       </div>
 
@@ -746,11 +862,11 @@ const Inventory = () => {
                   {product.barcode && (
                     <button
                       onClick={() => {
-                        setPrintLabelData(product);
-                        setTimeout(() => window.print(), 100);
+                        setSelectedBarcodeProduct(product);
+                        setIsBarcodePrintModalOpen(true);
                       }}
                       className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg"
-                      title="Print Barcode Sticker"
+                      title="Print Multiple Barcodes"
                     >
                       <Barcode size={16} />
                     </button>
@@ -868,7 +984,6 @@ const Inventory = () => {
           </div>
         ) : null}
       </div>
-
 
       {filteredProducts.length === 0 && (
         <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">
@@ -1304,6 +1419,76 @@ const Inventory = () => {
                     `}</style>
         </div>
       )}
+      {/* Barcode Print Quantity Modal */}
+      {isBarcodePrintModalOpen && selectedBarcodeProduct && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-8 animate-in zoom-in duration-200">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
+                <Barcode size={24} />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-slate-800">
+                  Print Barcodes
+                </h3>
+                <p className="text-sm text-slate-500 truncate max-w-[250px]">
+                  {selectedBarcodeProduct.name}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                  Number of Barcodes (for A4 Paper)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="1000"
+                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-6 text-xl font-black focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all"
+                  value={barcodePrintCount}
+                  onChange={(e) => setBarcodePrintCount(Number(e.target.value))}
+                  autoFocus
+                />
+                <p className="mt-2 text-[10px] text-slate-400 font-medium">
+                  * 44 barcodes fit on one A4 sheet.
+                </p>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setIsBarcodePrintModalOpen(false)}
+                  className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-200 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() =>
+                    generateBarcodePDF(
+                      selectedBarcodeProduct,
+                      barcodePrintCount,
+                    )
+                  }
+                  className="flex-1 py-4 bg-primary-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-primary-700 shadow-xl shadow-primary-200 transition-all flex items-center justify-center gap-2"
+                >
+                  <Download size={16} />
+                  Generate PDF
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Barcode Label for single print (legacy compatibility) */}
+      {printLabelData && (
+        <BarcodeLabel
+          product={printLabelData}
+          businessName={user?.companyName || "BuildMate ERP"}
+        />
+      )}
+
       {isBulkModalOpen && (
         <BulkUploadModal
           isOpen={isBulkModalOpen}

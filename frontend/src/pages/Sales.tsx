@@ -96,11 +96,15 @@ const SummaryCard = ({
   value,
   sub,
   color,
+  onClick,
+  isClickable,
 }: {
   title: string;
   value: string;
   sub?: string;
   color: "purple" | "emerald" | "rose";
+  onClick?: () => void;
+  isClickable?: boolean;
 }) => {
   const colorMap = {
     purple: "bg-violet-600 text-white",
@@ -119,28 +123,40 @@ const SummaryCard = ({
   };
   return (
     <div
-      className={`rounded-3xl p-6 flex items-center gap-5 shadow-sm ${colorMap[color]}`}
+      onClick={onClick}
+      className={`rounded-3xl p-6 flex items-center gap-5 shadow-sm transition-all duration-300 w-full h-full overflow-hidden min-w-0 ${colorMap[color]} ${
+        isClickable
+          ? "cursor-pointer hover:shadow-xl hover:-translate-y-1 active:scale-95"
+          : ""
+      }`}
     >
-      <div className={`${iconColorMap[color]}`}>{icons[color]}</div>
-      <div>
+      <div className={`${iconColorMap[color]} shrink-0`}>{icons[color]}</div>
+      <div className="flex-1 min-w-0 w-0">
         <p
           className={`text-[10px] font-black uppercase tracking-widest ${color === "purple" ? "text-violet-200" : "text-slate-400"}`}
         >
           {title}
         </p>
         <p
-          className={`text-2xl font-black tracking-tight ${color === "purple" ? "text-white" : "text-slate-900"}`}
+          className={`text-2xl font-black tracking-tight overflow-x-auto whitespace-nowrap no-scrollbar max-w-full ${color === "purple" ? "text-white" : "text-slate-900"}`}
         >
           {value}
         </p>
         {sub && (
           <p
-            className={`text-[10px] font-medium ${color === "purple" ? "text-violet-200" : "text-slate-400"}`}
+            className={`text-[10px] font-medium truncate max-w-full ${color === "purple" ? "text-violet-200" : "text-slate-400"}`}
           >
             {sub}
           </p>
         )}
       </div>
+      {isClickable && (
+        <div
+          className={`${color === "purple" ? "text-violet-200" : "text-slate-300"}`}
+        >
+          <Filter size={16} />
+        </div>
+      )}
     </div>
   );
 };
@@ -158,6 +174,48 @@ const Sales = () => {
   const [debouncedFilterSearch, setDebouncedFilterSearch] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [timeRange, setTimeRange] = useState("all");
+  const [showRangeMenu, setShowRangeMenu] = useState(false);
+  const [showProfitRangeMenu, setShowProfitRangeMenu] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<"all" | "paid" | "unpaid">("all");
+
+  const handleRangeSelect = (range: string) => {
+    const today = new Date();
+    let start = "";
+    let end = today.toISOString().split("T")[0] || "";
+
+    if (range === "today") {
+      start = end;
+    } else if (range === "yesterday") {
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      start = yesterday.toISOString().split("T")[0] || "";
+      end = start;
+    } else if (range === "week") {
+      const lastWeek = new Date(today);
+      lastWeek.setDate(lastWeek.getDate() - 7);
+      start = lastWeek.toISOString().split("T")[0] || "";
+    } else if (range === "month") {
+      const lastMonth = new Date(today);
+      lastMonth.setMonth(lastMonth.getMonth() - 1);
+      start = lastMonth.toISOString().split("T")[0] || "";
+    } else if (range === "custom") {
+      // Don't change dates, just set range label
+      setTimeRange("custom");
+      setShowRangeMenu(false);
+      setShowProfitRangeMenu(false);
+      return;
+    } else {
+      start = "";
+      end = "";
+    }
+
+    setStartDate(start);
+    setEndDate(end);
+    setTimeRange(range);
+    setShowRangeMenu(false);
+    setShowProfitRangeMenu(false);
+  };
 
   const [itemSearch, setItemSearch] = useState("");
   const [debouncedItemSearch, setDebouncedItemSearch] = useState("");
@@ -183,7 +241,7 @@ const Sales = () => {
     hasNextPage: hasNextSalesPage,
     isFetchingNextPage: isFetchingNextSalesPage,
   } = useInfiniteQuery<PaginatedSalesResponse>({
-    queryKey: ["sales", debouncedFilterSearch, startDate, endDate],
+    queryKey: ["sales", debouncedFilterSearch, startDate, endDate, filterStatus],
     queryFn: async ({ pageParam = 1 }) => {
       const res = await axios.get<PaginatedSalesResponse>(
         "/api/transactions/sales",
@@ -194,6 +252,7 @@ const Sales = () => {
             search: debouncedFilterSearch,
             startDate,
             endDate,
+            status: filterStatus,
           },
           headers: { Authorization: `Bearer ${user?.token}` },
         },
@@ -335,7 +394,7 @@ const Sales = () => {
     if ((location.state as any)?.openModal) {
       setIsModalOpen(true);
       // Clear location state to prevent modal reopening on refresh
-      window.history.replaceState({}, document.title);
+      window.history.replaceState({}, document.title || "");
     }
   }, [location.state]);
 
@@ -619,7 +678,19 @@ const Sales = () => {
           : []),
       ],
       paymentMode,
-      date: (date || new Date().toISOString().split("T")[0]) as string,
+      date: (() => {
+        const now = new Date();
+        const selectedDateStr = (date || now.toISOString().split("T")[0]) as string;
+        const isToday = selectedDateStr === now.toISOString().split("T")[0];
+        
+        if (isToday && !selectedSaleForEdit) {
+          return now.toISOString();
+        }
+        
+        const d = new Date(selectedDateStr);
+        d.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+        return d.toISOString();
+      })(),
       status: paymentStatus,
       amountPaid: Number(amountReceived) || 0,
       roundOffAmount: roundOffAmount,
@@ -1038,28 +1109,81 @@ const Sales = () => {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <SummaryCard
-            title={t("billing.total_sales")}
-            value={`₹${totalSales.toLocaleString()}`}
-            sub={`${salesData?.pages[0]?.pagination.totalCount || 0} ${t("billing.invoices")}`}
-            color="purple"
-          />
+        <div className="flex overflow-x-auto gap-4 pb-4 sm:pb-0 sm:grid sm:grid-cols-3 no-scrollbar w-full overflow-y-visible">
+          <div className="relative group w-[320px] max-w-[320px] sm:w-full sm:max-w-none min-w-0 flex-shrink-0">
+            <SummaryCard
+              title={t("billing.total_sales")}
+              value={`₹${totalSales.toLocaleString()}`}
+              sub={
+                timeRange === "all"
+                  ? `${salesData?.pages[0]?.pagination.totalCount || 0} ${t("billing.invoices")}`
+                  : `${t(`dashboard.${timeRange}`)} ${t("common.sales")}`
+              }
+              color="purple"
+              isClickable={true}
+              onClick={() => setShowRangeMenu(!showRangeMenu)}
+            />
+            {showRangeMenu && (
+              <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 z-30 p-2 animate-in slide-in-from-top-2 duration-200">
+                {["today", "yesterday", "week", "month", "all", "custom"].map((range) => (
+                  <button
+                    key={range}
+                    onClick={() => handleRangeSelect(range)}
+                    className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                      timeRange === range
+                        ? "bg-primary-50 text-primary-600"
+                        : "text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    {range === "all" ? "All Time" : range === "custom" ? "Custom Range" : t(`dashboard.${range}`)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-          <SummaryCard
-            title={t("billing.total_paid")}
-            value={`₹${totalPaid.toLocaleString()}`}
-            sub={`${salesSummary.paidCount || 0} ${t("billing.invoices")}`}
-            color="emerald"
-          />
+          <div className="w-[320px] max-w-[320px] sm:w-full sm:max-w-none min-w-0 flex-shrink-0">
+            <SummaryCard
+              title={t("billing.total_paid")}
+              value={`₹${totalPaid.toLocaleString()}`}
+              sub={`${salesSummary.paidCount || 0} ${t("billing.invoices")}`}
+              color="emerald"
+              isClickable={true}
+              onClick={() => setFilterStatus(filterStatus === "paid" ? "all" : "paid")}
+            />
+          </div>
 
-          <SummaryCard
-            title={t("billing.total_unpaid")}
-            value={`₹${totalUnpaid.toLocaleString()}`}
-            sub={`${salesSummary.pendingCount || 0} ${t("billing.invoices")}`}
-            color="rose"
-          />
+          <div className="w-[320px] max-w-[320px] sm:w-full sm:max-w-none min-w-0 flex-shrink-0">
+            <SummaryCard
+              title={t("billing.total_unpaid")}
+              value={`₹${totalUnpaid.toLocaleString()}`}
+              sub={`${salesSummary.pendingCount || 0} ${t("billing.invoices")}`}
+              color="rose"
+              isClickable={true}
+              onClick={() => setFilterStatus(filterStatus === "unpaid" ? "all" : "unpaid")}
+            />
+          </div>
+        </div>
 
+        {/* Status Filter Tabs */}
+        <div className="flex items-center gap-2 p-1.5 bg-slate-100/50 rounded-2xl w-fit">
+          {[
+            { id: "all", label: "All Invoices" },
+            { id: "paid", label: "Paid Only" },
+            { id: "unpaid", label: "Unpaid / Pending" },
+          ].map((status) => (
+            <button
+              key={status.id}
+              onClick={() => setFilterStatus(status.id as any)}
+              className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                filterStatus === status.id
+                  ? "bg-white text-primary-600 shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              {status.label}
+            </button>
+          ))}
         </div>
 
         {/* Filters */}
@@ -1106,39 +1230,73 @@ const Sales = () => {
           </div>
         </div>
 
-        {/* Net Profit summary bar */}
-        <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-3xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 text-white shadow-xl group relative overflow-hidden">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-white/10 rounded-2xl">
-              <TrendingUp size={20} />
-            </div>
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                {t("billing.net_profit")}
-                <button
-                  onClick={() => setShowProfit(!showProfit)}
-                  className="p-1 hover:bg-white/10 rounded-lg transition-colors text-slate-400 hover:text-white"
+        <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-3xl p-5 flex flex-col lg:flex-row items-center justify-between gap-6 text-white shadow-xl group relative overflow-visible">
+          <div className="flex flex-col sm:flex-row items-center gap-6 w-full lg:w-auto">
+            <div className="flex items-center gap-4 w-full sm:w-auto">
+              <div className="p-3 bg-white/10 rounded-2xl flex-shrink-0">
+                <TrendingUp size={24} />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2 mb-1">
+                  {t("billing.net_profit")}
+                  <button
+                    onClick={() => setShowProfit(!showProfit)}
+                    className="p-1 hover:bg-white/10 rounded-lg transition-colors text-slate-400 hover:text-white"
+                  >
+                    {showProfit ? <EyeOff size={12} /> : <Eye size={12} />}
+                  </button>
+                </p>
+                <p
+                  className={`text-2xl font-black tracking-tight transition-all duration-300 ${showProfit ? (totalNetProfit >= 0 ? "text-emerald-400" : "text-rose-400") : "text-slate-600 blur-sm select-none"}`}
                 >
-                  {showProfit ? <EyeOff size={12} /> : <Eye size={12} />}
+                  {showProfit ? (
+                    <>
+                      {totalNetProfit >= 0 ? "+" : ""}₹
+                      {Math.abs(totalNetProfit).toLocaleString()}
+                    </>
+                  ) : (
+                    "₹ *****"
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <button
+                  onClick={() => setShowProfitRangeMenu(!showProfitRangeMenu)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border border-white/5"
+                >
+                  <Filter size={14} />
+                  {timeRange === "all" ? "All Time" : timeRange === "custom" ? "Custom Range" : t(`dashboard.${timeRange}`)}
                 </button>
-              </p>
-              <p
-                className={`text-2xl font-black tracking-tight transition-all duration-300 ${showProfit ? (totalNetProfit >= 0 ? "text-emerald-400" : "text-rose-400") : "text-slate-600 blur-sm select-none"}`}
-              >
-                {showProfit ? (
-                  <>
-                    {totalNetProfit >= 0 ? "+" : ""}₹
-                    {Math.abs(totalNetProfit).toLocaleString()}
-                  </>
-                ) : (
-                  "₹ *****"
+                {showProfitRangeMenu && (
+                  <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 p-2 animate-in slide-in-from-top-2 duration-200 text-slate-800">
+                    {["today", "yesterday", "week", "month", "all", "custom"].map((range) => (
+                      <button
+                        key={range}
+                        onClick={() => {
+                          handleRangeSelect(range);
+                          setShowProfitRangeMenu(false);
+                        }}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                          timeRange === range
+                            ? "bg-primary-50 text-primary-600"
+                            : "text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        {range === "all" ? "All Time" : range === "custom" ? "Custom Range" : t(`dashboard.${range}`)}
+                      </button>
+                    ))}
+                  </div>
                 )}
-              </p>
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-6 text-right">
+
+          <div className="flex items-center gap-8 text-right w-full lg:w-auto justify-between lg:justify-end border-t lg:border-t-0 border-white/10 pt-4 lg:pt-0">
             <div>
-              <p className="text-[10px] text-slate-400 uppercase tracking-widest">
+              <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">
                 {t("billing.margin")}
               </p>
               <p
@@ -1157,7 +1315,7 @@ const Sales = () => {
               </p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-400 uppercase tracking-widest">
+              <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">
                 {t("billing.invoices")}
               </p>
               <p className="text-xl font-black text-white">
