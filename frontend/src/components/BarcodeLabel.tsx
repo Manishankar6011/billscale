@@ -42,7 +42,7 @@ const BarcodeLabel: React.FC<BarcodeLabelProps> = ({ product, businessName }) =>
                     {product.name}
                 </p>
                 <p className="text-[11px] font-black">
-                    ₹{product.pricePerUnit}
+                    MRP: ₹{product.mrp || product.pricePerUnit}
                 </p>
             </div>
 

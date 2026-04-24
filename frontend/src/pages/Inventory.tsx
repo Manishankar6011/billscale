@@ -585,7 +585,7 @@ const Inventory = () => {
 
       // Price
       doc.setFontSize(8);
-      doc.text(`Rs. ${product.pricePerUnit}`, x + itemWidth / 2, y + 12, {
+      doc.text(`MRP: Rs. ${product.mrp || product.pricePerUnit}`, x + itemWidth / 2, y + 12, {
         align: "center",
       });
 
