@@ -1703,9 +1703,21 @@ const Sales = () => {
                             >
                               -
                             </button>
-                            <span className="text-xs font-black text-slate-700 w-8 text-center">
-                              {item.quantity}
-                            </span>
+                            <input
+                              type="number"
+                              step="any"
+                              value={item.quantity}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                setCart((prev) =>
+                                  prev.map((it, i) =>
+                                    i === idx ? { ...it, quantity: val } : it,
+                                  ),
+                                );
+                              }}
+                              onWheel={(e) => e.currentTarget.blur()}
+                              className="text-xs font-black text-slate-700 w-12 text-center bg-transparent border-none focus:ring-0 p-0"
+                            />
                             <button
                               type="button"
                               onClick={() =>
@@ -2340,9 +2352,20 @@ const Sales = () => {
                               >
                                 -
                               </button>
-                              <span className="w-10 text-center font-black text-emerald-700 text-sm">
-                                {itemQtyMap[p._id!]}
-                              </span>
+                              <input
+                                  type="number"
+                                  step="any"
+                                  value={itemQtyMap[p._id!]}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setItemQtyMap((prev) => ({
+                                      ...prev,
+                                      [p._id!]: val,
+                                    }));
+                                  }}
+                                  onWheel={(e) => e.currentTarget.blur()}
+                                  className="w-12 text-center font-black text-emerald-700 text-sm bg-transparent border-none focus:ring-0 p-0"
+                                />
                               <button
                                 onClick={() => {
                                   const current = Number(itemQtyMap[p._id!]);
