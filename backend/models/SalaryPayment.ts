@@ -29,4 +29,8 @@ const salaryPaymentSchema: Schema = new mongoose.Schema({
     }
 });
 
+// Index for performance
+salaryPaymentSchema.index({ tenantId: 1, date: -1 });
+salaryPaymentSchema.index({ tenantId: 1, staffId: 1 });
+
 export default mongoose.model<ISalaryPayment>('SalaryPayment', salaryPaymentSchema);

@@ -40,4 +40,7 @@ const staffSchema: Schema = new mongoose.Schema({
     }
 });
 
+// Index for performance
+staffSchema.index({ tenantId: 1 });
+
 export default mongoose.model<IStaff>('Staff', staffSchema);

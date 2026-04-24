@@ -57,4 +57,9 @@ const productSchema: Schema = new mongoose.Schema({
     }
 });
 
+// Indices for faster searching and multi-tenancy
+productSchema.index({ tenantId: 1, name: 1 });
+productSchema.index({ tenantId: 1, barcode: 1 });
+productSchema.index({ tenantId: 1, category: 1 });
+
 export default mongoose.model<IProduct>('Product', productSchema);

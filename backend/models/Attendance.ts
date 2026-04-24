@@ -27,7 +27,8 @@ const attendanceSchema: Schema = new mongoose.Schema({
     }
 });
 
-// Compound index to ensure one attendance record per staff per day
-attendanceSchema.index({ staffId: 1, date: 1 }, { unique: true });
+// Compound index to ensure one attendance record per staff per day per tenant
+attendanceSchema.index({ tenantId: 1, staffId: 1, date: 1 }, { unique: true });
+attendanceSchema.index({ tenantId: 1, date: -1 });
 
 export default mongoose.model<IAttendance>('Attendance', attendanceSchema);
