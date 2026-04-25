@@ -1977,7 +1977,7 @@ const Sales = () => {
               {!printData && (
                 <button
                   type="submit"
-                  disabled={createSaleMutation.isPending}
+                  disabled={createSaleMutation.isPending || updateSaleMutation.isPending}
                   className="w-full py-4 bg-primary-600 text-white rounded-[2rem] font-black uppercase tracking-widest text-sm shadow-xl shadow-primary-200 hover:bg-primary-700 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mt-4"
                 >
                   {createSaleMutation.isPending ? (
@@ -2085,8 +2085,7 @@ const Sales = () => {
               <style>{`
                 @media print {
                     @page { 
-                      size: ${invoiceFormat === "thermal" ? "80mm auto" : "A4"}; 
-                      margin: 0 !important; 
+                      ${invoiceFormat === "thermal" ? "margin: 0 !important;" : "size: A4; margin: 0 !important;"}
                     }
                     html, body {
                       height: auto !important;
@@ -2155,8 +2154,13 @@ const Sales = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => window.print()}
-                    className="w-full py-4 bg-primary-600 text-white rounded-[1.5rem] font-black uppercase tracking-widest text-xs shadow-xl shadow-primary-100 hover:bg-primary-700 transition-all flex items-center justify-center gap-3 active:scale-95"
+                    onClick={(e) => {
+                      const btn = e.currentTarget;
+                      btn.disabled = true;
+                      window.print();
+                      setTimeout(() => btn.disabled = false, 2000);
+                    }}
+                    className="w-full py-4 bg-primary-600 text-white rounded-[1.5rem] font-black uppercase tracking-widest text-xs shadow-xl shadow-primary-100 hover:bg-primary-700 transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
                   >
                     <Printer size={18} /> {t("billing.print_now")}
                   </button>

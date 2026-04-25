@@ -54,7 +54,7 @@ export const getSales = async (req: AuthRequest, res: Response) => {
         const [sales, totalCount, totals] = await Promise.all([
             Sale.find(query)
                 .populate('items.productId', 'name unit')
-                .sort({ date: -1, createdAt: -1 })
+                .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit),
             Sale.countDocuments(query),
@@ -452,7 +452,7 @@ export const getPurchases = async (req: AuthRequest, res: Response) => {
         const [purchases, totalCount] = await Promise.all([
             Purchase.find(query)
                 .populate('productId', 'name unit')
-                .sort({ date: -1, createdAt: -1 })
+                .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit),
             Purchase.countDocuments(query)

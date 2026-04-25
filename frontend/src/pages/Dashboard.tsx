@@ -669,6 +669,7 @@ const Dashboard = () => {
                       tickFormatter={(str) => {
                         const d = new Date(str.replace(" ", "T"));
                         if (timeRange === "today" || timeRange === "yesterday") return d.getHours() + ":00";
+                        if (timeRange === "month") return d.getDate().toString();
                         const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                         return timeRange === "year"
                           ? d.toLocaleDateString("en-US", { month: "short" })
