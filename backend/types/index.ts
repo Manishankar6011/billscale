@@ -20,6 +20,7 @@ export interface ITenant extends Document {
   referredBy?: Types.ObjectId;
   referralRewardClaimed: boolean;
   nextInvoiceNumber: number;
+  upiId?: string;
   createdAt: Date;
 }
 
@@ -102,6 +103,7 @@ export interface ISale extends Document {
   additionalItems?: { name: string, price: number }[];
   invoiceNumber: string;
   date: Date;
+  showQRCode?: boolean;
   createdAt: Date;
 }
 

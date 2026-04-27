@@ -13,7 +13,11 @@ import {
   LogOut,
   UserRound,
   Gift,
-  Plus
+  Plus,
+  Bug,
+  Lightbulb,
+  MessageSquare,
+  ShieldCheck
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/utils";
@@ -59,8 +63,11 @@ const Layout = () => {
     <div className="flex flex-col min-h-screen lg:flex-row">
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-slate-100 p-6 fixed h-full overflow-y-auto print:hidden z-40">
-        <div className="mb-10 flex items-center gap-3">
-          <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center text-white shadow-lg">
+        <div 
+          className="mb-10 flex items-center gap-3 cursor-pointer group"
+          onClick={() => navigate("/")}
+        >
+          <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center text-white shadow-lg group-hover:rotate-12 transition-transform">
             <span className="text-xl font-bold italic">B</span>
           </div>
           <span className="text-xl font-bold text-slate-800">
@@ -96,6 +103,32 @@ const Layout = () => {
             </NavLink>
           ))}
         </nav>
+
+        <div className="mt-8 pt-6 border-t border-slate-100">
+          <p className="px-4 mb-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Help & Support</p>
+          <div className="space-y-1">
+            <NavLink to="/dashboard/contact" className={({ isActive }) => cn("flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all", isActive ? "bg-primary-50 text-primary-600" : "text-slate-500 hover:bg-slate-50")}>
+              <MessageSquare className="w-4 h-4" />
+              Contact Us
+            </NavLink>
+            <NavLink to="/dashboard/contact?subject=Report%20a%20Bug" className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-all">
+              <Bug className="w-4 h-4" />
+              Report Bug
+            </NavLink>
+            <NavLink to="/dashboard/contact?subject=Request%20a%20Feature" className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 transition-all">
+              <Lightbulb className="w-4 h-4" />
+              Request Feature
+            </NavLink>
+            <NavLink to="/dashboard/privacy" className={({ isActive }) => cn("flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all", isActive ? "bg-primary-50 text-primary-600" : "text-slate-500 hover:bg-slate-50")}>
+              <ShieldCheck className="w-4 h-4" />
+              Privacy Policy
+            </NavLink>
+            <NavLink to="/dashboard/terms" className={({ isActive }) => cn("flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all", isActive ? "bg-primary-50 text-primary-600" : "text-slate-500 hover:bg-slate-50")}>
+              <FileText className="w-4 h-4" />
+              Terms of Service
+            </NavLink>
+          </div>
+        </div>
 
         <div className="mt-auto pt-6 border-t border-slate-100">
           <div className="flex items-center gap-3 mb-4 px-2">
@@ -201,7 +234,10 @@ const Layout = () => {
 
         {/* Mobile Header */}
         <header className="lg:hidden flex items-center justify-between mb-6 print:hidden">
-          <div className="flex items-center gap-2">
+          <div 
+            className="flex items-center gap-2 cursor-pointer"
+            onClick={() => navigate("/")}
+          >
             <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center text-white text-xs font-bold">
               B
             </div>

@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
+import QRCode from 'qrcode';
 
 export const generateInvoice = async (
     sale: any, 
@@ -10,7 +11,8 @@ export const generateInvoice = async (
     companyAddress?: string,
     companyPhone?: string,
     companyEmail?: string,
-    signature?: string
+    signature?: string,
+    upiId?: string
 ) => {
     try {
         const doc = new jsPDF();
@@ -149,14 +151,30 @@ export const generateInvoice = async (
             doc.text(`Status: FULLY PAID`, pageWidth - 20, finalY, { align: 'right' });
         }
 
+        // QR Code and Signature Section
+        let qrAndSigY = finalY + 10;
+
+        if (upiId && sale.totalAmount > 0) {
+            try {
+                const upiUrl = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(businessName)}&am=${sale.totalAmount}&cu=INR`;
+                const qrDataUrl = await QRCode.toDataURL(upiUrl, { margin: 1, width: 100 });
+                
+                doc.addImage(qrDataUrl, 'PNG', 150, qrAndSigY, 40, 40);
+                doc.setFontSize(8);
+                doc.setFont('helvetica', 'bold');
+                doc.text('Scan to Pay', 170, qrAndSigY + 42, { align: 'center' });
+            } catch (err) {
+                console.error("QR Code generation failed", err);
+            }
+        }
+
         // Signature
         if (signature) {
-            finalY += 15;
             try {
-                doc.addImage(signature, 'PNG', 20, finalY, 40, 15);
-                finalY += 18;
+                doc.addImage(signature, 'PNG', 20, qrAndSigY + 5, 40, 15);
                 doc.setFontSize(8);
-                doc.text('Authorised Signatory', 20, finalY);
+                doc.setFont('helvetica', 'normal');
+                doc.text('Authorised Signatory', 20, qrAndSigY + 23);
             } catch (err) {
                 console.error("Signature failed to load", err);
             }

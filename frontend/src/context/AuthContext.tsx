@@ -35,6 +35,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             billingAddress: t.billingAddress || data.billingAddress,
             phone: t.phone || data.phone,
             signature: t.signature || data.signature,
+            upiId: t.upiId || data.upiId,
             token: token || data.token
         };
     };

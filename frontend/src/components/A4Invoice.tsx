@@ -10,6 +10,7 @@ interface A4InvoiceProps {
     companyAddress?: string | undefined;
     companyEmail?: string | undefined;
     signature?: string | undefined;
+    upiId?: string | undefined;
     isPreview?: boolean;
 }
 
@@ -22,8 +23,22 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
     companyAddress,
     companyEmail,
     signature,
+    upiId,
     isPreview = false
 }) => {
+    const [qrDataUrl, setQrDataUrl] = React.useState<string>('');
+
+    React.useEffect(() => {
+        if (upiId && sale?.totalAmount > 0) {
+            const upiUrl = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(businessName)}&am=${sale.totalAmount}&cu=INR`;
+            import('qrcode').then(QRCode => {
+                QRCode.toDataURL(upiUrl, { margin: 1, width: 256 })
+                    .then(url => setQrDataUrl(url))
+                    .catch(err => console.error('QR generation failed', err));
+            });
+        }
+    }, [upiId, sale?.totalAmount, businessName]);
+
     if (!sale) return null;
 
     const totalItems = (sale.items?.length || 0) + (sale.additionalItems?.length || 0);
@@ -161,6 +176,17 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                     <p>1. Goods once sold will not be taken back.</p>
                     <p>2. Subject to local jurisdiction.</p>
                     <p>3. This is a computer generated invoice.</p>
+                    
+                    {qrDataUrl && (
+                        <div className="mt-8 flex items-center gap-4 border-2 border-black p-4 rounded-3xl w-fit">
+                            <img src={qrDataUrl} alt="Scan to Pay" className="w-24 h-24" />
+                            <div>
+                                <p className="text-sm font-black uppercase tracking-tighter">Scan to Pay</p>
+                                <p className="text-lg font-black tracking-tight">₹{sale.totalAmount.toLocaleString()}</p>
+                                <p className="text-[10px] font-bold text-slate-500">{upiId}</p>
+                            </div>
+                        </div>
+                    )}
                 </div>
                 <div className="text-center min-w-[200px]">
                     {signature && (

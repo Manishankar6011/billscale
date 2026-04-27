@@ -9,6 +9,7 @@ interface BulkUploadModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSuccess: () => void;
+    initialData?: BulkItem[];
 }
 
 interface BulkItem {
@@ -24,13 +25,19 @@ interface BulkItem {
     errors?: Record<string, string> | undefined;
 }
 
-const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSuccess }) => {
+const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSuccess, initialData }) => {
     const { user } = useAuth();
     const { showToast } = useToast();
     const [data, setData] = useState<BulkItem[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    React.useEffect(() => {
+        if (isOpen && initialData && initialData.length > 0) {
+            setData(validateData(initialData));
+        }
+    }, [isOpen, initialData]);
 
     const downloadTemplate = () => {
         const headers = [['Product Name', 'Batch Number', 'Item Code', 'Purchase Price', 'Selling Price', 'MRP', 'Stock Quantity', 'Unit']];
@@ -246,6 +253,14 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
         setData(validateData([...data, newItem]));
     };
 
+    const setAllBatches = (batchName: string) => {
+        setData(prev => {
+            const newData = prev.map(item => ({ ...item, batchNumber: batchName }));
+            return validateData(newData);
+        });
+        showToast(`All items set to ${batchName} batch`, 'success');
+    };
+
     const handleSave = async () => {
         const hasErrors = data.some(item => Object.keys(item.errors || {}).length > 0);
         if (hasErrors) {
@@ -285,18 +300,18 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
 
     return (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-            <div className="bg-white w-full max-w-6xl h-[90vh] rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="bg-white w-full max-w-6xl h-[95vh] md:h-[90vh] rounded-[1.5rem] md:rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
                 {/* Header */}
-                <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div className="px-4 md:px-8 py-4 md:py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                     <div>
-                        <h2 className="text-2xl font-black text-slate-800 tracking-tight">Bulk Inventory Upload</h2>
-                        <p className="text-slate-500 text-sm">Upload Excel/CSV and edit data before final submission.</p>
+                        <h2 className="text-lg md:text-2xl font-black text-slate-800 tracking-tight">Bulk Inventory Upload</h2>
+                        <p className="text-slate-500 text-[10px] md:text-sm line-clamp-1">Upload Excel/CSV and edit data before final submission.</p>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-xl transition-all"><X size={20} /></button>
+                    <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-xl transition-all shrink-0"><X size={20} /></button>
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-hidden flex flex-col p-8">
+                <div className="flex-1 overflow-hidden flex flex-col p-4 md:p-8">
                     {data.length === 0 ? (
                         <div className="flex-1 flex flex-col items-center justify-center border-4 border-dashed border-slate-100 rounded-[2rem] bg-slate-50/30">
                             <div className="w-20 h-20 bg-primary-50 text-primary-600 rounded-3xl flex items-center justify-center mb-6">
@@ -333,20 +348,36 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
                         </div>
                     ) : (
                         <div className="flex-1 flex flex-col min-h-0">
-                            <div className="flex items-center justify-between mb-4">
-                                <div className="flex gap-4">
-                                    <div className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-xs font-bold border border-emerald-100 flex items-center gap-2">
+                            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-4">
+                                <div className="flex flex-wrap items-center gap-3 md:gap-4">
+                                    <div className="px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] md:text-xs font-bold border border-emerald-100 flex items-center gap-2">
                                         <Check size={14} /> {data.length} Items Loaded
                                     </div>
                                     <button 
                                         onClick={addNewRow}
-                                        className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 flex items-center gap-2"
+                                        className="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-xl text-[10px] md:text-xs font-bold hover:bg-slate-200 flex items-center gap-2"
                                     >
                                         <Plus size={14} /> Add Row
                                     </button>
+                                    <div className="hidden md:block h-6 w-px bg-slate-200 mx-1"></div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-tighter mr-1">Set All Batch:</span>
+                                        <button 
+                                            onClick={() => setAllBatches('Retail')}
+                                            className="px-2 py-1 md:px-3 md:py-1.5 bg-amber-50 text-amber-700 rounded-lg text-[9px] md:text-[10px] font-black uppercase tracking-widest hover:bg-amber-100 transition-all border border-amber-200/50"
+                                        >
+                                            Retail
+                                        </button>
+                                        <button 
+                                            onClick={() => setAllBatches('Wholesale')}
+                                            className="px-2 py-1 md:px-3 md:py-1.5 bg-blue-50 text-blue-700 rounded-lg text-[9px] md:text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 transition-all border border-blue-200/50"
+                                        >
+                                            Wholesale
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="text-xs font-medium text-slate-400 flex items-center gap-2">
-                                    <AlertCircle size={14} className="text-amber-500" /> Red cells require correction
+                                <div className="text-[10px] md:text-xs font-medium text-slate-400 flex items-center gap-2">
+                                    <AlertCircle size={14} className="text-amber-500" /> <span className="hidden sm:inline">Red cells require correction</span><span className="sm:hidden">Fix errors</span>
                                 </div>
                             </div>
 
@@ -483,24 +514,24 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
 
                 {/* Footer */}
                 {data.length > 0 && (
-                    <div className="px-8 py-6 bg-slate-50 flex items-center justify-between border-t border-slate-100">
+                    <div className="px-4 md:px-8 py-4 md:py-6 bg-slate-50 flex flex-col md:flex-row items-center justify-between gap-4 border-t border-slate-100">
                         <button 
                             onClick={() => { setData([]); if (fileInputRef.current) fileInputRef.current.value = ''; }}
-                            className="text-slate-400 hover:text-slate-600 font-bold uppercase tracking-widest text-[10px]"
+                            className="text-slate-400 hover:text-slate-600 font-bold uppercase tracking-widest text-[9px] md:text-[10px] order-last md:order-first"
                         >
                             Reset Table
                         </button>
-                        <div className="flex gap-4">
+                        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
                             <button 
                                 onClick={onClose}
-                                className="px-6 py-4 bg-white border border-slate-200 text-slate-600 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-50 transition-all"
+                                className="w-full md:w-auto px-6 py-3 md:py-4 bg-white border border-slate-200 text-slate-600 rounded-xl md:rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-50 transition-all"
                             >
                                 Cancel
                             </button>
                             <button 
                                 onClick={handleSave}
                                 disabled={isSaving}
-                                className="px-10 py-4 bg-primary-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-primary-200 hover:bg-primary-700 transition-all flex items-center gap-3 active:scale-95"
+                                className="w-full md:w-auto px-10 py-3 md:py-4 bg-primary-600 text-white rounded-xl md:rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-primary-200 hover:bg-primary-700 transition-all flex items-center justify-center gap-3 active:scale-95"
                             >
                                 {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
                                 Confirm & Save Stock

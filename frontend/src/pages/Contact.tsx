@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
-import { Mail, Phone, MapPin, Send, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Mail, Phone, MapPin, Send, ShieldCheck, Bug, Lightbulb, MessageSquare, ArrowLeft } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 const Contact = () => {
     const { showToast } = useToast();
+    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
         name: '',
@@ -12,6 +15,13 @@ const Contact = () => {
         subject: 'Account & Subscription',
         message: ''
     });
+
+    useEffect(() => {
+        const subjectParam = searchParams.get('subject');
+        if (subjectParam) {
+            setFormData(prev => ({ ...prev, subject: subjectParam }));
+        }
+    }, [searchParams]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -30,6 +40,14 @@ const Contact = () => {
 
     return (
         <div className="min-h-screen bg-slate-50 py-20 px-4">
+            <div className="max-w-6xl mx-auto mb-8">
+                <button 
+                    onClick={() => navigate(-1)}
+                    className="flex items-center gap-2 text-slate-500 hover:text-slate-800 font-bold transition-colors"
+                >
+                    <ArrowLeft size={20} /> Back
+                </button>
+            </div>
             <div className="max-w-6xl mx-auto">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
                     {/* Left Side: Info */}
@@ -126,6 +144,8 @@ const Contact = () => {
                                 >
                                     <option>Account & Subscription</option>
                                     <option>Technical Issue</option>
+                                    <option>Report a Bug</option>
+                                    <option>Request a Feature</option>
                                     <option>Business Partnership</option>
                                     <option>Other</option>
                                 </select>

@@ -13,6 +13,7 @@ export interface Tenant {
   subscriptionExpiryDate?: string;
   aiUsageCount: number;
   referralCode?: string;
+  upiId?: string;
 }
 
 export interface User {
@@ -34,6 +35,7 @@ export interface User {
   billingAddress?: string;
   phone?: string;
   signature?: string;
+  upiId?: string;
 }
 
 export interface Product {
@@ -135,6 +137,7 @@ export interface Sale {
   additionalItems?: { name: string; price: number }[];
   invoiceNumber: string;
   date: string;
+  showQRCode?: boolean;
 }
 
 export interface Purchase {

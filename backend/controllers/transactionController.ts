@@ -101,7 +101,8 @@ export const processSale = async (req: AuthRequest, res: Response) => {
         status, 
         date,
         amountPaid,
-        roundOffAmount
+        roundOffAmount,
+        showQRCode
     } = req.body;
     
     const session = await mongoose.startSession();
@@ -237,7 +238,8 @@ export const processSale = async (req: AuthRequest, res: Response) => {
             roundOffAmount: finalRoundOff,
             paymentMode,
             status: calculatedStatus,
-            date: date || new Date()
+            date: date || new Date(),
+            showQRCode: !!showQRCode
         });
 
         await sale.save({ session });
@@ -270,7 +272,8 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
         status, 
         date,
         amountPaid,
-        roundOffAmount
+        roundOffAmount,
+        showQRCode
     } = req.body;
     
     const session = await mongoose.startSession();
@@ -385,6 +388,7 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
         oldSale.paymentMode = paymentMode;
         oldSale.status = calculatedStatus;
         oldSale.date = date || oldSale.date;
+        oldSale.showQRCode = !!showQRCode;
 
         await oldSale.save({ session });
 
@@ -690,7 +694,7 @@ export const getPublicSale = async (req: Request, res: Response) => {
     try {
         const sale = await Sale.findById(req.params.id)
             .populate('items.productId', 'name unit')
-            .populate('tenantId', 'companyName phone address email');
+            .populate('tenantId', 'companyName phone address email logoUrl signature upiId billingEmail billingAddress name');
             
         if (!sale) {
             return res.status(404).json({ message: 'Invoice not found' });

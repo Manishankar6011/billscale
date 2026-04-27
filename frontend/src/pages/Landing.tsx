@@ -1,283 +1,595 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import { Box, Receipt, Users, ChevronRight, Globe, Package, Menu, X } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-import SEO from '../components/SEO';
+import React from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import {
+  Users,
+  ChevronRight,
+  Package,
+  Menu,
+  X,
+  Zap,
+  BarChart3,
+  ArrowRight,
+  PlayCircle,
+  Star,
+  CheckCircle2,
+} from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+import SEO from "../components/SEO";
 
 const cn = (...inputs: ClassValue[]) => twMerge(clsx(inputs));
 
 const Landing = () => {
-    const navigate = useNavigate();
-    const { user } = useAuth();
-    const { t, i18n } = useTranslation();
-    const [isMenuOpen, setIsMenuOpen] = React.useState(false);
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { t, i18n } = useTranslation();
+  const [isMenuOpen, setIsMenuOpen] = React.useState(false);
+  const [scrolled, setScrolled] = React.useState(false);
 
-    const changeLanguage = (lng: string) => {
-        i18n.changeLanguage(lng);
-    };
+  React.useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 20);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
-    const features = [
-        {
-            icon: Box,
-            title: t('landing.inventory_tracking'),
-            description: t('landing.inventory_desc'),
-            color: 'text-blue-600',
-            bg: 'bg-blue-50'
-        },
-        {
-            icon: Receipt,
-            title: t('landing.billing_accounting'),
-            description: t('landing.billing_desc'),
-            color: 'text-emerald-600',
-            bg: 'bg-emerald-50'
-        },
-        {
-            icon: Users,
-            title: t('landing.staff_management'),
-            description: t('landing.staff_desc'),
-            color: 'text-purple-600',
-            bg: 'bg-purple-50'
-        }
-    ];
+  const changeLanguage = (lng: string) => {
+    i18n.changeLanguage(lng);
+  };
 
-    return (
-        <div className="min-h-screen bg-slate-50 font-sans selection:bg-primary-100 selection:text-primary-900">
-            <SEO />
-            {/* Nav */}
-            <nav className={cn(
-                "fixed top-0 w-full z-50 transition-all duration-300 border-b",
-                isMenuOpen ? "bg-white h-full md:h-20" : "bg-slate-50/80 backdrop-blur-xl border-slate-200/50 h-20"
-            )}>
-                <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between text-slate-900">
-                    <div className="flex items-center gap-2 group cursor-pointer" onClick={() => navigate('/')}>
-                        <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary-200 group-hover:rotate-12 transition-transform">
-                            <Package size={24} />
-                        </div>
-                        <span className="text-2xl font-black tracking-tighter">BuildMate<span className="text-primary-600">ERP</span></span>
-                    </div>
+  const features = [
+    {
+      icon: Zap,
+      title: t("landing.ultra_fast_billing"),
+      description: t("landing.billing_desc"),
+      color: "text-amber-500",
+      bg: "bg-amber-50",
+    },
+    {
+      icon: BarChart3,
+      title: t("landing.smart_inventory"),
+      description: t("landing.inventory_desc"),
+      color: "text-primary-600",
+      bg: "bg-primary-50",
+    },
+    {
+      icon: Users,
+      title: t("landing.staff_attendance"),
+      description: t("landing.staff_desc"),
+      color: "text-emerald-600",
+      bg: "bg-emerald-50",
+    },
+  ];
 
-                    {/* Desktop Actions */}
-                    <div className="hidden md:flex items-center gap-8">
-                        <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-xl">
-                            <button 
-                                onClick={() => changeLanguage('en')}
-                                className={cn(
-                                    "px-4 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all",
-                                    i18n.language === 'en' ? "bg-white text-primary-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
-                                )}
-                            >
-                                English
-                            </button>
-                            <button 
-                                onClick={() => changeLanguage('hi')}
-                                className={cn(
-                                    "px-4 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all",
-                                    i18n.language === 'hi' ? "bg-white text-primary-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
-                                )}
-                            >
-                                हिंदी
-                            </button>
-                        </div>
-                        
-                        {user ? (
-                            <button onClick={() => navigate('/dashboard')} className="btn-primary flex items-center gap-2 py-2 px-6">
-                                {t('dashboard.title')} <ChevronRight size={18} />
-                            </button>
-                        ) : (
-                            <div className="flex items-center gap-4">
-                                <button onClick={() => navigate('/login')} className="text-slate-600 font-bold hover:text-primary-600 transition-colors">
-                                    {t('common.login')}
-                                </button>
-                                <button onClick={() => navigate('/register')} className="btn-primary py-2 px-8">
-                                    {t('common.register')}
-                                </button>
-                            </div>
-                        )}
-                    </div>
+  const steps = [
+    {
+      title: t("landing.step1_title"),
+      description: t("landing.step1_desc"),
+      icon: "01",
+    },
+    {
+      title: t("landing.step2_title"),
+      description: t("landing.step2_desc"),
+      icon: "02",
+    },
+    {
+      title: t("landing.step3_title"),
+      description: t("landing.step3_desc"),
+      icon: "03",
+    },
+  ];
 
-                    {/* Mobile Menu Toggle */}
-                    <button 
-                        className="md:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
-                        onClick={() => setIsMenuOpen(!isMenuOpen)}
+  return (
+    <div className="min-h-screen bg-white font-sans selection:bg-primary-100 selection:text-primary-900 overflow-x-hidden">
+      <SEO />
+
+      {/* Header / Nav */}
+      <nav
+        className={cn(
+          "fixed top-0 w-full z-50 transition-all duration-500",
+          scrolled
+            ? "bg-white/80 backdrop-blur-xl border-b border-slate-100 py-4"
+            : "bg-transparent py-6",
+        )}
+      >
+        <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
+          <div
+            className="flex items-center gap-2 group cursor-pointer"
+            onClick={() => navigate("/")}
+          >
+            <div className="w-10 h-10 bg-primary-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-primary-200 group-hover:rotate-12 transition-transform duration-500">
+              <Package size={22} />
+            </div>
+            <span className="text-2xl font-black tracking-tighter text-slate-900">
+              BuildMate<span className="text-primary-600">ERP</span>
+            </span>
+          </div>
+
+          {/* Desktop Menu */}
+          <div className="hidden md:flex items-center gap-10">
+            <div className="flex items-center gap-8 text-sm font-bold text-slate-500">
+              <a
+                href="#features"
+                className="hover:text-primary-600 transition-colors"
+              >
+                {t("landing.features_link")}
+              </a>
+              <a
+                href="#how-it-works"
+                className="hover:text-primary-600 transition-colors"
+              >
+                {t("landing.how_it_works")}
+              </a>
+              <Link
+                to="/pricing"
+                className="hover:text-primary-600 transition-colors"
+              >
+                {t("landing.pricing")}
+              </Link>
+            </div>
+
+            <div className="h-6 w-px bg-slate-200"></div>
+
+            <div className="flex items-center gap-6">
+              {/* Language Switcher */}
+              <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-lg">
+                <button 
+                  onClick={() => changeLanguage('en')}
+                  className={cn(
+                    "px-3 py-1 rounded-md text-[10px] font-black transition-all",
+                    i18n.language === 'en' ? "bg-white text-primary-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                  )}
+                >
+                  EN
+                </button>
+                <button 
+                  onClick={() => changeLanguage('hi')}
+                  className={cn(
+                    "px-3 py-1 rounded-md text-[10px] font-black transition-all",
+                    i18n.language === 'hi' ? "bg-white text-primary-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                  )}
+                >
+                  हिन्दी
+                </button>
+              </div>
+
+              <div className="flex items-center gap-4">
+                {user ? (
+                  <button
+                    onClick={() => navigate("/dashboard")}
+                    className="px-6 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"
+                  >
+                    {t("common.dashboard")}
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => navigate("/login")}
+                      className="text-sm font-black text-slate-900 px-4"
                     >
-                        {isMenuOpen ? <X size={28} /> : <Menu size={28} />}
+                      {t("common.login")}
                     </button>
-                </div>
-
-                {/* Mobile Menu Content */}
-                {isMenuOpen && (
-                    <div className="md:hidden flex flex-col p-6 gap-8 animate-in fade-in slide-in-from-top-4 duration-300">
-                        <div className="space-y-4">
-                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-2">{t('landing.choose_lang')}</p>
-                            <div className="grid grid-cols-2 gap-2 p-1 bg-slate-50 rounded-2xl">
-                                <button 
-                                    onClick={() => { changeLanguage('en'); setIsMenuOpen(false); }}
-                                    className={cn(
-                                        "py-3 rounded-xl font-bold transition-all",
-                                        i18n.language === 'en' ? "bg-white text-primary-600 shadow-sm" : "text-slate-400"
-                                    )}
-                                >
-                                    English
-                                </button>
-                                <button 
-                                    onClick={() => { changeLanguage('hi'); setIsMenuOpen(false); }}
-                                    className={cn(
-                                        "py-3 rounded-xl font-bold transition-all",
-                                        i18n.language === 'hi' ? "bg-white text-primary-600 shadow-sm" : "text-slate-400"
-                                    )}
-                                >
-                                    हिंदी
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="flex flex-col gap-3">
-                            {user ? (
-                                <button 
-                                    onClick={() => { navigate('/dashboard'); setIsMenuOpen(false); }} 
-                                    className="btn-primary w-full py-4 text-center"
-                                >
-                                    {t('dashboard.title')}
-                                </button>
-                            ) : (
-                                <>
-                                    <button 
-                                        onClick={() => { navigate('/register'); setIsMenuOpen(false); }} 
-                                        className="btn-primary w-full py-4 text-center"
-                                    >
-                                        {t('common.register')}
-                                    </button>
-                                    <button 
-                                        onClick={() => { navigate('/login'); setIsMenuOpen(false); }} 
-                                        className="btn-secondary w-full py-4 text-center"
-                                    >
-                                        {t('common.login')}
-                                    </button>
-                                </>
-                            )}
-                        </div>
-                    </div>
+                    <button
+                      onClick={() => navigate("/register")}
+                      className="px-8 py-3 bg-primary-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-primary-700 transition-all shadow-xl shadow-primary-100"
+                    >
+                      {t("common.get_started")}
+                    </button>
+                  </>
                 )}
-            </nav>
+              </div>
+            </div>
+          </div>
 
-            {/* Hero */}
-            <section className="pt-40 pb-24 px-6 relative overflow-hidden">
-                {/* Premium Background Elements */}
-                <div className="absolute top-0 right-[-10%] w-[600px] h-[600px] bg-primary-100/30 rounded-full blur-[120px] -z-10 animate-pulse"></div>
-                <div className="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] bg-blue-100/20 rounded-full blur-[100px] -z-10 animate-float"></div>
-                <div className="absolute top-[20%] left-[5%] w-24 h-24 bg-primary-200/20 rounded-3xl rotate-12 blur-2xl -z-10"></div>
-                
-                <div className="max-w-7xl mx-auto flex flex-col items-center text-center">
-                    <div className="inline-flex items-center gap-3 px-5 py-2.5 bg-white border border-slate-200/50 shadow-sm text-slate-600 rounded-full text-[10px] font-black uppercase tracking-[0.2em] mb-10 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-                        <span className="flex h-2 w-2 relative">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                        </span>
-                        {t('landing.trusted_by', 'Trusted by 100+ Businesses')}
-                    </div>
-                    
-                    <h1 className="text-5xl md:text-7xl font-black text-slate-900 tracking-[-0.04em] leading-[0.95] mb-10 max-w-5xl animate-in fade-in slide-in-from-bottom-6 duration-1000 delay-100">
-                        {t('landing.hero_title')}
-                    </h1>
-                    
-                    <p className="text-xl md:text-2xl text-slate-500 font-medium leading-relaxed max-w-2xl mb-14 animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-200">
-                        {t('landing.hero_subtitle')}
-                    </p>
-                    
-                    <div className="flex flex-col sm:flex-row items-center justify-center gap-5 w-full sm:w-auto animate-in fade-in slide-in-from-bottom-10 duration-1000 delay-300">
-                        <button 
-                            onClick={() => navigate(user ? '/dashboard' : '/register')} 
-                            className="btn-primary w-full sm:w-auto py-5 px-12 text-lg shadow-2xl shadow-primary-200 group"
-                        >
-                            {user ? t('dashboard.title') : t('common.get_started')}
-                            <ChevronRight className="inline-block ml-2 group-hover:translate-x-1 transition-transform" />
-                        </button>
-                        <button 
-                            onClick={() => changeLanguage(i18n.language === 'en' ? 'hi' : 'en')}
-                            className="btn-secondary w-full sm:w-auto py-5 px-10 text-lg flex items-center justify-center gap-3"
-                        >
-                            <Globe size={22} className="text-primary-600" />
-                            {i18n.language === 'en' ? 'हिंदी में' : 'English'}
-                        </button>
-                    </div>
-
-                    <div className="mt-20"></div>
-                </div>
-            </section>
-
-            {/* Features */}
-            <section id="features" className="py-32 px-6 max-w-7xl mx-auto relative">
-                <div className="text-center mb-20">
-                    <h2 className="text-4xl md:text-5xl font-black text-slate-900 mb-6 tracking-tight">Everything you need to scale</h2>
-                    <p className="text-slate-500 font-medium text-lg max-w-2xl mx-auto">BuildMate ERP provides a comprehensive suite of tools designed specifically for modern business operations.</p>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
-                    {features.map((feature, idx) => (
-                        <div key={idx} className="card group hover:scale-[1.02] hover:shadow-2xl hover:shadow-primary-100/50 transition-all duration-500 cursor-default border border-slate-100">
-                            <div className={cn("w-16 h-16 rounded-[2rem] flex items-center justify-center mb-8 group-hover:rotate-[10deg] transition-transform duration-500", feature.bg)}>
-                                <feature.icon className={cn("w-8 h-8", feature.color)} />
-                            </div>
-                            <h3 className="text-2xl font-black text-slate-900 mb-4 tracking-tight">{feature.title}</h3>
-                            <p className="text-slate-500 leading-relaxed font-medium text-lg">
-                                {feature.description}
-                            </p>
-                        </div>
-                    ))}
-                </div>
-            </section>
-
-            {/* Stats / Proof */}
-            <section className="py-24 bg-slate-100/50">
-                <div className="max-w-7xl mx-auto px-6">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-12 text-center">
-                        <div>
-                            <div className="text-4xl md:text-5xl font-black text-primary-600 mb-2">10k+</div>
-                            <div className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">Active Users</div>
-                        </div>
-                        <div>
-                            <div className="text-4xl md:text-5xl font-black text-primary-600 mb-2">99%</div>
-                            <div className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">Uptime Rate</div>
-                        </div>
-                        <div>
-                            <div className="text-4xl md:text-5xl font-black text-primary-600 mb-2">24/7</div>
-                            <div className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">Support</div>
-                        </div>
-                        <div>
-                            <div className="text-4xl md:text-5xl font-black text-primary-600 mb-2">100+</div>
-                            <div className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">Reviews</div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* CTA Section */}
-            <section className="py-32 px-6">
-                <div className="max-w-5xl mx-auto card bg-slate-900 border-none p-16 text-center relative overflow-hidden">
-                    <div className="absolute top-[-20%] right-[-10%] w-[300px] h-[300px] bg-primary-600/20 rounded-full blur-[80px]"></div>
-                    <div className="relative z-10">
-                        <h2 className="text-4xl md:text-5xl font-black text-white mb-8 tracking-tight">Ready to transform your business?</h2>
-                        <p className="text-slate-400 text-lg font-medium mb-12 max-w-xl mx-auto">Join hundreds of successful businesses who trust BuildMate ERP for their daily operations.</p>
-                        <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
-                            <button onClick={() => navigate('/register')} className="btn-primary py-5 px-12 text-lg shadow-2xl shadow-primary-900/50 w-full sm:w-auto">
-                                Get Started Free
-                            </button>
-                            <button onClick={() => navigate('/login')} className="bg-white/10 hover:bg-white/20 text-white font-bold py-5 px-12 rounded-[1.25rem] transition-all w-full sm:w-auto">
-                                Sign In
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* Footer */}
-            <footer className="py-12 border-t border-slate-200 text-center">
-                <p className="text-slate-400 text-sm font-medium">&copy; {new Date().getFullYear()} BuildMate ERP. All rights reserved.</p>
-            </footer>
+          {/* Mobile Toggle */}
+          <button
+            className="md:hidden p-2 text-slate-900"
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+          >
+            {isMenuOpen ? <X size={28} /> : <Menu size={28} />}
+          </button>
         </div>
-    );
+
+        {/* Mobile Menu */}
+        {isMenuOpen && (
+          <div className="md:hidden absolute top-0 left-0 w-full h-screen bg-white z-50 p-6 flex flex-col animate-in fade-in slide-in-from-top-4 duration-300">
+            <div className="flex justify-between items-center mb-12">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-primary-600 rounded-xl flex items-center justify-center text-white">
+                  <Package size={18} />
+                </div>
+                <span className="text-xl font-black tracking-tighter">
+                  BuildMate ERP
+                </span>
+              </div>
+              <button onClick={() => setIsMenuOpen(false)}>
+                <X size={28} />
+              </button>
+            </div>
+            <div className="flex flex-col gap-6 text-2xl font-black text-slate-900 mb-12">
+              <a href="#features" onClick={() => setIsMenuOpen(false)}>
+                {t("landing.features_link")}
+              </a>
+              <a href="#how-it-works" onClick={() => setIsMenuOpen(false)}>
+                {t("landing.how_it_works")}
+              </a>
+              <button
+                onClick={() => {
+                  navigate("/pricing");
+                  setIsMenuOpen(false);
+                }}
+              >
+                {t("landing.pricing")}
+              </button>
+              
+              {/* Mobile Language Switcher */}
+              <div className="flex items-center gap-4 pt-4 border-t border-slate-100">
+                <button 
+                  onClick={() => { changeLanguage('en'); setIsMenuOpen(false); }}
+                  className={cn("text-lg font-black", i18n.language === 'en' ? "text-primary-600" : "text-slate-400")}
+                >
+                  English
+                </button>
+                <button 
+                  onClick={() => { changeLanguage('hi'); setIsMenuOpen(false); }}
+                  className={cn("text-lg font-black", i18n.language === 'hi' ? "text-primary-600" : "text-slate-400")}
+                >
+                  हिन्दी
+                </button>
+              </div>
+            </div>
+            <div className="mt-auto flex flex-col gap-4">
+              <button
+                onClick={() => navigate("/login")}
+                className="w-full py-5 bg-slate-100 text-slate-900 rounded-2xl font-black"
+              >
+                {t("common.login")}
+              </button>
+              <button
+                onClick={() => navigate("/register")}
+                className="w-full py-5 bg-primary-600 text-white rounded-2xl font-black shadow-xl shadow-primary-100"
+              >
+                {t("landing.get_started_free")}
+              </button>
+            </div>
+          </div>
+        )}
+      </nav>
+
+      {/* Hero Section */}
+      <section className="relative pt-32 md:pt-48 pb-20 px-6 overflow-hidden">
+        {/* Background Decor */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-full -z-10">
+          <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-primary-50 rounded-full blur-[120px] opacity-60"></div>
+          <div className="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] bg-blue-50 rounded-full blur-[100px] opacity-40"></div>
+        </div>
+
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+          <div className="text-center lg:text-left space-y-8 max-w-2xl mx-auto lg:mx-0">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary-50 rounded-full border border-primary-100 text-primary-600 text-[10px] font-black uppercase tracking-[0.2em] animate-in fade-in slide-in-from-bottom-4 duration-700">
+              <Star size={14} className="fill-primary-600" />
+              {t("landing.hero_tagline")}
+            </div>
+
+            <h1 className="text-5xl md:text-7xl font-black text-slate-900 tracking-[-0.04em] leading-[0.95] animate-in fade-in slide-in-from-bottom-6 duration-1000 delay-100">
+              {t("landing.hero_title_part1")} <span className="text-primary-600">ERP</span> {t("landing.hero_title_part2")}
+            </h1>
+
+            <p className="text-lg md:text-xl text-slate-500 font-medium leading-relaxed animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-200">
+              {t("landing.hero_subtitle")}
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-center gap-4 pt-4 animate-in fade-in slide-in-from-bottom-10 duration-1000 delay-300">
+              <button
+                onClick={() => navigate("/register")}
+                className="w-full sm:w-auto px-10 py-5 bg-primary-600 text-white rounded-2xl font-black uppercase tracking-widest text-sm shadow-2xl shadow-primary-200 hover:bg-primary-700 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+              >
+                {t("landing.get_started_free")} <ArrowRight size={20} />
+              </button>
+              <button className="w-full sm:w-auto px-10 py-5 bg-white text-slate-900 rounded-2xl font-black uppercase tracking-widest text-sm border-2 border-slate-100 hover:bg-slate-50 transition-all flex items-center justify-center gap-3">
+                <PlayCircle size={20} className="text-primary-600" /> {t("landing.view_demo")}
+              </button>
+            </div>
+
+            <div className="flex items-center justify-center lg:justify-start gap-8 pt-8 opacity-60 grayscale animate-in fade-in duration-1000 delay-500">
+              <div className="flex flex-col items-center lg:items-start">
+                <span className="text-2xl font-black text-slate-900">24/7</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest">
+                  {t("landing.support")}
+                </span>
+              </div>
+              <div className="w-px h-10 bg-slate-200"></div>
+              <div className="flex flex-col items-center lg:items-start">
+                <span className="text-2xl font-black text-slate-900">
+                  99.9%
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-widest">
+                  {t("landing.uptime")}
+                </span>
+              </div>
+              <div className="w-px h-10 bg-slate-200"></div>
+              <div className="flex flex-col items-center lg:items-start">
+                <span className="text-2xl font-black text-slate-900">100%</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest">
+                  {t("landing.secure")}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="relative animate-in fade-in slide-in-from-right-10 duration-1000 delay-300">
+            <div className="absolute inset-0 bg-primary-600/5 rounded-[3rem] -rotate-3 scale-105"></div>
+            <div className="relative bg-slate-900 rounded-[2.5rem] p-2 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.3)] border border-slate-800">
+              <img
+                src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?ixlib=rb-4.0.3&auto=format&fit=crop&w=2426&q=80"
+                alt="BuildMate Dashboard"
+                className="rounded-[2rem] w-full shadow-inner"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Features Grid */}
+      <section id="features" className="py-32 px-6 bg-slate-50/50">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center max-w-3xl mx-auto mb-24 space-y-4">
+            <h2 className="text-[10px] font-black text-primary-600 uppercase tracking-[0.3em]">
+              {t("landing.features_tag")}
+            </h2>
+            <h3 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tight">
+              {t("landing.features_title")}
+            </h3>
+            <p className="text-lg text-slate-500 font-medium">
+              {t("landing.features_desc")}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+            {features.map((feature, idx) => (
+              <div
+                key={idx}
+                className="group p-10 bg-white rounded-[2.5rem] border border-slate-100 hover:border-primary-100 hover:shadow-2xl hover:shadow-primary-100/30 transition-all duration-500"
+              >
+                <div
+                  className={cn(
+                    "w-16 h-16 rounded-2xl flex items-center justify-center mb-8 group-hover:scale-110 group-hover:rotate-6 transition-all duration-500 shadow-lg shadow-inherit",
+                    feature.bg,
+                  )}
+                >
+                  <feature.icon className={cn("w-8 h-8", feature.color)} />
+                </div>
+                <h4 className="text-2xl font-black text-slate-900 mb-4">
+                  {feature.title}
+                </h4>
+                <p className="text-slate-500 font-medium leading-relaxed mb-6">
+                  {feature.description}
+                </p>
+                <div className="flex items-center gap-2 text-primary-600 font-black text-xs uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all translate-x-[-10px] group-hover:translate-x-0">
+                  {t("landing.learn_more")} <ChevronRight size={16} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* How it Works */}
+      <section id="how-it-works" className="py-32 px-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
+            <div className="space-y-10">
+              <div className="space-y-4 text-center lg:text-left">
+                <h2 className="text-[10px] font-black text-primary-600 uppercase tracking-[0.3em]">
+                  {t("landing.process_tag")}
+                </h2>
+                <h3 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tight leading-none">
+                  {t("landing.process_title")}
+                </h3>
+                <p className="text-lg text-slate-500 font-medium max-w-xl">
+                  {t("landing.process_desc")}
+                </p>
+              </div>
+
+              <div className="space-y-8">
+                {steps.map((step, idx) => (
+                  <div key={idx} className="flex gap-6 group">
+                    <div className="w-14 h-14 bg-slate-900 text-white rounded-2xl flex items-center justify-center font-black text-xl shrink-0 group-hover:bg-primary-600 transition-colors duration-500">
+                      {step.icon}
+                    </div>
+                    <div className="space-y-1 py-1">
+                      <h5 className="text-xl font-black text-slate-900 tracking-tight">
+                        {step.title}
+                      </h5>
+                      <p className="text-slate-500 font-medium leading-relaxed">
+                        {step.description}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-primary-50 rounded-[3rem] p-12 lg:p-20 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-12 text-primary-100 opacity-50 group-hover:scale-110 transition-transform duration-700">
+                <Zap size={200} />
+              </div>
+              <div className="relative z-10 space-y-8">
+                <div className="p-4 bg-white rounded-2xl inline-block shadow-lg">
+                  <CheckCircle2 className="text-emerald-500 w-8 h-8" />
+                </div>
+                <h4 className="text-3xl md:text-5xl font-black text-slate-900 tracking-tight">
+                  {t("landing.cta_title")}
+                </h4>
+                <p className="text-lg text-slate-600 font-medium">
+                  {t("landing.cta_desc")}
+                </p>
+                <button
+                  onClick={() => navigate("/register")}
+                  className="px-10 py-5 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-sm hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
+                >
+                  {t("landing.start_trial")}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="py-20 px-6">
+        <div className="max-w-5xl mx-auto bg-primary-600 rounded-[3rem] p-16 text-center text-white relative overflow-hidden shadow-[0_50px_100px_-20px_rgba(37,99,235,0.4)]">
+          <div className="absolute top-[-20%] right-[-10%] w-[300px] h-[300px] bg-white/10 rounded-full blur-[80px]"></div>
+          <div className="absolute bottom-[-20%] left-[-10%] w-[300px] h-[300px] bg-white/10 rounded-full blur-[80px]"></div>
+
+          <div className="relative z-10 max-w-2xl mx-auto space-y-10">
+            <h2 className="text-4xl md:text-6xl font-black tracking-tight leading-none">
+              {t("landing.growth_journey")}
+            </h2>
+            <p className="text-primary-100 text-xl font-medium opacity-90">
+              {t("landing.no_card_req")}
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-4">
+              <button
+                onClick={() => navigate("/register")}
+                className="w-full sm:w-auto px-12 py-5 bg-white text-primary-600 rounded-2xl font-black uppercase tracking-widest text-sm hover:bg-slate-50 transition-all shadow-2xl"
+              >
+                {t("landing.create_account")}
+              </button>
+              <button
+                onClick={() => navigate("/contact")}
+                className="w-full sm:w-auto px-12 py-5 bg-primary-700 text-white rounded-2xl font-black uppercase tracking-widest text-sm hover:bg-primary-800 transition-all"
+              >
+                {t("landing.talk_sales")}
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="py-20 border-t border-slate-100 bg-white relative">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-20">
+            <div className="col-span-1 md:col-span-1 space-y-6">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center text-white">
+                  <Package size={18} />
+                </div>
+                <span className="text-xl font-black tracking-tighter text-slate-900">
+                  BuildMate<span className="text-primary-600">ERP</span>
+                </span>
+              </div>
+              <p className="text-slate-500 text-sm font-medium leading-relaxed">
+                {t("landing.footer_desc")}
+              </p>
+            </div>
+
+            <div>
+              <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-8">
+                {t("landing.product")}
+              </h4>
+              <ul className="space-y-4">
+                <li>
+                  <Link
+                    to="/pricing"
+                    className="text-slate-600 hover:text-primary-600 text-sm font-bold transition-colors block"
+                  >
+                    {t("landing.pricing")}
+                  </Link>
+                </li>
+                <li>
+                  <a
+                    href="#features"
+                    className="text-slate-600 hover:text-primary-600 text-sm font-bold transition-colors block"
+                  >
+                    {t("landing.features_link")}
+                  </a>
+                </li>
+                <li>
+                  <Link
+                    to="/register"
+                    className="text-slate-600 hover:text-primary-600 text-sm font-bold transition-colors block"
+                  >
+                    {t("common.register")}
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-8">
+                {t("landing.support_label")}
+              </h4>
+              <ul className="space-y-4">
+                <li>
+                  <Link
+                    to="/contact"
+                    className="text-slate-600 hover:text-primary-600 text-sm font-bold transition-colors block"
+                  >
+                    {t("landing.contact_us")}
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/contact?subject=Report%20a%20Bug"
+                    className="text-slate-600 hover:text-primary-600 text-sm font-bold transition-colors block"
+                  >
+                    {t("landing.report_bug")}
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/contact?subject=Request%20a%20Feature"
+                    className="text-slate-600 hover:text-primary-600 text-sm font-bold transition-colors block"
+                  >
+                    {t("landing.request_feature")}
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-8">
+                {t("landing.legal")}
+              </h4>
+              <ul className="space-y-4">
+                <li>
+                  <Link
+                    to="/privacy"
+                    className="text-slate-600 hover:text-primary-600 text-sm font-bold transition-colors block"
+                  >
+                    {t("landing.privacy_policy")}
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/terms"
+                    className="text-slate-600 hover:text-primary-600 text-sm font-bold transition-colors block"
+                  >
+                    {t("landing.terms_service")}
+                  </Link>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="pt-10 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-6">
+            <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">
+              &copy; {new Date().getFullYear()} BuildMate ERP. All rights
+              reserved.
+            </p>
+            <div className="flex items-center gap-6">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                {t("landing.made_in_india")}
+              </span>
+            </div>
+          </div>
+        </div>
+      </footer >
+    </div >
+  );
 };
 
 export default Landing;

@@ -443,6 +443,7 @@ const Sales = () => {
   const [matchingProducts, setMatchingProducts] = useState<Product[]>([]);
   const [hwScannerInput, setHwScannerInput] = useState("");
   const [autoPrint, setAutoPrint] = useState(true);
+  const [showQRCode, setShowQRCode] = useState(false);
   const [printData, setPrintData] = useState<any>(null);
   const [selectedSaleForEdit, setSelectedSaleForEdit] = useState<Sale | null>(
     null,
@@ -694,6 +695,7 @@ const Sales = () => {
       status: paymentStatus,
       amountPaid: Number(amountReceived) || 0,
       roundOffAmount: roundOffAmount,
+      showQRCode,
     };
 
     if (selectedSaleForEdit) {
@@ -1918,6 +1920,17 @@ const Sales = () => {
                       {t("inventory.auto_generate")}
                     </span>
                   </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showQRCode}
+                      onChange={(e) => setShowQRCode(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                      {t("billing.show_qr_code")}
+                    </span>
+                  </label>
                 </div>
 
                 {/* Grand Total */}
@@ -2050,6 +2063,7 @@ const Sales = () => {
                     signature={
                       user?.signature || (user?.tenantId as any)?.signature
                     }
+                    upiId={showQRCode ? (user?.upiId || (user?.tenantId as any)?.upiId) : undefined}
                     changeAmount={
                       changeAmount !== null && changeAmount > 0
                         ? changeAmount
@@ -2078,6 +2092,7 @@ const Sales = () => {
                     signature={
                       user?.signature || (user?.tenantId as any)?.signature
                     }
+                    upiId={showQRCode ? (user?.upiId || (user?.tenantId as any)?.upiId) : undefined}
                     isPreview={true}
                   />
                 )}
@@ -2179,6 +2194,12 @@ const Sales = () => {
                         printData,
                         user?.companyName || "Business",
                         user?.name || "Admin",
+                        user?.logoUrl || (user?.tenantId as any)?.logoUrl,
+                        user?.billingAddress || (user?.tenantId as any)?.billingAddress,
+                        user?.phone || (user?.tenantId as any)?.phone,
+                        user?.billingEmail || (user?.tenantId as any)?.billingEmail,
+                        user?.signature || (user?.tenantId as any)?.signature,
+                        showQRCode ? (user?.upiId || (user?.tenantId as any)?.upiId) : undefined
                       )
                     }
                     className="w-full py-4 bg-slate-50 text-slate-600 rounded-[1.5rem] font-black uppercase tracking-widest text-xs hover:bg-slate-100 transition-all flex items-center justify-center gap-3 border border-slate-200 shadow-sm"

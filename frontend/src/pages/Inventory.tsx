@@ -27,6 +27,7 @@ import {
   Filter,
   ArrowUpDown,
   X,
+  ShoppingBag,
 } from "lucide-react";
 import BarcodeScanner from "../components/BarcodeScanner";
 import JsBarcode from "jsbarcode";
@@ -37,6 +38,7 @@ import { InventorySkeleton } from "../components/Skeleton";
 import { useToast } from "../context/ToastContext";
 import BarcodeLabel from "../components/BarcodeLabel";
 import BulkUploadModal from "../components/BulkUploadModal";
+import MasterProductSelectionModal from "../components/MasterProductSelectionModal";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
@@ -179,6 +181,8 @@ const Inventory = () => {
     useState<Product | null>(null);
 
   const [stockValueDisplay, setStockValueDisplay] = useState<"purchase" | "sell">("purchase");
+  const [isSmartModalOpen, setIsSmartModalOpen] = useState(false);
+  const [smartSelectedData, setSmartSelectedData] = useState<any[]>([]);
 
   const isFormDirty = !!(
     formData.name ||
@@ -333,6 +337,21 @@ const Inventory = () => {
       batchNumber: formData.batchNumber,
     };
     saveMutation.mutate(data);
+  };
+
+  const handleSmartSelect = (selectedProducts: any[], batchType: string) => {
+    const formattedData = selectedProducts.map(p => ({
+      name: p.name,
+      batchNumber: batchType === 'Retail' ? 'Retail' : 'Wholesale',
+      barcode: p.barcode || '',
+      purchasePrice: p.purchasePrice,
+      pricePerUnit: p.pricePerUnit,
+      mrp: p.mrp,
+      stock: 0,
+      unit: p.unit
+    }));
+    setSmartSelectedData(formattedData);
+    setIsBulkModalOpen(true);
   };
 
   // Server-side filtering/sorting is already handled by useInfiniteQuery params
@@ -657,7 +676,7 @@ const Inventory = () => {
           </h1>
           <p className="text-slate-500">{t("inventory.subtitle")}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 md:gap-3">
           {/* Export Dropdown */}
           <div className="relative">
             <button
@@ -695,6 +714,22 @@ const Inventory = () => {
             )}
           </div>
 
+          <button
+            onClick={() => {
+              if (user?.planType === "free" || user?.planType === "basic") {
+                showToast(
+                  "Smart Library is only available in Business Pro plan.",
+                  "error",
+                );
+                navigate("/dashboard/pricing");
+              } else {
+                setIsSmartModalOpen(true);
+              }
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-600 to-indigo-600 border-none rounded-2xl text-sm font-bold text-white hover:shadow-lg hover:shadow-primary-200 transition-all shadow-sm active:scale-95"
+          >
+            <ShoppingBag size={18} /> Smart Add
+          </button>
           <button
             onClick={() => {
               if (user?.planType === "free" || user?.planType === "basic") {
@@ -783,7 +818,7 @@ const Inventory = () => {
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="grid grid-cols-2 sm:flex items-center gap-3 w-full sm:w-auto">
           {/* Filter Dropdown */}
           <div className="relative group">
             <select
@@ -791,7 +826,7 @@ const Inventory = () => {
               onChange={(e) =>
                 setFilterType(e.target.value as typeof filterType)
               }
-              className="appearance-none pl-10 pr-10 py-4 bg-white border border-slate-100 rounded-2xl text-sm font-bold text-slate-600 focus:ring-2 focus:ring-primary-500 outline-none shadow-sm cursor-pointer min-w-[160px]"
+              className="appearance-none pl-10 pr-10 py-4 bg-white border border-slate-100 rounded-2xl text-sm font-bold text-slate-600 focus:ring-2 focus:ring-primary-500 outline-none shadow-sm cursor-pointer w-full sm:min-w-[160px]"
             >
               <option value="all">{t("inventory.filter_all")}</option>
               <option value="low">{t("inventory.filter_low")}</option>
@@ -812,7 +847,7 @@ const Inventory = () => {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-              className="appearance-none pl-10 pr-10 py-4 bg-white border border-slate-100 rounded-2xl text-sm font-bold text-slate-600 focus:ring-2 focus:ring-primary-500 outline-none shadow-sm cursor-pointer min-w-[180px]"
+              className="appearance-none pl-10 pr-10 py-4 bg-white border border-slate-100 rounded-2xl text-sm font-bold text-slate-600 focus:ring-2 focus:ring-primary-500 outline-none shadow-sm cursor-pointer w-full sm:min-w-[180px]"
             >
               <option value="name">{t("inventory.sort_name")}</option>
               <option value="price-asc">{t("inventory.sort_price_asc")}</option>
@@ -1492,10 +1527,22 @@ const Inventory = () => {
       {isBulkModalOpen && (
         <BulkUploadModal
           isOpen={isBulkModalOpen}
-          onClose={() => setIsBulkModalOpen(false)}
+          onClose={() => {
+            setIsBulkModalOpen(false);
+            setSmartSelectedData([]);
+          }}
+          initialData={smartSelectedData}
           onSuccess={() =>
             queryClient.invalidateQueries({ queryKey: ["inventory"] })
           }
+        />
+      )}
+
+      {isSmartModalOpen && (
+        <MasterProductSelectionModal 
+          isOpen={isSmartModalOpen}
+          onClose={() => setIsSmartModalOpen(false)}
+          onSelect={handleSmartSelect}
         />
       )}
     </div>
