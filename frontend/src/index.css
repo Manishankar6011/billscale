@@ -88,6 +88,11 @@
   to { transform: translateY(0); opacity: 1; }
 }
 
+@keyframes slide-in-right {
+  from { transform: translateX(20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
 .animate-in {
   animation-duration: 0.6s;
   animation-fill-mode: both;
@@ -99,6 +104,7 @@
 .slide-in-from-bottom-8 { animation-name: slide-in-bottom; animation-delay: 0.2s; }
 .slide-in-from-bottom-10 { animation-name: slide-in-bottom; animation-delay: 0.3s; }
 .slide-in-from-bottom-12 { animation-name: slide-in-bottom; animation-delay: 0.4s; }
+.slide-in-from-right-10 { animation-name: slide-in-right; animation-delay: 0.3s; }
 
 /* Delay classes */
 .delay-100 { animation-delay: 0.1s; }
@@ -130,4 +136,22 @@
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
+}
+
+/* Custom Horizontal Scrollbar for Categories */
+.custom-horizontal-scrollbar::-webkit-scrollbar {
+  height: 4px;
+}
+
+.custom-horizontal-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-horizontal-scrollbar::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 10px;
+}
+
+.custom-horizontal-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #cbd5e1;
 }

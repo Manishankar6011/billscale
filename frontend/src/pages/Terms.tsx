@@ -1,9 +1,20 @@
 import React from 'react';
-import { FileText, ClipboardList, Scale, AlertCircle, RefreshCcw, Handshake } from 'lucide-react';
+import { FileText, ClipboardList, Scale, AlertCircle, RefreshCcw, Handshake, ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const Terms = () => {
+    const navigate = useNavigate();
+
     return (
         <div className="min-h-screen bg-slate-50 py-20 px-4">
+            <div className="max-w-4xl mx-auto mb-8">
+                <button 
+                    onClick={() => navigate(-1)}
+                    className="flex items-center gap-2 text-slate-500 hover:text-slate-800 font-bold transition-colors"
+                >
+                    <ArrowLeft size={20} /> Back
+                </button>
+            </div>
             <div className="max-w-4xl mx-auto bg-white rounded-[3rem] p-10 md:p-16 shadow-2xl border border-slate-100">
                 <div className="flex items-center gap-4 mb-12">
                     <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center shadow-inner">

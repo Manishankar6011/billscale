@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 import { NavLink } from 'react-router-dom';
-import { User, Building2, Phone, MapPin, Save, ShieldCheck, Crown, ArrowRight, Upload, Image, Mail, Pen, X, AlertCircle, Loader2 } from 'lucide-react';
+import { User, Building2, Phone, MapPin, Save, ShieldCheck, Crown, ArrowRight, Upload, Image, Mail, Pen, X, AlertCircle, Loader2, MessageSquare, Bug, Lightbulb } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
@@ -32,7 +32,8 @@ const Settings = () => {
         billingEmail: '',
         billingAddress: '',
         logoUrl: '',
-        signature: ''
+        signature: '',
+        upiId: ''
     });
 
     const logoInputRef = useRef<HTMLInputElement>(null);
@@ -49,6 +50,7 @@ const Settings = () => {
                 billingAddress: profile.tenantId?.billingAddress || '',
                 logoUrl: profile.tenantId?.logoUrl || '',
                 signature: profile.tenantId?.signature || '',
+                upiId: profile.tenantId?.upiId || '',
             });
         }
     }, [profile]);
@@ -121,13 +123,13 @@ const Settings = () => {
     return (
         <div className="max-w-4xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
             <div>
-                <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase">{t('settings.title')}</h1>
+                <h1 className="text-2xl md:text-4xl font-black text-slate-900 tracking-tighter uppercase">{t('settings.title')}</h1>
                 <p className="text-slate-500 font-bold uppercase tracking-widest text-xs mt-2 opacity-60">{t('settings.identity_org_management')}</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-8">
                 {/* Identity Card */}
-                <div className="card p-10 bg-white shadow-2xl shadow-slate-200 border-none rounded-[2.5rem] relative overflow-hidden group">
+                <div className="card p-6 md:p-10 bg-white shadow-2xl shadow-slate-200 border-none rounded-[1.5rem] md:rounded-[2.5rem] relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-8 text-slate-50 opacity-10 group-hover:scale-110 transition-transform">
                         <User size={120} />
                     </div>
@@ -172,7 +174,7 @@ const Settings = () => {
                             {/* Logo Upload */}
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('settings.company_logo')}</label>
-                                <div className="flex items-center gap-6">
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
                                     {formData.logoUrl ? (
                                         <div className="relative">
                                             <img src={formData.logoUrl} alt="Company Logo" className="w-20 h-20 object-contain rounded-2xl border-2 border-slate-100 bg-white p-2 shadow-sm" />
@@ -249,10 +251,19 @@ const Settings = () => {
                                 </div>
                             </div>
 
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('settings.upi_id_label')}</label>
+                                <div className="relative">
+                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-black text-xs">UPI</div>
+                                    <input type="text" className="input pl-14 py-4 font-bold bg-slate-50 border-none rounded-2xl" value={formData.upiId} onChange={(e) => setFormData({...formData, upiId: e.target.value})} placeholder="yourname@bank" />
+                                </div>
+                                <p className="text-[9px] text-slate-400 font-bold ml-1 italic">Used to generate dynamic payment QR codes on bills</p>
+                            </div>
+
                             {/* Signature Upload */}
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('settings.digital_signature')}</label>
-                                <div className="flex items-center gap-6">
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
                                     {formData.signature ? (
                                         <div className="relative">
                                             <img src={formData.signature} alt="Signature" className="h-16 object-contain rounded-2xl border-2 border-slate-100 bg-white px-4 shadow-sm" />
@@ -315,7 +326,7 @@ const Settings = () => {
                 </div>
 
                 {/* Subscription Card */}
-                <div className="card p-10 bg-slate-900 border-none rounded-[2.5rem] relative overflow-hidden group">
+                <div className="card p-6 md:p-10 bg-slate-900 border-none rounded-[1.5rem] md:rounded-[2.5rem] relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-8 text-white opacity-10 group-hover:scale-110 transition-transform">
                         <ShieldCheck size={120} />
                     </div>
@@ -335,9 +346,47 @@ const Settings = () => {
                                 </div>
                             </div>
                         </div>
-                        <NavLink to="/dashboard/pricing" className="btn-primary-white px-8 py-4 text-[10px] font-black uppercase tracking-widest rounded-xl bg-white text-slate-900 hover:bg-slate-100 flex items-center gap-3">
+                        <NavLink to="/dashboard/pricing" className="w-full md:w-auto btn-primary-white px-8 py-4 text-[10px] font-black uppercase tracking-widest rounded-xl bg-white text-slate-900 hover:bg-slate-100 flex items-center justify-center gap-3">
                             {t('settings.manage_plan')} <ArrowRight size={16} />
                         </NavLink>
+                    </div>
+                </div>
+
+                {/* Support & Feedback Card */}
+                <div className="card p-10 bg-white shadow-2xl shadow-slate-200 border-none rounded-[2.5rem] relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-8 text-slate-50 opacity-10 group-hover:scale-110 transition-transform">
+                        <MessageSquare size={120} />
+                    </div>
+                    <div className="relative z-10">
+                        <div className="flex items-center gap-4 mb-8">
+                            <div className="w-12 h-12 bg-rose-600 rounded-2xl flex items-center justify-center text-white shadow-lg">
+                                <MessageSquare size={24} />
+                            </div>
+                            <h2 className="text-xl font-black text-slate-800 tracking-tight uppercase">Support & Feedback</h2>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <NavLink to="/dashboard/contact" className="p-6 bg-slate-50 rounded-3xl hover:bg-slate-100 transition-all group/card border border-transparent hover:border-slate-200">
+                                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-600 mb-4 shadow-sm group-hover/card:text-primary-600 transition-colors">
+                                    <Mail size={20} />
+                                </div>
+                                <h4 className="font-black text-slate-800 mb-1">Contact Us</h4>
+                                <p className="text-[10px] text-slate-500 font-medium">Get in touch with our team</p>
+                            </NavLink>
+                            <NavLink to="/dashboard/contact?subject=Report%20a%20Bug" className="p-6 bg-slate-50 rounded-3xl hover:bg-rose-50 transition-all group/card border border-transparent hover:border-rose-100">
+                                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-600 mb-4 shadow-sm group-hover/card:text-rose-600 transition-colors">
+                                    <Bug size={20} />
+                                </div>
+                                <h4 className="font-black text-slate-800 mb-1">Report Bug</h4>
+                                <p className="text-[10px] text-slate-500 font-medium">Help us improve BuildMate</p>
+                            </NavLink>
+                            <NavLink to="/dashboard/contact?subject=Request%20a%20Feature" className="p-6 bg-slate-50 rounded-3xl hover:bg-emerald-50 transition-all group/card border border-transparent hover:border-emerald-100">
+                                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-600 mb-4 shadow-sm group-hover/card:text-emerald-600 transition-colors">
+                                    <Lightbulb size={20} />
+                                </div>
+                                <h4 className="font-black text-slate-800 mb-1">Request Feature</h4>
+                                <p className="text-[10px] text-slate-500 font-medium">Share your ideas with us</p>
+                            </NavLink>
+                        </div>
                     </div>
                 </div>
 

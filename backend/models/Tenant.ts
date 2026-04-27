@@ -58,6 +58,11 @@ const tenantSchema: Schema = new mongoose.Schema({
         type: Number,
         default: 1
     },
+    upiId: {
+        type: String,
+        trim: true,
+        default: ''
+    },
     createdAt: {
         type: Date,
         default: Date.now

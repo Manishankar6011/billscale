@@ -47,12 +47,18 @@ const App: React.FC = () => {
       <ToastContainer />
       <Suspense fallback={<PageLoader />}>
         <Routes>
+          {/* Public Routes */}
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/reset-password/:token" element={<ResetPassword />} />
           <Route path="/public-invoice/:id" element={<PublicInvoice />} />
+          <Route path="/contact" element={<Contact />} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/pricing" element={<Pricing />} />
 
+          {/* Protected Dashboard Routes */}
           <Route
             path="/dashboard"
             element={user ? <Layout /> : <Navigate to="/login" />}
@@ -75,6 +81,7 @@ const App: React.FC = () => {
             <Route path="terms" element={<Terms />} />
           </Route>
 
+          {/* Catch-all Redirect */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

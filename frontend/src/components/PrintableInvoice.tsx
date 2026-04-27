@@ -12,6 +12,7 @@ interface PrintableInvoiceProps {
     signature?: string | undefined;
     changeAmount?: number | undefined;
     roundOffAmount?: number | undefined;
+    upiId?: string | undefined;
     isPreview?: boolean;
 }
 
@@ -26,8 +27,22 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
     signature,
     changeAmount,
     roundOffAmount,
+    upiId,
     isPreview = false
 }) => {
+    const [qrDataUrl, setQrDataUrl] = React.useState<string>('');
+
+    React.useEffect(() => {
+        if (upiId && sale?.totalAmount > 0) {
+            const upiUrl = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(businessName)}&am=${sale.totalAmount}&cu=INR`;
+            import('qrcode').then(QRCode => {
+                QRCode.toDataURL(upiUrl, { margin: 1, width: 200 })
+                    .then(url => setQrDataUrl(url))
+                    .catch(err => console.error('QR generation failed', err));
+            });
+        }
+    }, [upiId, sale?.totalAmount, businessName]);
+
     if (!sale) return null;
 
     const totalItems = (sale.items?.length || 0) + (sale.additionalItems?.length || 0);
@@ -158,6 +173,14 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                             <p className="text-[8px] mb-1 font-bold uppercase tracking-widest">Authorized Signature</p>
                             <img src={signature} alt="Signature" className="h-10 object-contain mb-1 mix-blend-multiply" />
                             <div className="w-32 border-t border-black"></div>
+                        </div>
+                    )}
+
+                    {qrDataUrl && (
+                        <div className="flex flex-col items-center mt-4 border-2 border-black p-2 rounded-lg">
+                            <img src={qrDataUrl} alt="Scan to Pay" className="w-32 h-32 mb-1" />
+                            <p className="text-[10px] font-black uppercase tracking-widest">Scan to Pay ₹{sale.totalAmount.toLocaleString()}</p>
+                            <p className="text-[8px] font-bold mt-1">{upiId}</p>
                         </div>
                     )}
                     

@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Check, Zap, Building2, Crown, ArrowRight, Loader2, ShieldCheck, CreditCard } from 'lucide-react';
+import { Check, Zap, Building2, Crown, ArrowRight, Loader2, ShieldCheck, CreditCard, ArrowLeft } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 declare global {
     interface Window {
@@ -99,6 +99,12 @@ const Pricing = () => {
     };
 
     const handleSubscription = async (plan: any) => {
+        if (!user) {
+            showToast('Please register or login to subscribe.', 'info');
+            navigate('/register');
+            return;
+        }
+
         if (plan.id === 'free') {
             showToast('You are on the Free Starter plan.', 'info');
             navigate('/dashboard');
@@ -177,6 +183,14 @@ const Pricing = () => {
 
     return (
         <div className="min-h-screen bg-slate-50 py-20 px-4">
+            <div className="max-w-6xl mx-auto mb-8">
+                <button 
+                    onClick={() => navigate(-1)}
+                    className="flex items-center gap-2 text-slate-500 hover:text-slate-800 font-bold transition-colors"
+                >
+                    <ArrowLeft size={20} /> Back
+                </button>
+            </div>
             <div className="max-w-6xl mx-auto text-center mb-16">
                 <h1 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter mb-4">
                     Upgrade to <span className="text-primary-600">Growth</span>
@@ -304,11 +318,11 @@ const Pricing = () => {
 
             <footer className="max-w-4xl mx-auto mt-12 mb-10 text-center">
                 <div className="flex flex-wrap items-center justify-center gap-6 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
-                    <a href="/dashboard/contact" className="hover:text-primary-600 transition-colors">Contact Us</a>
+                    <Link to="/contact" className="hover:text-primary-600 transition-colors">Contact Us</Link>
                     <span className="w-1.5 h-1.5 bg-slate-200 rounded-full" />
-                    <a href="/dashboard/privacy" className="hover:text-primary-600 transition-colors">Privacy Policy</a>
+                    <Link to="/privacy" className="hover:text-primary-600 transition-colors">Privacy Policy</Link>
                     <span className="w-1.5 h-1.5 bg-slate-200 rounded-full" />
-                    <a href="/dashboard/terms" className="hover:text-primary-600 transition-colors">Terms of Service</a>
+                    <Link to="/terms" className="hover:text-primary-600 transition-colors">Terms of Service</Link>
                 </div>
                 <p className="mt-6 text-[10px] font-bold text-slate-300 uppercase tracking-widest">
                     &copy; {new Date().getFullYear()} BuildMate ERP. All rights reserved.
