@@ -51,6 +51,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 const flattened = flattenUser(data, token);
                 setUser(flattened);
                 localStorage.setItem('user', JSON.stringify(flattened));
+                localStorage.setItem('last_active_at', Date.now().toString());
             } catch (err) {
                 console.error('Failed to sync profile:', err);
             }
@@ -59,11 +60,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (storedUser) {
             const userData = JSON.parse(storedUser);
             
-            // Inactivity Check: 5 Days
-            const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
+            // Inactivity Check: 30 Days
+            const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
             const now = Date.now();
             
-            if (lastActiveAt && (now - parseInt(lastActiveAt)) > FIVE_DAYS_MS) {
+            if (lastActiveAt && (now - parseInt(lastActiveAt)) > THIRTY_DAYS_MS) {
                 console.log('Session expired due to 5 days of inactivity.');
                 logout();
             } else {
@@ -105,7 +106,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             localStorage.removeItem('user');
             return;
         }
-        const flattened = flattenUser(userData);
+        // Preserve existing token if not provided in new data
+        const flattened = flattenUser(userData, userData.token || user?.token);
         setUser(flattened);
         localStorage.setItem('user', JSON.stringify(flattened));
     };

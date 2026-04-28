@@ -59,7 +59,6 @@ const AIAssistant = () => {
             if (user) {
                 const updatedUser = { ...user, aiUsageCount: data.aiUsageCount };
                 setUser(updatedUser);
-                localStorage.setItem('user', JSON.stringify(updatedUser));
             }
 
             // 2. Call your AI API (Placeholder)
