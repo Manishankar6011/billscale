@@ -17,7 +17,8 @@ import {
   Bug,
   Lightbulb,
   MessageSquare,
-  ShieldCheck
+  ShieldCheck,
+  BarChart3
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/utils";
@@ -53,6 +54,7 @@ const Layout = () => {
     },
     { name: t("common.salary"), path: "/dashboard/salary", icon: Wallet },
     { name: t("common.ledger"), path: "/dashboard/ledger", icon: FileText },
+    { name: "Reports", path: "/dashboard/reports", icon: BarChart3 },
     { name: t("common.settings"), path: "/dashboard/settings", icon: Settings },
     { name: "Refer & Earn", path: "/dashboard/referral", icon: Gift },
   ];
