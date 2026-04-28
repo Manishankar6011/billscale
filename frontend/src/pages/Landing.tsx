@@ -13,6 +13,9 @@ import {
   PlayCircle,
   Star,
   CheckCircle2,
+  LineChart,
+  BookOpen,
+  Globe,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { clsx, type ClassValue } from "clsx";
@@ -47,7 +50,7 @@ const Landing = () => {
       bg: "bg-amber-50",
     },
     {
-      icon: BarChart3,
+      icon: Package,
       title: t("landing.smart_inventory"),
       description: t("landing.inventory_desc"),
       color: "text-primary-600",
@@ -59,6 +62,27 @@ const Landing = () => {
       description: t("landing.staff_desc"),
       color: "text-emerald-600",
       bg: "bg-emerald-50",
+    },
+    {
+      icon: BookOpen,
+      title: t("landing.customer_ledger"),
+      description: t("landing.customer_ledger_desc"),
+      color: "text-indigo-600",
+      bg: "bg-indigo-50",
+    },
+    {
+      icon: LineChart,
+      title: t("landing.analytics_reports"),
+      description: t("landing.analytics_reports_desc"),
+      color: "text-rose-600",
+      bg: "bg-rose-50",
+    },
+    {
+      icon: Globe,
+      title: t("landing.offline_pwa"),
+      description: t("landing.offline_pwa_desc"),
+      color: "text-sky-600",
+      bg: "bg-sky-50",
     },
   ];
 
@@ -287,7 +311,10 @@ const Landing = () => {
               >
                 {t("landing.get_started_free")} <ArrowRight size={20} />
               </button>
-              <button className="w-full sm:w-auto px-10 py-5 bg-white text-slate-900 rounded-2xl font-black uppercase tracking-widest text-sm border-2 border-slate-100 hover:bg-slate-50 transition-all flex items-center justify-center gap-3">
+              <button
+                onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}
+                className="w-full sm:w-auto px-10 py-5 bg-white text-slate-900 rounded-2xl font-black uppercase tracking-widest text-sm border-2 border-slate-100 hover:bg-slate-50 transition-all flex items-center justify-center gap-3"
+              >
                 <PlayCircle size={20} className="text-primary-600" /> {t("landing.view_demo")}
               </button>
             </div>
