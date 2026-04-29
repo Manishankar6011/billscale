@@ -5,7 +5,15 @@ import Tenant from '../models/Tenant';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import sendEmail from '../utils/sendEmail';
-import { uploadImage } from '../utils/cloudinary';
+import Attendance from '../models/Attendance';
+import Customer from '../models/Customer';
+import MasterProduct from '../models/MasterProduct';
+import Payment from '../models/Payment';
+import Product from '../models/Product';
+import Purchase from '../models/Purchase';
+import SalaryPayment from '../models/SalaryPayment';
+import Sale from '../models/Sale';
+import Staff from '../models/Staff';
 
 const generateToken = (id: string) => {
     return jwt.sign({ id }, process.env.JWT_SECRET as string, {
@@ -261,6 +269,46 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
         await user.save();
 
         res.json({ message: 'Password reset successful' });
+    } catch (error: any) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+export const deleteAccount = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+        const user = await User.findById(req.user?._id);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        if (user.role !== 'owner') {
+            return res.status(403).json({ message: 'Only the account owner can delete the account' });
+        }
+
+        const tenantId = user.tenantId;
+
+        if (!tenantId) {
+            return res.status(400).json({ message: 'No tenant associated with this user' });
+        }
+
+        // Delete all data associated with the tenant
+        await Promise.all([
+            Attendance.deleteMany({ tenantId }),
+            Customer.deleteMany({ tenantId }),
+            MasterProduct.deleteMany({ tenantId }),
+            Payment.deleteMany({ tenantId }),
+            Product.deleteMany({ tenantId }),
+            Purchase.deleteMany({ tenantId }),
+            SalaryPayment.deleteMany({ tenantId }),
+            Sale.deleteMany({ tenantId }),
+            User.deleteMany({ tenantId }),
+            Staff.deleteMany({ tenantId })
+        ]);
+
+        // Delete the tenant itself
+        await Tenant.findByIdAndDelete(tenantId);
+
+        res.json({ message: 'Account and all associated data deleted successfully' });
     } catch (error: any) {
         res.status(500).json({ message: error.message });
     }

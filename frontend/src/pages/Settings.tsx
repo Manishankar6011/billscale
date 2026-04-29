@@ -1,17 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 import { NavLink } from 'react-router-dom';
-import { User, Building2, Phone, MapPin, Save, ShieldCheck, Crown, ArrowRight, Upload, Image, Mail, Pen, X, AlertCircle, Loader2, MessageSquare, Bug, Lightbulb } from 'lucide-react';
+import { User, Building2, Phone, MapPin, Save, ShieldCheck, Crown, ArrowRight, Upload, Image, Mail, Pen, X, AlertCircle, Loader2, MessageSquare, Bug, Lightbulb, Trash2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
 const Settings = () => {
     const { t, i18n } = useTranslation();
-    const { user, setUser } = useAuth();
+    const { user, setUser, logout } = useAuth();
     const { showToast } = useToast();
     const queryClient = useQueryClient();
+
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
     const { data: profile, isLoading: loading } = useQuery({
         queryKey: ['profile'],
@@ -111,6 +114,25 @@ const Settings = () => {
         e.preventDefault();
         setSaving(true);
         updateMutation.mutate(formData);
+    };
+
+    const deleteMutation = useMutation({
+        mutationFn: async () => {
+            return axios.delete('/api/auth/account');
+        },
+        onSuccess: () => {
+            setIsDeleteModalOpen(false);
+            showToast('Account deleted successfully', 'success');
+            logout();
+        },
+        onError: (err: any) => {
+            showToast(err.response?.data?.message || 'Failed to delete account', 'error');
+            setIsDeleteModalOpen(false);
+        }
+    });
+
+    const handleDeleteAccount = () => {
+        deleteMutation.mutate();
     };
 
     if (loading) return (
@@ -397,6 +419,69 @@ const Settings = () => {
                     </button>
                 </div>
             </form>
+
+            {/* Danger Zone */}
+            {user?.role === 'owner' && (
+                <div className="card p-10 bg-white shadow-2xl shadow-rose-100/50 border border-rose-100 rounded-[2.5rem] relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-8 text-rose-50 opacity-50 group-hover:scale-110 transition-transform -z-0">
+                        <Trash2 size={120} />
+                    </div>
+                    <div className="relative z-10">
+                        <div className="flex items-center gap-4 mb-4">
+                            <div className="w-12 h-12 bg-rose-100 rounded-2xl flex items-center justify-center text-rose-600 shadow-sm">
+                                <AlertTriangle size={24} />
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-black text-rose-600 tracking-tight uppercase">Danger Zone</h2>
+                            </div>
+                        </div>
+                        <p className="text-sm text-slate-500 font-medium mb-6">
+                            Once you delete your account, there is no going back. Please be certain.
+                            This will permanently delete all data including products, customers, sales, and your organization profile.
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => setIsDeleteModalOpen(true)}
+                            className="px-6 py-3 bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white rounded-2xl font-black uppercase tracking-widest text-xs border border-rose-200 hover:border-rose-600 transition-all flex items-center gap-2"
+                        >
+                            <Trash2 size={16} /> Delete My Account
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {isDeleteModalOpen && createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-[2rem] p-8 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-200">
+                        <div className="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center text-rose-600 mb-6 mx-auto">
+                            <AlertTriangle size={32} />
+                        </div>
+                        <h3 className="text-2xl font-black text-center text-slate-900 uppercase tracking-tight mb-2">Delete Account?</h3>
+                        <p className="text-center text-slate-500 font-medium text-sm mb-8">
+                            Are you absolutely sure you want to delete your account? This action cannot be undone and will permanently erase all your data.
+                        </p>
+                        <div className="flex flex-col gap-3">
+                            <button
+                                onClick={handleDeleteAccount}
+                                disabled={deleteMutation.isPending}
+                                className="w-full py-4 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl font-black uppercase tracking-widest text-xs transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                                {deleteMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                                {deleteMutation.isPending ? 'Deleting...' : 'Yes, Delete My Account'}
+                            </button>
+                            <button
+                                onClick={() => setIsDeleteModalOpen(false)}
+                                disabled={deleteMutation.isPending}
+                                className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-black uppercase tracking-widest text-xs transition-colors disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 };

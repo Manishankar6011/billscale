@@ -1,6 +1,6 @@
 import express from 'express';
 const router = express.Router();
-import { registerContractor, loginUser, getProfile, updateProfile, forgotPassword, resetPassword, getReferralStats } from '../controllers/authController';
+import { registerContractor, loginUser, getProfile, updateProfile, forgotPassword, resetPassword, getReferralStats, deleteAccount } from '../controllers/authController';
 import { protect } from '../middleware/auth';
 
 router.post('/register', registerContractor);
@@ -10,5 +10,6 @@ router.put('/reset-password/:token', resetPassword);
 router.get('/profile', protect as any, getProfile as any);
 router.put('/profile', protect as any, updateProfile as any);
 router.get('/referrals', protect as any, getReferralStats as any);
+router.delete('/account', protect as any, deleteAccount as any);
 
 export default router;
