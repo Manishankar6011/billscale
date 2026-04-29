@@ -1,6 +1,7 @@
 import  { createContext, useState, useContext, useEffect, type ReactNode } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import type { User } from '../types';
 
 interface AuthContextType {
@@ -18,6 +19,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
 
     const flattenUser = (data: any, token?: string): User => {
         const t = data.tenantId || {};
@@ -131,6 +133,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const logout = () => {
         updateStateAndStorage(null);
         delete axios.defaults.headers.common['Authorization'];
+        queryClient.clear();
         navigate('/login');
     };
 

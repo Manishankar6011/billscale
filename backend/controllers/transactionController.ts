@@ -51,6 +51,9 @@ export const getSales = async (req: AuthRequest, res: Response) => {
             }
         }
 
+        const summaryQuery = { ...query };
+        delete summaryQuery.status;
+
         const [sales, totalCount, totals] = await Promise.all([
             Sale.find(query)
                 .populate('items.productId', 'name unit')
@@ -59,7 +62,7 @@ export const getSales = async (req: AuthRequest, res: Response) => {
                 .limit(limit),
             Sale.countDocuments(query),
             Sale.aggregate([
-                { $match: query },
+                { $match: summaryQuery },
                 { $group: { 
                     _id: null, 
                     totalAmount: { $sum: "$totalAmount" },
@@ -67,7 +70,7 @@ export const getSales = async (req: AuthRequest, res: Response) => {
                     totalUnpaid: { $sum: "$balanceDue" },
                     totalProfit: { $sum: "$totalProfit" },
                     paidCount: { $sum: { $cond: [{ $eq: ["$status", "paid"] }, 1, 0] } },
-                    pendingCount: { $sum: { $cond: [{ $eq: ["$status", "pending"] }, 1, 0] } }
+                    pendingCount: { $sum: { $cond: [{ $in: ["$status", ["pending", "partial"]] }, 1, 0] } }
                 }}
             ])
         ]);
@@ -135,7 +138,9 @@ export const processSale = async (req: AuthRequest, res: Response) => {
         const processedItems = [];
 
         // 1. Handle Customer Auto-Creation/Linking
-        if (customerPhone || customerName) {
+        let finalCustomerId = req.body.customerId || null;
+        
+        if (!finalCustomerId && (customerPhone || customerName)) {
             let existingCustomer;
             if (customerPhone) {
                 existingCustomer = await Customer.findOne({ 
@@ -159,6 +164,9 @@ export const processSale = async (req: AuthRequest, res: Response) => {
                     address: customerAddress
                 });
                 await newCustomer.save({ session });
+                finalCustomerId = newCustomer._id;
+            } else if (existingCustomer) {
+                finalCustomerId = existingCustomer._id;
             }
         }
 
@@ -225,6 +233,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
 
         const sale = new Sale({
             tenantId: req.tenantId,
+            customerId: finalCustomerId,
             customerName,
             customerPhone,
             customerAddress,
@@ -234,6 +243,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
             totalAmount,
             totalProfit,
             amountPaid: finalAmountPaid,
+            downPayment: finalAmountPaid,
             balanceDue: balanceDue,
             roundOffAmount: finalRoundOff,
             paymentMode,
@@ -298,7 +308,9 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
         const processedItems = [];
 
         // 2. Handle Customer
-        if (customerPhone || customerName) {
+        let finalCustomerId = req.body.customerId || null;
+        
+        if (!finalCustomerId && (customerPhone || customerName)) {
             let existingCustomer;
             if (customerPhone) {
                 existingCustomer = await Customer.findOne({ 
@@ -321,6 +333,9 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
                     address: customerAddress
                 });
                 await newCustomer.save({ session });
+                finalCustomerId = newCustomer._id;
+            } else if (existingCustomer) {
+                finalCustomerId = existingCustomer._id;
             }
         }
 
@@ -375,6 +390,7 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
         else calculatedStatus = 'pending';
 
         // Update Sale
+        if (finalCustomerId) oldSale.customerId = finalCustomerId;
         oldSale.customerName = customerName;
         oldSale.customerPhone = customerPhone;
         oldSale.customerAddress = customerAddress;
@@ -383,6 +399,7 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
         oldSale.totalAmount = totalAmount;
         oldSale.totalProfit = totalProfit;
         oldSale.amountPaid = finalAmountPaid;
+        oldSale.downPayment = finalAmountPaid;
         oldSale.balanceDue = balanceDue;
         oldSale.roundOffAmount = finalRoundOff;
         oldSale.paymentMode = paymentMode;

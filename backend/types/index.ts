@@ -79,6 +79,7 @@ export interface IPurchase extends Document {
 
 export interface ISale extends Document {
   tenantId: Types.ObjectId;
+  customerId?: Types.ObjectId;
   customerName: string;
   customerPhone?: string;
   customerAddress?: string;
@@ -94,6 +95,7 @@ export interface ISale extends Document {
   totalAmount: number;
   totalProfit: number;
   amountPaid: number;
+  downPayment?: number;
   balanceDue: number;
   roundOffAmount: number;
   taxAmount?: number;
@@ -143,5 +145,15 @@ export interface IPayment extends Document {
   type: 'advance' | 'full-settlement' | 'partial';
   note?: string;
   method: 'cash' | 'bank-transfer' | 'upi';
+  createdAt: Date;
+}
+
+export interface ICustomerPayment extends Document {
+  tenantId: Types.ObjectId;
+  customerId: Types.ObjectId;
+  amount: number;
+  paymentDate: Date;
+  paymentMode: 'cash' | 'upi' | 'bank_transfer' | 'card';
+  notes?: string;
   createdAt: Date;
 }

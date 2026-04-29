@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import {
   Users,
@@ -9,11 +9,29 @@ import {
   IndianRupee,
   TrendingUp,
   X,
+  CreditCard,
+  FileText,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Loader2
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { format } from "date-fns";
 import Skeleton from "../components/Skeleton";
+
+interface LedgerEntry {
+  id: string;
+  type: 'sale' | 'payment';
+  date: string;
+  amount: number;
+  paid?: number;
+  due?: number;
+  invoiceNumber?: string;
+  paymentMode?: string;
+  notes?: string;
+  runningBalance: number;
+}
 
 interface CustomerData {
   _id: string;
@@ -44,6 +62,60 @@ const Customers = () => {
 
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<CustomerData | null>(null);
+
+  const queryClient = useQueryClient();
+  const [ledger, setLedger] = useState<LedgerEntry[]>([]);
+  const [loadingLedger, setLoadingLedger] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentMode, setPaymentMode] = useState("cash");
+  const [paymentNotes, setPaymentNotes] = useState("");
+  const [submittingPayment, setSubmittingPayment] = useState(false);
+
+  const handleSelectCustomer = async (c: CustomerData) => {
+    setSelected(c);
+    setLoadingLedger(true);
+    try {
+      const res = await axios.get(`/api/customers/${c._id}/ledger`, {
+        headers: { Authorization: `Bearer ${user?.token}` }
+      });
+      setLedger(res.data);
+    } catch (err: any) {
+      showToast(err.response?.data?.message || "Failed to load ledger", "error");
+    } finally {
+      setLoadingLedger(false);
+    }
+  };
+
+  const isSubmittingPaymentRef = useRef(false);
+
+  const handlePaymentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selected || !paymentAmount || isSubmittingPaymentRef.current) return;
+    isSubmittingPaymentRef.current = true;
+    setSubmittingPayment(true);
+    try {
+      await axios.post(`/api/customers/${selected._id}/payments`, {
+        amount: Number(paymentAmount),
+        paymentMode,
+        notes: paymentNotes
+      }, {
+        headers: { Authorization: `Bearer ${user?.token}` }
+      });
+      showToast("Payment recorded successfully", "success");
+      setShowPaymentModal(false);
+      setPaymentAmount("");
+      setPaymentNotes("");
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      const updatedCustomer = { ...selected, totalDue: selected.totalDue - Number(paymentAmount), totalPaid: selected.totalPaid + Number(paymentAmount) };
+      handleSelectCustomer(updatedCustomer);
+    } catch (err: any) {
+      showToast(err.response?.data?.message || "Failed to record payment", "error");
+    } finally {
+      isSubmittingPaymentRef.current = false;
+      setSubmittingPayment(false);
+    }
+  };
 
   const filtered = customers.filter(
     (c) =>
@@ -134,17 +206,152 @@ const Customers = () => {
                   </div>
                 )}
               </div>
+
+              {/* Ledger Section */}
+              <div className="mt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-sm font-black uppercase tracking-widest text-slate-800 flex items-center gap-2">
+                    <FileText size={16} className="text-primary-500" />
+                    Ledger History
+                  </h4>
+                  <button
+                    onClick={() => setShowPaymentModal(true)}
+                    className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-primary-700 transition-colors shadow-lg shadow-primary-200"
+                  >
+                    <IndianRupee size={14} />
+                    Receive Payment
+                  </button>
+                </div>
+                
+                <div className="bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden">
+                  {loadingLedger ? (
+                    <div className="p-8 flex justify-center">
+                      <Loader2 size={24} className="text-primary-500 animate-spin" />
+                    </div>
+                  ) : ledger.length === 0 ? (
+                    <div className="p-8 text-center text-slate-400 text-sm font-medium">
+                      No transactions found
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto">
+                      {ledger.map((entry, idx) => (
+                        <div key={idx} className="p-4 flex items-center justify-between hover:bg-white transition-colors">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-xl ${entry.type === 'sale' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                              {entry.type === 'sale' ? <ArrowDownToLine size={16} /> : <ArrowUpFromLine size={16} />}
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-slate-800">
+                                {entry.type === 'sale' ? 'Invoice ' + (entry.invoiceNumber || '') : 'Payment Received'}
+                              </p>
+                              <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mt-0.5">
+                                {format(new Date(entry.date), "dd MMM yyyy, p")}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className={`text-sm font-black ${entry.type === 'sale' ? 'text-rose-600' : 'text-emerald-600'}`}>
+                              {entry.type === 'sale' ? '-' : '+'}₹{entry.amount.toLocaleString()}
+                            </p>
+                            <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                              Bal: ₹{entry.runningBalance.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {selected.phone && (
                 <a
                   href={`https://wa.me/${selected.phone.replace(/\D/g, "")}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="w-full flex items-center justify-center gap-2 py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100"
+                  className="w-full flex items-center justify-center gap-2 py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100 mt-4"
                 >
                   WhatsApp {selected.name}
                 </a>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Modal */}
+      {showPaymentModal && selected && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in duration-200">
+            <div className="bg-primary-600 p-6 text-white text-center">
+              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-md">
+                <CreditCard size={32} />
+              </div>
+              <h3 className="text-xl font-black">Receive Payment</h3>
+              <p className="text-primary-100 text-sm mt-1">from {selected.name}</p>
+            </div>
+            <form onSubmit={handlePaymentSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">
+                  Amount Received (₹)
+                </label>
+                <div className="relative">
+                  <IndianRupee className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 pl-12 pr-4 text-slate-800 font-bold focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all"
+                    placeholder="Enter amount"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">
+                  Payment Mode
+                </label>
+                <select
+                  value={paymentMode}
+                  onChange={(e) => setPaymentMode(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-slate-800 font-bold focus:ring-2 focus:ring-primary-500 outline-none"
+                >
+                  <option value="cash">Cash</option>
+                  <option value="upi">UPI</option>
+                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="card">Card</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">
+                  Notes (Optional)
+                </label>
+                <textarea
+                  value={paymentNotes}
+                  onChange={(e) => setPaymentNotes(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-slate-800 font-medium focus:ring-2 focus:ring-primary-500 outline-none resize-none"
+                  placeholder="e.g. Cleared pending dues"
+                  rows={2}
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowPaymentModal(false)}
+                  className="flex-1 py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingPayment}
+                  className="flex-1 py-3 bg-primary-600 text-white font-bold rounded-2xl hover:bg-primary-700 transition-colors shadow-lg shadow-primary-200 disabled:opacity-70 flex justify-center items-center gap-2"
+                >
+                  {submittingPayment ? <Loader2 size={18} className="animate-spin" /> : 'Save Payment'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -216,7 +423,7 @@ const Customers = () => {
         {filtered.map((c) => (
           <div
             key={c._id}
-            onClick={() => setSelected(c)}
+            onClick={() => handleSelectCustomer(c)}
             className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 cursor-pointer hover:shadow-md hover:border-primary-100 transition-all group"
           >
             <div className="flex items-start justify-between mb-4">

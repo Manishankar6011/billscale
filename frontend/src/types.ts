@@ -115,6 +115,7 @@ export interface Staff {
 
 export interface Sale {
   _id?: string;
+  customerId?: string;
   customerName: string;
   customerPhone?: string;
   customerAddress?: string;
