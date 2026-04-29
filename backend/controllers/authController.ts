@@ -14,6 +14,7 @@ import Purchase from '../models/Purchase';
 import SalaryPayment from '../models/SalaryPayment';
 import Sale from '../models/Sale';
 import Staff from '../models/Staff';
+import CustomerPayment from '../models/CustomerPayment';
 
 const generateToken = (id: string) => {
     return jwt.sign({ id }, process.env.JWT_SECRET as string, {
@@ -302,7 +303,8 @@ export const deleteAccount = async (req: AuthRequest, res: Response, next: NextF
             SalaryPayment.deleteMany({ tenantId }),
             Sale.deleteMany({ tenantId }),
             User.deleteMany({ tenantId }),
-            Staff.deleteMany({ tenantId })
+            Staff.deleteMany({ tenantId }),
+            CustomerPayment.deleteMany({ tenantId })
         ]);
 
         // Delete the tenant itself

@@ -7,6 +7,10 @@ const saleSchema: Schema = new mongoose.Schema({
         ref: 'Tenant',
         required: true
     },
+    customerId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Customer'
+    },
     customerName: {
         type: String,
         required: true,
@@ -63,6 +67,9 @@ const saleSchema: Schema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    downPayment: {
+        type: Number
+    },
     balanceDue: {
         type: Number,
         default: 0
@@ -86,7 +93,7 @@ const saleSchema: Schema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['paid', 'pending'],
+        enum: ['paid', 'pending', 'partial'],
         default: 'paid'
     },
     additionalItems: [{

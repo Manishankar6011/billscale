@@ -113,7 +113,9 @@
         "send_reset_link": "Send Reset Link",
         "back_to_login": "Back to Login",
         "reset_success": "Password updated successfully!",
-        "reset_email_sent": "If an account exists with this email, a reset link will be sent."
+        "reset_email_sent": "If an account exists with this email, a reset link will be sent.",
+        "login_success": "Logged in successfully!",
+        "register_success": "Account created successfully!"
     },
     "dashboard": {
         "title": "BusinessMate Overview",
@@ -269,6 +271,7 @@
         "cash": "Cash",
         "credit": "Credit (Udhaar)",
         "paid": "Paid",
+        "partial": "Partial",
         "show_qr_code": "Show QR Code",
         "pending": "Pending",
         "invoice": "Generate Invoice",

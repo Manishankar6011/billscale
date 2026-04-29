@@ -168,6 +168,7 @@ const Sales = () => {
   const queryClient = useQueryClient();
   const location = useLocation();
   const navigate = useNavigate();
+  const isSubmittingRef = useRef(false);
 
   // State Declarations (Moved to top)
   const [filterSearch, setFilterSearch] = useState("");
@@ -404,14 +405,11 @@ const Sales = () => {
     products.length === 0;
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Form State
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
+  const [customerId, setCustomerId] = useState<string | null>(null);
   const [paymentMode, setPaymentMode] = useState<"cash" | "credit">("cash");
-  const [paymentStatus, setPaymentStatus] = useState<"paid" | "pending">(
-    "pending",
-  );
   const [invoiceFormat, setInvoiceFormat] = useState<"thermal" | "a4">(
     "thermal",
   );
@@ -514,12 +512,12 @@ const Sales = () => {
     setCustomerName("");
     setCustomerPhone("");
     setCustomerAddress("");
+    setCustomerId(null);
     setCart([]);
     setAdditionalItems([]);
     setPaymentMode("cash");
     setAmountReceived("");
     setRoundOff(false);
-    setPaymentStatus("pending");
     setScannedProducts([]);
   };
 
@@ -546,6 +544,7 @@ const Sales = () => {
       });
     },
     onSuccess: (res) => {
+      isSubmittingRef.current = false;
       const newSale = res.data;
       showToast(t("billing.sale_recorded"), "success");
       if (autoPrint && newSale) {
@@ -558,6 +557,7 @@ const Sales = () => {
       resetForm();
     },
     onError: (err: any) => {
+      isSubmittingRef.current = false;
       showToast(
         err.response?.data?.message || t("billing.error_processing_sale"),
         "error",
@@ -576,6 +576,7 @@ const Sales = () => {
       );
     },
     onSuccess: (res) => {
+      isSubmittingRef.current = false;
       showToast(t("billing.sale_updated"), "success");
       if (autoPrint && res.data) {
         setPrintData(res.data);
@@ -588,6 +589,7 @@ const Sales = () => {
       resetForm();
     },
     onError: (err: any) => {
+      isSubmittingRef.current = false;
       showToast(
         err.response?.data?.message || t("billing.error_updating_sale"),
         "error",
@@ -622,6 +624,12 @@ const Sales = () => {
       showToast("Customer saved to database!", "success");
       queryClient.invalidateQueries({ queryKey: ["customers"] });
       setIsNewCustomerModalOpen(false);
+      
+      // Auto-select the newly created customer
+      setCustomerId(res.data._id || null);
+      setCustomerName(res.data.name);
+      setCustomerPhone(res.data.phone || "");
+      setCustomerAddress(res.data.address || "");
     },
     onError: (err: any) => {
       // If customer already exists, we just close and apply locally
@@ -650,13 +658,16 @@ const Sales = () => {
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (isSubmittingRef.current) return;
     if (cart.length === 0) {
       showToast("Add at least one item to cart", "error");
       return;
     }
+    isSubmittingRef.current = true;
 
     const saleData: Partial<Sale> = {
-      customerName,
+      ...(customerId ? { customerId } : {}),
+      customerName: customerName.trim() || "Cash Sale",
       customerPhone,
       customerAddress,
       items: cart.map((i) => ({
@@ -692,7 +703,7 @@ const Sales = () => {
         d.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
         return d.toISOString();
       })(),
-      status: paymentStatus,
+      status: Number(amountReceived) >= grandTotal && grandTotal > 0 ? "paid" : Number(amountReceived) > 0 ? "partial" : "pending",
       amountPaid: Number(amountReceived) || 0,
       roundOffAmount: roundOffAmount,
       showQRCode,
@@ -964,8 +975,10 @@ const Sales = () => {
     setCustomerName(customer.name);
     setCustomerPhone(customer.phone ?? "");
     setCustomerAddress(customer.address || "");
+    setCustomerId(customer._id || null);
   };
   const handleAddNewCustomer = (query: string) => {
+    setCustomerId(null);
     if (/^\d{10}$/.test(query)) {
       setCustomerPhone(query);
       setCustomerName("");
@@ -982,8 +995,8 @@ const Sales = () => {
     setCustomerName(sale.customerName);
     setCustomerPhone(sale.customerPhone || "");
     setCustomerAddress(sale.customerAddress || "");
-    setPaymentMode(sale.paymentMode);
-    setPaymentStatus(sale.status as any);
+    setCustomerId(sale.customerId || null);
+    setPaymentMode(sale.paymentMode as any);
     setDate(new Date(sale.date).toISOString().split("T")[0]);
     setAmountReceived(sale.amountPaid.toString());
     setRoundOff(sale.roundOffAmount !== 0);
@@ -1346,6 +1359,12 @@ const Sales = () => {
                     {t("billing.sale_price")}
                   </th>
                   <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
+                    {t("billing.total_paid")}
+                  </th>
+                  <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
+                    {t("billing.balance_due")}
+                  </th>
+                  <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
                     {t("billing.cost_price")}
                   </th>
                   <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
@@ -1445,6 +1464,22 @@ const Sales = () => {
                         </p>
                         <p className="text-[10px] text-slate-400 font-medium">
                           Sale Price
+                        </p>
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="font-bold text-emerald-600">
+                          ₹{(sale.amountPaid || 0).toLocaleString()}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-medium">
+                          Paid
+                        </p>
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="font-bold text-rose-600">
+                          ₹{(sale.balanceDue || 0).toLocaleString()}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-medium">
+                          Dues
                         </p>
                       </td>
                       <td className="px-6 py-4">
@@ -1627,6 +1662,7 @@ const Sales = () => {
                           setCustomerName("");
                           setCustomerPhone("");
                           setCustomerAddress("");
+                          setCustomerId(null);
                         }}
                         className="text-slate-300 hover:text-rose-500 transition-colors"
                       >
@@ -1888,25 +1924,6 @@ const Sales = () => {
                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
                       {/* Need better key? Using total items for now or adding roundoff */}
                       Round Off
-                    </span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={paymentStatus === "paid"}
-                      onChange={(e) => {
-                        const isPaid = e.target.checked;
-                        setPaymentStatus(isPaid ? "paid" : "pending");
-                        if (isPaid) {
-                          setAmountReceived(grandTotal.toString());
-                        } else {
-                          setAmountReceived("");
-                        }
-                      }}
-                      className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                    />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                      {t("billing.paid")}
                     </span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
