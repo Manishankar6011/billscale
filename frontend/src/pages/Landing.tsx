@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Users,
   ChevronRight,
@@ -30,6 +31,7 @@ const Landing = () => {
   const { t, i18n } = useTranslation();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const [scrolled, setScrolled] = React.useState(false);
+  const [showVideo, setShowVideo] = React.useState(false);
 
   React.useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -312,7 +314,7 @@ const Landing = () => {
                 {t("landing.get_started_free")} <ArrowRight size={20} />
               </button>
               <button
-                onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}
+                onClick={() => setShowVideo(true)}
                 className="w-full sm:w-auto px-10 py-5 bg-white text-slate-900 rounded-2xl font-black uppercase tracking-widest text-sm border-2 border-slate-100 hover:bg-slate-50 transition-all flex items-center justify-center gap-3"
               >
                 <PlayCircle size={20} className="text-primary-600" /> {t("landing.view_demo")}
@@ -614,8 +616,43 @@ const Landing = () => {
             </div>
           </div>
         </div>
-      </footer >
-    </div >
+      </footer>
+
+      {/* Video Modal */}
+      <AnimatePresence>
+        {showVideo && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowVideo(false)}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-10 bg-slate-900/90 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative w-full max-w-5xl aspect-video bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/10"
+            >
+              <button
+                onClick={() => setShowVideo(false)}
+                className="absolute top-4 right-4 z-10 p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors backdrop-blur-md"
+              >
+                <X size={24} />
+              </button>
+              <iframe
+                src="https://www.youtube.com/embed/Oo-anzrFgug?autoplay=1&mute=0"
+                title="BuildMate ERP Demo"
+                className="w-full h-full border-0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              ></iframe>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 };
 
