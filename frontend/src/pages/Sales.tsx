@@ -536,6 +536,13 @@ const Sales = () => {
   const changeAmount =
     amountReceived !== "" ? Number(amountReceived) - grandTotal : null;
 
+  // Auto-sync amountReceived for cash sales
+  useEffect(() => {
+    if (paymentMode === "cash" && isModalOpen && !selectedSaleForEdit) {
+      setAmountReceived(grandTotal.toString());
+    }
+  }, [grandTotal, paymentMode, isModalOpen, selectedSaleForEdit]);
+
   // Mutations
   const createSaleMutation = useMutation({
     mutationFn: async (saleData: Partial<Sale>) => {
@@ -1900,17 +1907,35 @@ const Sales = () => {
               {/* Payment & totals Section */}
               <div className="space-y-4 p-5 bg-slate-50 rounded-3xl">
                 <div className="flex items-center justify-between">
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">
-                    {t("billing.mode")}
+                  <label className="flex items-center gap-3 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={paymentMode === "cash"}
+                      onChange={(e) => {
+                        const isPaid = e.target.checked;
+                        setPaymentMode(isPaid ? "cash" : "credit");
+                        if (isPaid) {
+                          setAmountReceived(grandTotal.toString());
+                        } else {
+                          setAmountReceived("0");
+                        }
+                      }}
+                      className="w-4 h-4 rounded-lg border-slate-300 text-emerald-600 focus:ring-emerald-500 transition-all cursor-pointer"
+                    />
+                    <span className="text-xs font-black uppercase tracking-widest text-slate-700 group-hover:text-emerald-600 transition-colors">
+                      {t("billing.paid")}
+                    </span>
                   </label>
-                  <select
-                    className="bg-white border border-slate-200 rounded-xl p-2 text-xs font-black uppercase text-slate-700"
-                    value={paymentMode}
-                    onChange={(e) => setPaymentMode(e.target.value as any)}
-                  >
-                    <option value="cash">{t("billing.cash")}</option>
-                    <option value="credit">{t("billing.credit")}</option>
-                  </select>
+                  {paymentMode === "credit" && (
+                    <span className="text-[10px] font-black uppercase tracking-widest text-rose-500 bg-rose-50 px-2 py-1 rounded-lg border border-rose-100">
+                      {t("billing.credit")}
+                    </span>
+                  )}
+                  {paymentMode === "cash" && (
+                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
+                      {t("billing.cash")}
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-4">
