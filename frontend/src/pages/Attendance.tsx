@@ -16,12 +16,23 @@ import { useAuth } from "../context/AuthContext";
 import { TableSkeleton } from "../components/Skeleton";
 import { useToast } from "../context/ToastContext";
 import { format, addDays, subDays, isSameDay } from "date-fns";
+import UpgradePrompt from "../components/UpgradePrompt";
+import { canUseFeature } from "../utils/planLimits";
 
 const Attendance = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
+
+  if (user?.planType === 'free') {
+    return (
+        <UpgradePrompt 
+            feature="Staff Attendance" 
+            description="Tracking staff attendance and automate salary calculation is only available in Basic & Business plans." 
+        />
+    );
+  }
 
   const [date, setDate] = useState(new Date());
   const dateInputRef = React.useRef<HTMLInputElement>(null);

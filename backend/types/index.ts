@@ -3,7 +3,7 @@ import { Document, Types } from "mongoose";
 export interface ITenant extends Document {
   companyName: string;
   businessType?: string;
-  planType: "free" | "basic" | "business" | "premium";
+  planType: "free" | "basic" | "business";
   address?: string;
   phone?: string;
   email: string;
@@ -21,6 +21,7 @@ export interface ITenant extends Document {
   referralRewardClaimed: boolean;
   nextInvoiceNumber: number;
   upiId?: string;
+  slug: string;
   createdAt: Date;
 }
 
@@ -28,7 +29,7 @@ export interface IUser extends Document {
   name: string;
   email: string;
   password: string;
-  role: "super-admin" | "owner" | "accountant";
+  role: "super-admin" | "owner" | "accountant" | "staff";
   tenantId: Types.ObjectId | null;
   resetPasswordToken?: string;
   resetPasswordExpire?: Date;
@@ -48,6 +49,7 @@ export interface IProduct extends Document {
   mrp: number;
   barcode?: string;
   batchNumber?: string;
+  imageUrl?: string;
   createdAt: Date;
 }
 
@@ -83,6 +85,7 @@ export interface ISale extends Document {
   customerName: string;
   customerPhone?: string;
   customerAddress?: string;
+  createdBy?: Types.ObjectId;
   items: {
     productId: Types.ObjectId;
     quantity: number;

@@ -14,17 +14,18 @@ export interface Tenant {
   aiUsageCount: number;
   referralCode?: string;
   upiId?: string;
+  slug?: string;
 }
 
 export interface User {
   _id?: string;
   name: string;
   email: string;
-  role: "super-admin" | "owner" | "accountant";
+  role: "super-admin" | "owner" | "accountant" | "staff";
   tenantId: Tenant | string | null;
   companyName: string;
   businessType: string;
-  planType?: "free" | "basic" | "business" | "premium";
+  planType?: "free" | "basic" | "business";
   subscriptionStatus: "active" | "inactive" | "trial";
   subscriptionExpiryDate?: string;
   aiUsageCount: number;
@@ -49,6 +50,7 @@ export interface Product {
   mrp: number;
   barcode?: string;
   batchNumber?: string;
+  imageUrl?: string;
 }
 
 export interface PaginatedResponse<T> {
@@ -139,6 +141,7 @@ export interface Sale {
   invoiceNumber: string;
   date: string;
   showQRCode?: boolean;
+  createdBy?: string | { _id: string; name: string };
 }
 
 export interface Purchase {

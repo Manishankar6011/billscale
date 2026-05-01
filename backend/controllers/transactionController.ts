@@ -57,6 +57,7 @@ export const getSales = async (req: AuthRequest, res: Response) => {
         const [sales, totalCount, totals] = await Promise.all([
             Sale.find(query)
                 .populate('items.productId', 'name unit')
+                .populate('createdBy', 'name')
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit),
@@ -249,7 +250,8 @@ export const processSale = async (req: AuthRequest, res: Response) => {
             paymentMode,
             status: calculatedStatus,
             date: date || new Date(),
-            showQRCode: !!showQRCode
+            showQRCode: !!showQRCode,
+            createdBy: req.user?._id
         });
 
         await sale.save({ session });
@@ -406,6 +408,7 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
         oldSale.status = calculatedStatus;
         oldSale.date = date || oldSale.date;
         oldSale.showQRCode = !!showQRCode;
+        if (!oldSale.createdBy) oldSale.createdBy = req.user?._id;
 
         await oldSale.save({ session });
 

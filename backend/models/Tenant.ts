@@ -21,7 +21,7 @@ const tenantSchema: Schema = new mongoose.Schema({
     },
     planType: {
         type: String,
-        enum: ['free', 'basic', 'business', 'premium'],
+        enum: ['free', 'basic', 'business'],
         default: 'free'
     },
     subscriptionStatus: {
@@ -62,6 +62,13 @@ const tenantSchema: Schema = new mongoose.Schema({
         type: String,
         trim: true,
         default: ''
+    },
+    slug: {
+        type: String,
+        unique: true,
+        trim: true,
+        lowercase: true,
+        sparse: true // Allows nulls while enforcing uniqueness on non-nulls during migration
     },
     createdAt: {
         type: Date,

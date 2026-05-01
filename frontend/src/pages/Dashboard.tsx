@@ -12,6 +12,7 @@ import {
   Bar,
 } from "recharts";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import {
   TrendingUp,
   Package,
@@ -34,12 +35,14 @@ import {
   Receipt,
   ArrowUpCircle,
   Search,
+  Lock,
 } from "lucide-react";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
 import { DashboardSkeleton } from "../components/Skeleton";
 import { useToast } from "../context/ToastContext";
 import { format } from "date-fns";
+import { canUseFeature } from "../utils/planLimits";
 
 const MetricCard = ({ title, subtitle, value, icon, trend, color }: any) => {
   const colorMap: any = {
@@ -257,6 +260,7 @@ const ActivityItem = ({ activity, onClick }: any) => {
 
 const Dashboard = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { showToast } = useToast();
   const [timeRange, setTimeRange] = useState("today");
@@ -432,8 +436,7 @@ const Dashboard = () => {
                     <span>{selectedSale.roundOffAmount > 0 ? '+' : ''}{selectedSale.roundOffAmount.toFixed(2)}</span>
                   </div>
                 )}
-                </div>
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center mt-6">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
                       {t("dashboard.status")}
@@ -457,6 +460,7 @@ const Dashboard = () => {
                   </h3>
                 </div>
               </div>
+            </div>
             </div>
 
             <div className="bg-slate-50/50 p-6 border-t border-slate-100 flex justify-between gap-4">
@@ -627,18 +631,26 @@ const Dashboard = () => {
                  </div>
 
                  {/* Legend */}
-                 <div className="flex items-center gap-4 text-xs font-bold">
-                    <div className="flex items-center gap-2">
-                       <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
-                       <span className="text-slate-500">{t("dashboard.revenue")}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                       <div className="w-3 h-3 rounded-full bg-primary-500"></div>
-                       <span className="text-slate-500">{t("dashboard.profit")}</span>
-                    </div>
+                     {user?.role !== 'staff' && canUseFeature(user?.planType || 'free', 'hasProfitAnalytics') && (
+                      <div className="flex items-center gap-4 text-xs font-bold">
+                        <div className="flex items-center gap-2">
+                           <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                           <span className="text-slate-500">{t("dashboard.revenue")}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                           <div className="w-3 h-3 rounded-full bg-primary-500"></div>
+                           <span className="text-slate-500">{t("dashboard.profit")}</span>
+                        </div>
+                      </div>
+                    )}
+                    {(!canUseFeature(user?.planType || 'free', 'hasProfitAnalytics')) && (
+                       <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                          <span className="text-slate-500">{t("dashboard.revenue")}</span>
+                       </div>
+                    )}
                  </div>
               </div>
-            </div>
 
             <div className="h-[400px] w-full relative z-10">
               {chartData.length === 0 ? (
@@ -698,24 +710,26 @@ const Dashboard = () => {
                       dot={false}
                       animationDuration={2000}
                     />
-                    <Area
-                      type="monotone"
-                      name={t("dashboard.profit")}
-                      dataKey="profit"
-                      stroke="#3b82f6"
-                      strokeWidth={4}
-                      fillOpacity={1}
-                      fill="url(#colorProfitBlue)"
-                      activeDot={{ r: 8, strokeWidth: 4, stroke: '#fff', fill: '#3b82f6' }}
-                      dot={false}
-                      animationDuration={2500}
-                    />
+                    {user?.role !== 'staff' && canUseFeature(user?.planType || 'free', 'hasProfitAnalytics') && (
+                      <Area
+                        type="monotone"
+                        name={t("dashboard.profit")}
+                        dataKey="profit"
+                        stroke="#3b82f6"
+                        strokeWidth={4}
+                        fillOpacity={1}
+                        fill="url(#colorProfitBlue)"
+                        activeDot={{ r: 8, strokeWidth: 4, stroke: '#fff', fill: '#3b82f6' }}
+                        dot={false}
+                        animationDuration={2500}
+                      />
+                    )}
                   </AreaChart>
                 </ResponsiveContainer>
               )}
             </div>
           </div>
-
+      
           {/* Metrics Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <MetricCard
@@ -727,66 +741,6 @@ const Dashboard = () => {
               color="emerald"
             />
             <MetricCard
-              title={`${getFilterLabel()} ${t("dashboard.profit")}`}
-              subtitle={t("dashboard.growth_analysis")}
-              value={`₹${stats?.periodProfit?.toLocaleString() || 0}`}
-              icon={<ArrowUpCircle size={24} />}
-              trend={stats?.profitTrend}
-              color="primary"
-            />
-            <MetricCard
-              title={`${getFilterLabel()} ${t("dashboard.expenses")}`}
-              subtitle={t("dashboard.budget_vs_spending")}
-              value={`₹${stats?.periodExpenses?.toLocaleString() || 0}`}
-              icon={<Receipt size={24} />}
-              trend={stats?.expensesTrend}
-              color="amber"
-            />
-            <MetricCard
-              title={t("dashboard.to_collect")}
-              subtitle={t("billing.receivable")}
-              value={`₹${stats?.toCollect?.toLocaleString() || 0}`}
-              icon={<Clock size={24} />}
-              trend={t("billing.pending")}
-              color="indigo"
-            />
-            <MetricCard
-              title={t("dashboard.to_pay")}
-              subtitle={t("billing.payable")}
-              value={`₹${stats?.toPay?.toLocaleString() || 0}`}
-              icon={<HandCoins size={24} />}
-              trend={t("billing.pending")}
-              color="indigo"
-            />
-            <div className="relative group">
-              <MetricCard
-                title={t("dashboard.stock_value")}
-                subtitle={`${stockValueDisplay === "purchase" ? "At Purchase Price" : "At Selling Price"}`}
-                value={`₹${(stockValueDisplay === "purchase" ? stats?.stockValue : stats?.stockSellingValue)?.toLocaleString() || 0}`}
-                icon={<Package size={24} />}
-                trend={stats?.lowStockCount > 0 ? `${stats?.lowStockCount} items low` : t("dashboard.all_clear")}
-                color="blue"
-              />
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setStockValueDisplay(stockValueDisplay === "purchase" ? "sell" : "purchase");
-                }}
-                className="absolute top-8 right-8 p-2 bg-white/80 backdrop-blur-md border border-slate-100 rounded-xl shadow-sm hover:bg-white hover:shadow-md transition-all z-20 text-slate-400 hover:text-primary-600"
-                title="Toggle Purchase/Selling Value"
-              >
-                <RefreshCw size={14} className={stockValueDisplay === "sell" ? "rotate-180 transition-transform" : "transition-transform"} />
-              </button>
-            </div>
-            <MetricCard
-              title={t("dashboard.est_balance")}
-              subtitle={t("dashboard.stats.monthly_revenue")}
-              value={`₹${stats?.estimatedBalance?.toLocaleString() || 0}`}
-              icon={<Wallet size={24} />}
-              trend="Real-time"
-              color="emerald"
-            />
-            <MetricCard
               title={t("dashboard.staff_present")}
               subtitle={`${stats?.presentToday || 0}/${stats?.totalStaff || 0} active today`}
               value={(stats?.presentToday || 0).toString()}
@@ -794,6 +748,112 @@ const Dashboard = () => {
               trend={stats?.presentToday > 0 ? "Active" : "N/A"}
               color="slate"
             />
+            {user?.role !== 'staff' && (
+              <>
+                {canUseFeature(user?.planType || 'free', 'hasProfitAnalytics') ? (
+                  <MetricCard
+                    title={`${getFilterLabel()} ${t("dashboard.profit")}`}
+                    subtitle={t("dashboard.growth_analysis")}
+                    value={`₹${stats?.periodProfit?.toLocaleString() || 0}`}
+                    icon={<ArrowUpCircle size={24} />}
+                    trend={stats?.profitTrend}
+                    color="primary"
+                  />
+                ) : (
+                  <div className="relative group overflow-hidden rounded-[2.5rem] bg-slate-50 border border-slate-100 p-8 h-56 flex flex-col justify-center items-center text-center">
+                    <Lock size={32} className="text-slate-300 mb-4" />
+                    <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-1">Profit Analytics</h4>
+                    <p className="text-[10px] text-slate-400 font-bold mb-4">Available in Business Plan</p>
+                    <button onClick={() => navigate('/pricing')} className="px-4 py-2 bg-white text-[10px] font-black uppercase tracking-widest text-primary-600 rounded-xl shadow-sm hover:shadow-md transition-all">Upgrade</button>
+                  </div>
+                )}
+
+                {canUseFeature(user?.planType || 'free', 'hasExpenseTracking') ? (
+                  <MetricCard
+                    title={`${getFilterLabel()} ${t("dashboard.expenses")}`}
+                    subtitle={t("dashboard.budget_vs_spending")}
+                    value={`₹${stats?.periodExpenses?.toLocaleString() || 0}`}
+                    icon={<Receipt size={24} />}
+                    trend={stats?.expensesTrend}
+                    color="amber"
+                  />
+                ) : (
+                  <div className="relative group overflow-hidden rounded-[2.5rem] bg-slate-50 border border-slate-100 p-8 h-56 flex flex-col justify-center items-center text-center">
+                    <Lock size={32} className="text-slate-300 mb-4" />
+                    <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-1">Expense Tracking</h4>
+                    <p className="text-[10px] text-slate-400 font-bold mb-4">Available in Business Plan</p>
+                    <button onClick={() => navigate('/pricing')} className="px-4 py-2 bg-white text-[10px] font-black uppercase tracking-widest text-primary-600 rounded-xl shadow-sm hover:shadow-md transition-all">Upgrade</button>
+                  </div>
+                )}
+                
+                <MetricCard
+                  title={t("dashboard.to_collect")}
+                  subtitle={t("billing.receivable")}
+                  value={`₹${stats?.toCollect?.toLocaleString() || 0}`}
+                  icon={<Clock size={24} />}
+                  trend={t("billing.pending")}
+                  color="indigo"
+                />
+                <MetricCard
+                  title={t("dashboard.to_pay")}
+                  subtitle={t("billing.payable")}
+                  value={`₹${stats?.toPay?.toLocaleString() || 0}`}
+                  icon={<HandCoins size={24} />}
+                  trend={t("billing.pending")}
+                  color="indigo"
+                />
+                
+                {canUseFeature(user?.planType || 'free', 'hasProfitAnalytics') ? (
+                  <div className="relative group">
+                    <MetricCard
+                      title={t("dashboard.stock_value")}
+                      subtitle={`${stockValueDisplay === "purchase" ? "At Purchase Price" : "At Selling Price"}`}
+                      value={`₹${(stockValueDisplay === "purchase" ? stats?.stockValue : stats?.stockSellingValue)?.toLocaleString() || 0}`}
+                      icon={<Package size={24} />}
+                      trend={stats?.lowStockCount > 0 ? `${stats?.lowStockCount} items low` : t("dashboard.all_clear")}
+                      color="blue"
+                    />
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setStockValueDisplay(stockValueDisplay === "purchase" ? "sell" : "purchase");
+                      }}
+                      className="absolute top-8 right-8 p-2 bg-white/80 backdrop-blur-md border border-slate-100 rounded-xl shadow-sm hover:bg-white hover:shadow-md transition-all z-20 text-slate-400 hover:text-primary-600"
+                      title="Toggle Purchase/Selling Value"
+                    >
+                      <RefreshCw size={14} className={stockValueDisplay === "sell" ? "rotate-180 transition-transform" : "transition-transform"} />
+                    </button>
+                  </div>
+                ) : (
+                  <MetricCard
+                    title={t("dashboard.stock_value")}
+                    subtitle="At Purchase Price"
+                    value={`₹${stats?.stockValue?.toLocaleString() || 0}`}
+                    icon={<Package size={24} />}
+                    trend={stats?.lowStockCount > 0 ? `${stats?.lowStockCount} items low` : t("dashboard.all_clear")}
+                    color="blue"
+                  />
+                )}
+
+                {canUseFeature(user?.planType || 'free', 'hasProfitAnalytics') ? (
+                  <MetricCard
+                    title={t("dashboard.est_balance")}
+                    subtitle={t("dashboard.stats.monthly_revenue")}
+                    value={`₹${stats?.estimatedBalance?.toLocaleString() || 0}`}
+                    icon={<Wallet size={24} />}
+                    trend="Real-time"
+                    color="primary"
+                  />
+                ) : (
+                  <div className="relative group overflow-hidden rounded-[2.5rem] bg-slate-50 border border-slate-100 p-8 h-56 flex flex-col justify-center items-center text-center">
+                    <Lock size={32} className="text-slate-300 mb-4" />
+                    <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-1">Balance Analysis</h4>
+                    <p className="text-[10px] text-slate-400 font-bold mb-4">Available in Business Plan</p>
+                    <button onClick={() => navigate('/pricing')} className="px-4 py-2 bg-white text-[10px] font-black uppercase tracking-widest text-primary-600 rounded-xl shadow-sm hover:shadow-md transition-all">Upgrade</button>
+                  </div>
+                )}
+              </>
+            )}
             <MetricCard
               title={t("dashboard.system_alerts")}
               subtitle={`${alerts?.length || 0} items need attention`}

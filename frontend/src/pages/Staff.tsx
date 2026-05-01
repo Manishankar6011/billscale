@@ -8,6 +8,8 @@ import type { Staff } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { TableSkeleton } from '../components/Skeleton';
 import { useToast } from '../context/ToastContext';
+import UpgradePrompt from '../components/UpgradePrompt';
+import { canUseFeature } from '../utils/planLimits';
 
 const StaffPage = () => {
     const { t } = useTranslation();
@@ -111,6 +113,15 @@ const StaffPage = () => {
     );
 
     if (loading) return <TableSkeleton rows={10} />;
+
+    if (user?.planType === 'free') {
+        return (
+            <UpgradePrompt 
+                feature="Staff Management" 
+                description="Managing a team requires a Basic or Business plan. Add staff members, track their attendance, and automate payroll effortlessly." 
+            />
+        );
+    }
 
     return (
         <div className="space-y-6">

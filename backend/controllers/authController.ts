@@ -15,6 +15,7 @@ import SalaryPayment from '../models/SalaryPayment';
 import Sale from '../models/Sale';
 import Staff from '../models/Staff';
 import CustomerPayment from '../models/CustomerPayment';
+import { slugify } from '../utils/slugify';
 
 const generateToken = (id: string) => {
     return jwt.sign({ id }, process.env.JWT_SECRET as string, {
@@ -45,7 +46,8 @@ export const registerContractor = async (req: Request, res: Response, next: Next
             email,
             businessType: businessType || 'Retail',
             planType: 'free',
-            referredBy
+            referredBy,
+            slug: slugify(companyName)
         });
 
         const user = await User.create({
@@ -81,6 +83,24 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
         if (user && (await user.comparePassword(password))) {
             const populatedUser = await User.findById(user._id).select('-password').populate('tenantId');
             const token = generateToken(user._id.toString());
+            
+            // Auto-generate slug if missing (for legacy users)
+            if (populatedUser?.tenantId && !(populatedUser.tenantId as any).slug) {
+                const tenant = await Tenant.findById((populatedUser.tenantId as any)._id);
+                if (tenant) {
+                    tenant.slug = slugify(tenant.companyName);
+                    try {
+                        await tenant.save();
+                        (populatedUser.tenantId as any).slug = tenant.slug;
+                    } catch (e) {
+                        // If slug exists, add random suffix
+                        tenant.slug = `${tenant.slug}-${Math.floor(Math.random() * 1000)}`;
+                        await tenant.save();
+                        (populatedUser.tenantId as any).slug = tenant.slug;
+                    }
+                }
+            }
+
             res.json({
                 ...populatedUser?.toObject(),
                 token
@@ -106,7 +126,7 @@ export const getProfile = async (req: AuthRequest, res: Response, next: NextFunc
 };
 
 export const updateProfile = async (req: AuthRequest, res: Response, next: NextFunction) => {
-    const { name, companyName, address, phone, billingEmail, billingAddress, logoUrl, signature, upiId } = req.body;
+    const { name, companyName, address, phone, billingEmail, billingAddress, logoUrl, signature, upiId, slug } = req.body;
 
     try {
         const user = await User.findById(req.user?._id);
@@ -126,6 +146,7 @@ export const updateProfile = async (req: AuthRequest, res: Response, next: NextF
                 if (billingEmail !== undefined) tenant.billingEmail = billingEmail;
                 if (billingAddress !== undefined) tenant.billingAddress = billingAddress;
                 if (upiId !== undefined) tenant.upiId = upiId;
+                if (slug) tenant.slug = slugify(slug);
                 
                 // Handle Logo Update & Cleanup
                 if (logoUrl !== undefined && logoUrl !== tenant.logoUrl) {
@@ -311,6 +332,96 @@ export const deleteAccount = async (req: AuthRequest, res: Response, next: NextF
         await Tenant.findByIdAndDelete(tenantId);
 
         res.json({ message: 'Account and all associated data deleted successfully' });
+    } catch (error: any) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Create a new staff user account
+// @route   POST /api/auth/staff
+// @access  Private (Owner Only)
+export const createStaffUser = async (req: AuthRequest, res: Response) => {
+    const { name, email, password } = req.body;
+    const tenantId = req.tenantId;
+
+    try {
+        if (!name || !email || !password) {
+            return res.status(400).json({ message: 'Please provide name, email and password' });
+        }
+
+        const userExists = await User.findOne({ email });
+        if (userExists) {
+            return res.status(400).json({ message: 'User already exists with this email' });
+        }
+
+        // Plan-based Staff Account Limit
+        const tenant = await Tenant.findById(tenantId);
+        const plan = tenant?.planType || 'free';
+        const staffAccountsCount = await User.countDocuments({ tenantId, role: 'staff' });
+
+        if (plan === 'free' && staffAccountsCount >= 0) {
+            return res.status(403).json({ message: 'Free Plan limit reached! You can only manage 0 staff accounts. Please upgrade.' });
+        }
+        if (plan === 'basic' && staffAccountsCount >= 1) {
+            return res.status(403).json({ message: 'Basic Plan limit reached! You can only manage up to 1 staff account. Please upgrade.' });
+        }
+        if (plan === 'business' && staffAccountsCount >= 5) {
+            return res.status(403).json({ message: 'Business Plan limit reached! You can only manage up to 5 staff accounts.' });
+        }
+
+        const user = await User.create({
+            name,
+            email,
+            password,
+            role: 'staff',
+            tenantId
+        });
+
+        res.status(201).json({
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            tenantId: user.tenantId
+        });
+    } catch (error: any) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Get all staff users for a tenant
+// @route   GET /api/auth/staff
+// @access  Private (Owner/Accountant)
+export const getStaffUsers = async (req: AuthRequest, res: Response) => {
+    try {
+        const staffUsers = await User.find({ 
+            tenantId: req.tenantId, 
+            role: 'staff' 
+        }).select('-password');
+        
+        res.json(staffUsers);
+    } catch (error: any) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Delete a staff user account
+// @route   DELETE /api/auth/staff/:id
+// @access  Private (Owner Only)
+export const deleteStaffUser = async (req: AuthRequest, res: Response) => {
+    try {
+        const user = await User.findOne({ 
+            _id: req.params.id, 
+            tenantId: req.tenantId,
+            role: 'staff'
+        });
+
+        if (!user) {
+            return res.status(404).json({ message: 'Staff user not found' });
+        }
+
+        await User.deleteOne({ _id: user._id });
+        res.json({ message: 'Staff user deleted successfully' });
     } catch (error: any) {
         res.status(500).json({ message: error.message });
     }

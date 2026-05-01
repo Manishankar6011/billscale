@@ -26,12 +26,25 @@ import {
     Activity
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useAuth } from '../context/AuthContext';
+import { canUseFeature } from '../utils/planLimits';
+import UpgradePrompt from '../components/UpgradePrompt';
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const HOURS = Array.from({ length: 24 }, (_, i) => `${i}:00`);
 
 const Reports = () => {
+    const { user } = useAuth();
     const [days, setDays] = useState(30);
+
+    if (user?.planType === 'free') {
+        return (
+            <UpgradePrompt 
+                feature="Advanced Reports" 
+                description="Unlock deep business insights like traffic heatmaps, fastest-selling items, and peak hour analysis to grow your business faster." 
+            />
+        );
+    }
 
     const { data: fastestSelling, isLoading: loadingFastest } = useQuery({
         queryKey: ['fastest-selling', days],

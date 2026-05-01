@@ -49,6 +49,8 @@ import {
   Table as TableIcon,
 } from "lucide-react";
 import { format } from "date-fns";
+import { canUseFeature, PLAN_LIMITS } from "../utils/planLimits";
+import UpgradePrompt from "../components/UpgradePrompt";
 
 const UNIT_GROUPS = {
   weight: ["kg", "gm", "ton", "bag", "bundle", "pack"],
@@ -716,7 +718,7 @@ const Inventory = () => {
 
           <button
             onClick={() => {
-              if (user?.planType === "free" || user?.planType === "basic") {
+              if (!canUseFeature(user?.planType || 'free', 'hasAISmartAssistant')) {
                 showToast(
                   "Smart Library is only available in Business Pro plan.",
                   "error",
@@ -747,7 +749,16 @@ const Inventory = () => {
             <FileSpreadsheet size={18} /> {t("inventory.bulk_upload")}
           </button>
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              const plan = user?.planType || 'free';
+              const maxProducts = PLAN_LIMITS[plan].maxProducts;
+              if (totalItems >= maxProducts) {
+                showToast(`Your current plan is limited to ${maxProducts} products. Please upgrade for more.`, 'error');
+                navigate('/dashboard/pricing');
+                return;
+              }
+              setIsModalOpen(true);
+            }}
             className="btn-primary flex items-center gap-2"
           >
             <Plus size={20} />

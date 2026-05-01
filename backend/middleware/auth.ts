@@ -9,7 +9,7 @@ export interface AuthRequest extends Request {
     user?: IUser;
     tenantId?: string;
     subscriptionStatus?: string;
-    planType?: 'free' | 'basic' | 'business' | 'premium';
+    planType?: 'free' | 'basic' | 'business';
     companyName?: string;
 }
 

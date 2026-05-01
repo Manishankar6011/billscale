@@ -3,16 +3,19 @@ import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
-import { NavLink } from 'react-router-dom';
-import { User, Building2, Phone, MapPin, Save, ShieldCheck, Crown, ArrowRight, Upload, Image, Mail, Pen, X, AlertCircle, Loader2, MessageSquare, Bug, Lightbulb, Trash2, AlertTriangle } from 'lucide-react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { User, Building2, Phone, MapPin, Save, ShieldCheck, Crown, ArrowRight, Upload, Image, Mail, Pen, X, AlertCircle, Loader2, MessageSquare, Bug, Lightbulb, Trash2, AlertTriangle, Users, Plus, Link, ExternalLink, Globe } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { canUseFeature } from '../utils/planLimits';
+import { Lock } from 'lucide-react';
 
 const Settings = () => {
     const { t, i18n } = useTranslation();
     const { user, setUser, logout } = useAuth();
     const { showToast } = useToast();
     const queryClient = useQueryClient();
+    const navigate = useNavigate();
 
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
@@ -36,11 +39,26 @@ const Settings = () => {
         billingAddress: '',
         logoUrl: '',
         signature: '',
-        upiId: ''
+        upiId: '',
+        slug: ''
     });
 
     const logoInputRef = useRef<HTMLInputElement>(null);
     const sigInputRef = useRef<HTMLInputElement>(null);
+    
+    // Staff Management State
+    const [showStaffModal, setShowStaffModal] = useState(false);
+    const [staffFormData, setStaffFormData] = useState({ name: '', email: '', password: '' });
+    const [creatingStaff, setCreatingStaff] = useState(false);
+
+    const { data: staffUsers = [], refetch: refetchStaff } = useQuery({
+        queryKey: ['staff-users'],
+        queryFn: async () => {
+            const res = await axios.get('/api/auth/staff');
+            return res.data;
+        },
+        enabled: user?.role === 'owner'
+    });
 
     useEffect(() => {
         if (profile) {
@@ -54,6 +72,7 @@ const Settings = () => {
                 logoUrl: profile.tenantId?.logoUrl || '',
                 signature: profile.tenantId?.signature || '',
                 upiId: profile.tenantId?.upiId || '',
+                slug: profile.tenantId?.slug || '',
             });
         }
     }, [profile]);
@@ -133,6 +152,33 @@ const Settings = () => {
 
     const handleDeleteAccount = () => {
         deleteMutation.mutate();
+    };
+
+    const handleCreateStaff = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setCreatingStaff(true);
+        try {
+            await axios.post('/api/auth/staff', staffFormData);
+            showToast('Staff account created successfully', 'success');
+            setStaffFormData({ name: '', email: '', password: '' });
+            setShowStaffModal(false);
+            refetchStaff();
+        } catch (err: any) {
+            showToast(err.response?.data?.message || 'Failed to create staff account', 'error');
+        } finally {
+            setCreatingStaff(false);
+        }
+    };
+
+    const handleDeleteStaff = async (id: string) => {
+        if (!window.confirm('Are you sure you want to delete this staff account?')) return;
+        try {
+            await axios.delete(`/api/auth/staff/${id}`);
+            showToast('Staff account deleted successfully', 'success');
+            refetchStaff();
+        } catch (err: any) {
+            showToast(err.response?.data?.message || 'Failed to delete staff account', 'error');
+        }
     };
 
     if (loading) return (
@@ -420,6 +466,176 @@ const Settings = () => {
                 </div>
             </form>
 
+            {/* Staff Management Card */}
+            {user?.role === 'owner' && (
+                <div className="card p-10 bg-white shadow-2xl shadow-slate-200 border-none rounded-[2.5rem] relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-8 text-slate-50 opacity-10 group-hover:scale-110 transition-transform">
+                        <Users size={120} />
+                    </div>
+                    <div className="relative z-10">
+                        <div className="flex items-center justify-between mb-8">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 bg-primary-600 rounded-2xl flex items-center justify-center text-white shadow-lg">
+                                    <Users size={24} />
+                                </div>
+                                <h2 className="text-xl font-black text-slate-800 tracking-tight uppercase">Staff Logins</h2>
+                            </div>
+                            <button 
+                                onClick={() => {
+                                    const currentCount = staffUsers.length;
+                                    const plan = user?.planType || 'free';
+
+                                    if (plan === 'free') {
+                                        showToast('Staff Login accounts are only available in Basic & Business plans.', 'info');
+                                        navigate('/dashboard/pricing');
+                                        return;
+                                    }
+
+                                    if (plan === 'basic' && currentCount >= 1) {
+                                        showToast('Basic Plan is limited to 1 staff login account. Upgrade to Business for more.', 'info');
+                                        navigate('/dashboard/pricing');
+                                        return;
+                                    }
+
+                                    if (plan === 'business' && currentCount >= 5) {
+                                        showToast('Business Pro Plan is limited to 5 staff login accounts.', 'info');
+                                        return;
+                                    }
+
+                                    setShowStaffModal(true);
+                                }}
+                                className="px-5 py-2.5 bg-primary-600 text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-primary-700 transition-all flex items-center gap-2 shadow-lg shadow-primary-100"
+                            >
+                                <Plus size={16} /> Add Staff Account
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {staffUsers.length === 0 ? (
+                                <div className="col-span-2 py-10 text-center bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                                    <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">No staff login accounts created yet</p>
+                                </div>
+                            ) : (
+                                staffUsers.map((s: any) => (
+                                    <div key={s._id} className="p-5 bg-slate-50 rounded-2xl flex items-center justify-between group/item hover:bg-slate-100 transition-all border border-transparent hover:border-slate-200">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-primary-600 font-black shadow-sm">
+                                                {s.name.charAt(0).toUpperCase()}
+                                            </div>
+                                            <div>
+                                                <p className="font-black text-slate-800 uppercase tracking-tight">{s.name}</p>
+                                                <p className="text-[10px] text-slate-400 font-bold tracking-widest">{s.email}</p>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            onClick={() => handleDeleteStaff(s._id)}
+                                            className="p-2 text-slate-300 hover:text-rose-500 transition-colors"
+                                            title="Delete Account"
+                                        >
+                                            <Trash2 size={18} />
+                                        </button>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                        <p className="mt-6 text-[10px] text-slate-400 font-bold flex items-center gap-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            <AlertCircle size={14} className="text-primary-500" />
+                            Staff accounts can create bills but cannot see Profit, Reports, or Settings.
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {/* Digital Catalog Section */}
+            {user?.role === 'owner' && (
+                <div className="card p-10 bg-white shadow-2xl shadow-emerald-100/50 border border-emerald-100 rounded-[2.5rem] relative overflow-hidden group mb-8">
+                    {!canUseFeature(user?.planType || 'free', 'hasDigitalCatalog') && (
+                        <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-20 flex flex-col items-center justify-center text-center p-6">
+                            <div className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center text-emerald-600 mb-4 shadow-sm">
+                                <Lock size={32} />
+                            </div>
+                            <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase mb-2">Digital Catalog Locked</h3>
+                            <p className="text-slate-500 text-sm font-medium max-w-xs mb-6">
+                                Launch your online shop and take orders on WhatsApp with our Basic & Business plans.
+                            </p>
+                            <button 
+                                onClick={() => navigate('/pricing')}
+                                className="px-8 py-3 bg-emerald-600 text-white rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition-all flex items-center gap-2"
+                            >
+                                Upgrade Now <ArrowRight size={14} />
+                            </button>
+                        </div>
+                    )}
+                    <div className="absolute top-0 right-0 p-8 text-emerald-50 opacity-50 group-hover:scale-110 transition-transform -z-0">
+                        <Globe size={120} />
+                    </div>
+                    <div className="relative z-10">
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="w-12 h-12 bg-emerald-100 rounded-2xl flex items-center justify-center text-emerald-600 shadow-sm">
+                                <Globe size={24} />
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-black text-slate-800 tracking-tight uppercase">Digital Catalog</h2>
+                                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Share your products with the world</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-6 max-w-2xl">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Your Shop URL Slug</label>
+                                <div className="flex items-center gap-2">
+                                    <div className="bg-slate-100 px-4 py-3 rounded-2xl text-slate-500 font-bold text-sm border border-slate-200">
+                                        buildmate.com/catalog/
+                                    </div>
+                                    <input 
+                                        type="text"
+                                        className="flex-grow bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500 transition-all"
+                                        placeholder="your-shop-name"
+                                        value={formData.slug}
+                                        onChange={(e) => setFormData({ ...formData, slug: e.target.value.toLowerCase().replace(/\s+/g, '-') })}
+                                    />
+                                </div>
+                                <p className="text-[10px] text-slate-400 font-medium ml-1">This will be your public shop link. Use letters, numbers, and dashes only.</p>
+                            </div>
+
+                            <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+                                <div className="flex items-center gap-4">
+                                    <div className="p-3 bg-white rounded-xl shadow-sm text-primary-600">
+                                        <Link size={20} />
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Your Public Link</p>
+                                        <p className="text-sm font-bold text-slate-700 truncate max-w-[200px] sm:max-w-md">
+                                            {window.location.origin}/catalog/{formData.slug || 'your-slug'}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2 w-full sm:w-auto">
+                                    <button 
+                                        type="button"
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(`${window.location.origin}/catalog/${formData.slug}`);
+                                            showToast('Link copied to clipboard!', 'success');
+                                        }}
+                                        className="flex-grow sm:flex-grow-0 px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-700 rounded-xl font-bold text-xs border border-slate-200 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        Copy Link
+                                    </button>
+                                    <a 
+                                        href={`/catalog/${formData.slug}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="flex-grow sm:flex-grow-0 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-emerald-100 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        Visit Shop <ExternalLink size={14} />
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Danger Zone */}
             {user?.role === 'owner' && (
                 <div className="card p-10 bg-white shadow-2xl shadow-rose-100/50 border border-rose-100 rounded-[2.5rem] relative overflow-hidden group">
@@ -478,6 +694,67 @@ const Settings = () => {
                                 Cancel
                             </button>
                         </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* Create Staff Modal */}
+            {showStaffModal && createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-[2rem] p-8 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-200">
+                        <div className="flex items-center justify-between mb-8">
+                            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Create Staff Login</h3>
+                            <button onClick={() => setShowStaffModal(false)} className="p-2 text-slate-400 hover:bg-slate-50 rounded-xl transition-all">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleCreateStaff} className="space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Staff Name</label>
+                                <input 
+                                    type="text" 
+                                    required 
+                                    className="input py-4 font-bold bg-slate-50 border-none rounded-2xl" 
+                                    placeholder="Full Name"
+                                    value={staffFormData.name}
+                                    onChange={(e) => setStaffFormData({...staffFormData, name: e.target.value})}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Email Address</label>
+                                <input 
+                                    type="email" 
+                                    required 
+                                    className="input py-4 font-bold bg-slate-50 border-none rounded-2xl" 
+                                    placeholder="staff@buildmate.com"
+                                    value={staffFormData.email}
+                                    onChange={(e) => setStaffFormData({...staffFormData, email: e.target.value})}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Password</label>
+                                <input 
+                                    type="password" 
+                                    required 
+                                    minLength={6}
+                                    className="input py-4 font-bold bg-slate-50 border-none rounded-2xl" 
+                                    placeholder="Create password"
+                                    value={staffFormData.password}
+                                    onChange={(e) => setStaffFormData({...staffFormData, password: e.target.value})}
+                                />
+                            </div>
+                            <div className="pt-4">
+                                <button
+                                    type="submit"
+                                    disabled={creatingStaff}
+                                    className="w-full py-4 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl font-black uppercase tracking-widest text-xs transition-all shadow-lg shadow-primary-100 flex items-center justify-center gap-2"
+                                >
+                                    {creatingStaff ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                                    {creatingStaff ? 'Creating...' : 'Create Account'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>,
                 document.body

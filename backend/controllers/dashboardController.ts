@@ -365,7 +365,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
       (totalPaidPurchasesAgg[0]?.total || 0) -
       (totalSalariesAgg[0]?.total || 0);
 
-    res.status(200).json({
+    const responseData: any = {
       stats: {
         periodSales,
         periodProfit,
@@ -410,7 +410,25 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
         message: `${p.name} is low on stock (${p.stock} remaining)`,
         severity: "high",
       })),
-    });
+    };
+
+    if (req.user?.role === "staff") {
+      // Hide sensitive data for staff
+      responseData.stats.periodSales = 0;
+      responseData.stats.periodProfit = 0;
+      responseData.stats.periodExpenses = 0;
+      responseData.stats.salesTrend = "0%";
+      responseData.stats.profitTrend = "0%";
+      responseData.stats.expensesTrend = "0%";
+      responseData.stats.toCollect = 0;
+      responseData.stats.toPay = 0;
+      responseData.stats.stockValue = 0;
+      responseData.stats.stockSellingValue = 0;
+      responseData.stats.estimatedBalance = 0;
+      responseData.chartData = responseData.chartData.map((d: any) => ({ ...d, revenue: 0, profit: 0, expenses: 0 }));
+    }
+
+    res.status(200).json(responseData);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }

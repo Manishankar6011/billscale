@@ -18,13 +18,25 @@ export const addStaff = async (req: AuthRequest, res: Response) => {
     try {
         // Subscription Constraint Check
         const tenant = await Tenant.findById(req.tenantId);
-        if (tenant?.planType === 'free') {
-            const staffCount = await Staff.countDocuments({ tenantId: req.tenantId });
-            if (staffCount >= 3) {
-                return res.status(403).json({
-                    message: 'Free Plan limit reached! You can only manage up to 3 staff members. Please upgrade to the Business Plan to add more.'
-                });
-            }
+        const plan = tenant?.planType || 'free';
+        const staffCount = await Staff.countDocuments({ tenantId: req.tenantId });
+
+        if (plan === 'free' && staffCount >= 0) {
+            return res.status(403).json({
+                message: 'Free Plan limit reached! You can only manage 0 staff members. Please upgrade to the Basic or Business Plan.'
+            });
+        }
+        
+        if (plan === 'basic' && staffCount >= 1) {
+            return res.status(403).json({
+                message: 'Basic Plan limit reached! You can only manage up to 1 staff member. Please upgrade to the Business Plan.'
+            });
+        }
+
+        if (plan === 'business' && staffCount >= 5) {
+            return res.status(403).json({
+                message: 'Business Plan limit reached! You can only manage up to 5 staff members.'
+            });
         }
 
         const staff = new Staff({

@@ -10,6 +10,7 @@ import {
   useInfiniteQuery,
   useMutation,
   useQueryClient,
+  useQuery,
 } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
@@ -61,6 +62,8 @@ import { generateInvoice } from "../utils/invoiceGenerator";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
+import { canUseFeature, PLAN_LIMITS } from "../utils/planLimits";
+import UpgradePrompt from "../components/UpgradePrompt";
 
 const UNIT_GROUPS: Record<string, string[]> = {
   weight: ["kg", "gm", "ton", "bag", "bundle", "pack"],
@@ -286,6 +289,25 @@ const Sales = () => {
       }
     );
   }, [salesData]);
+
+  // Specific query for monthly count (to enforce limits)
+  const { data: monthlyCountData } = useQuery({
+    queryKey: ['monthly-sales-count'],
+    queryFn: async () => {
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+      const res = await axios.get('/api/transactions/sales', {
+        params: {
+          startDate: startOfMonth.toISOString().split('T')[0],
+          limit: 1
+        },
+        headers: { Authorization: `Bearer ${user?.token}` }
+      });
+      return res.data.pagination.totalCount;
+    },
+    enabled: !!user?.token && user?.planType === 'free'
+  });
 
   // Infinite Query for Inventory
   const {
@@ -666,6 +688,20 @@ const Sales = () => {
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (isSubmittingRef.current) return;
+    
+    // Plan Limit Check
+    const plan = user?.planType || 'free';
+    const limit = PLAN_LIMITS[plan].maxBillsPerMonth;
+    
+    if (limit !== Infinity && !selectedSaleForEdit) {
+        const currentMonthSales = monthlyCountData || 0;
+        if (currentMonthSales >= limit) {
+            showToast(`Monthly limit reached (${limit} bills). Please upgrade for unlimited billing.`, 'error');
+            navigate('/dashboard/pricing');
+            return;
+        }
+    }
+
     if (cart.length === 0) {
       showToast("Add at least one item to cart", "error");
       return;
@@ -1252,100 +1288,102 @@ const Sales = () => {
           </div>
         </div>
 
-        <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-3xl p-5 flex flex-col lg:flex-row items-center justify-between gap-6 text-white shadow-xl group relative overflow-visible">
-          <div className="flex flex-col sm:flex-row items-center gap-6 w-full lg:w-auto">
-            <div className="flex items-center gap-4 w-full sm:w-auto">
-              <div className="p-3 bg-white/10 rounded-2xl flex-shrink-0">
-                <TrendingUp size={24} />
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2 mb-1">
-                  {t("billing.net_profit")}
-                  <button
-                    onClick={() => setShowProfit(!showProfit)}
-                    className="p-1 hover:bg-white/10 rounded-lg transition-colors text-slate-400 hover:text-white"
+        {user?.role !== 'staff' && (
+          <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-3xl p-5 flex flex-col lg:flex-row items-center justify-between gap-6 text-white shadow-xl group relative overflow-visible">
+            <div className="flex flex-col sm:flex-row items-center gap-6 w-full lg:w-auto">
+              <div className="flex items-center gap-4 w-full sm:w-auto">
+                <div className="p-3 bg-white/10 rounded-2xl flex-shrink-0">
+                  <TrendingUp size={24} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2 mb-1">
+                    {t("billing.net_profit")}
+                    <button
+                      onClick={() => setShowProfit(!showProfit)}
+                      className="p-1 hover:bg-white/10 rounded-lg transition-colors text-slate-400 hover:text-white"
+                    >
+                      {showProfit ? <EyeOff size={12} /> : <Eye size={12} />}
+                    </button>
+                  </p>
+                  <p
+                    className={`text-2xl font-black tracking-tight transition-all duration-300 ${showProfit ? (totalNetProfit >= 0 ? "text-emerald-400" : "text-rose-400") : "text-slate-600 blur-sm select-none"}`}
                   >
-                    {showProfit ? <EyeOff size={12} /> : <Eye size={12} />}
+                    {showProfit ? (
+                      <>
+                        {totalNetProfit >= 0 ? "+" : ""}₹
+                        {Math.abs(totalNetProfit).toLocaleString()}
+                      </>
+                    ) : (
+                      "₹ *****"
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <button
+                    onClick={() => setShowProfitRangeMenu(!showProfitRangeMenu)}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border border-white/5"
+                  >
+                    <Filter size={14} />
+                    {timeRange === "all" ? "All Time" : timeRange === "custom" ? "Custom Range" : t(`dashboard.${timeRange}`)}
                   </button>
+                  {showProfitRangeMenu && (
+                    <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 p-2 animate-in slide-in-from-top-2 duration-200 text-slate-800">
+                      {["today", "yesterday", "week", "month", "all", "custom"].map((range) => (
+                        <button
+                          key={range}
+                          onClick={() => {
+                            handleRangeSelect(range);
+                            setShowProfitRangeMenu(false);
+                          }}
+                          className={`w-full text-left px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                            timeRange === range
+                              ? "bg-primary-50 text-primary-600"
+                              : "text-slate-600 hover:bg-slate-50"
+                          }`}
+                        >
+                          {range === "all" ? "All Time" : range === "custom" ? "Custom Range" : t(`dashboard.${range}`)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-8 text-right w-full lg:w-auto justify-between lg:justify-end border-t lg:border-t-0 border-white/10 pt-4 lg:pt-0">
+              <div>
+                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">
+                  {t("billing.margin")}
                 </p>
                 <p
-                  className={`text-2xl font-black tracking-tight transition-all duration-300 ${showProfit ? (totalNetProfit >= 0 ? "text-emerald-400" : "text-rose-400") : "text-slate-600 blur-sm select-none"}`}
+                  className={`text-xl font-black transition-all duration-300 ${showProfit ? "text-white" : "text-slate-600 blur-sm select-none"}`}
                 >
                   {showProfit ? (
                     <>
-                      {totalNetProfit >= 0 ? "+" : ""}₹
-                      {Math.abs(totalNetProfit).toLocaleString()}
+                      {totalSales > 0
+                        ? ((totalNetProfit / totalSales) * 100).toFixed(1)
+                        : 0}
+                      %
                     </>
                   ) : (
-                    "₹ *****"
+                    "**%"
                   )}
                 </p>
               </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <button
-                  onClick={() => setShowProfitRangeMenu(!showProfitRangeMenu)}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border border-white/5"
-                >
-                  <Filter size={14} />
-                  {timeRange === "all" ? "All Time" : timeRange === "custom" ? "Custom Range" : t(`dashboard.${timeRange}`)}
-                </button>
-                {showProfitRangeMenu && (
-                  <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 p-2 animate-in slide-in-from-top-2 duration-200 text-slate-800">
-                    {["today", "yesterday", "week", "month", "all", "custom"].map((range) => (
-                      <button
-                        key={range}
-                        onClick={() => {
-                          handleRangeSelect(range);
-                          setShowProfitRangeMenu(false);
-                        }}
-                        className={`w-full text-left px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                          timeRange === range
-                            ? "bg-primary-50 text-primary-600"
-                            : "text-slate-600 hover:bg-slate-50"
-                        }`}
-                      >
-                        {range === "all" ? "All Time" : range === "custom" ? "Custom Range" : t(`dashboard.${range}`)}
-                      </button>
-                    ))}
-                  </div>
-                )}
+              <div>
+                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">
+                  {t("billing.invoices")}
+                </p>
+                <p className="text-xl font-black text-white">
+                  {salesData?.pages[0]?.pagination.totalCount || 0}
+                </p>
               </div>
             </div>
           </div>
-
-          <div className="flex items-center gap-8 text-right w-full lg:w-auto justify-between lg:justify-end border-t lg:border-t-0 border-white/10 pt-4 lg:pt-0">
-            <div>
-              <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">
-                {t("billing.margin")}
-              </p>
-              <p
-                className={`text-xl font-black transition-all duration-300 ${showProfit ? "text-white" : "text-slate-600 blur-sm select-none"}`}
-              >
-                {showProfit ? (
-                  <>
-                    {totalSales > 0
-                      ? ((totalNetProfit / totalSales) * 100).toFixed(1)
-                      : 0}
-                    %
-                  </>
-                ) : (
-                  "**%"
-                )}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">
-                {t("billing.invoices")}
-              </p>
-              <p className="text-xl font-black text-white">
-                {salesData?.pages[0]?.pagination.totalCount || 0}
-              </p>
-            </div>
-          </div>
-        </div>
+        )}
 
         {/* Sales Table */}
         <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
@@ -1371,17 +1409,24 @@ const Sales = () => {
                   <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
                     {t("billing.balance_due")}
                   </th>
-                  <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
-                    {t("billing.cost_price")}
-                  </th>
-                  <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
-                    {t("billing.profit")}
-                  </th>
-                  <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
-                    {t("billing.margin_perc")}
-                  </th>
+                  {user?.role !== 'staff' && (
+                    <>
+                      <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
+                        {t("billing.cost_price")}
+                      </th>
+                      <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
+                        {t("billing.profit")}
+                      </th>
+                      <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
+                        {t("billing.margin_perc")}
+                      </th>
+                    </>
+                  )}
                   <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
                     {t("common.items")}
+                  </th>
+                  <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
+                    Billed By
                   </th>
                   <th className="px-6 py-4 text-right pr-10 text-xs font-black uppercase text-slate-400 tracking-widest">
                     {t("common.actions")}
@@ -1489,40 +1534,44 @@ const Sales = () => {
                           Dues
                         </p>
                       </td>
-                      <td className="px-6 py-4">
-                        <p className="font-bold text-slate-600">
-                          ₹{(totalCost || 0).toLocaleString()}
-                        </p>
-                        <p className="text-[10px] text-slate-400 font-medium">
-                          Cost Price
-                        </p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div
-                          className={`flex items-center gap-1 font-black ${profit >= 0 ? "text-emerald-600" : "text-rose-600"}`}
-                        >
-                          {profit >= 0 ? (
-                            <TrendingUp size={14} />
-                          ) : (
-                            <TrendingDown size={14} />
-                          )}
-                          {profit >= 0 ? "+" : ""}₹
-                          {Math.abs(profit).toLocaleString()}
-                        </div>
-                        <p className="text-[10px] text-slate-400 font-medium">
-                          {t("billing.net_profit")}
-                        </p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p
-                          className={`font-black uppercase tracking-widest text-xs ${profit >= 0 ? "text-emerald-500" : "text-rose-500"}`}
-                        >
-                          {profitPerc.toFixed(1)}%
-                        </p>
-                        <p className="text-[10px] text-slate-400 font-medium">
-                          {t("billing.margin")}
-                        </p>
-                      </td>
+                      {user?.role !== 'staff' && (
+                        <>
+                          <td className="px-6 py-4">
+                            <p className="font-bold text-slate-600">
+                              ₹{(totalCost || 0).toLocaleString()}
+                            </p>
+                            <p className="text-[10px] text-slate-400 font-medium">
+                              Cost Price
+                            </p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div
+                              className={`flex items-center gap-1 font-black ${profit >= 0 ? "text-emerald-600" : "text-rose-600"}`}
+                            >
+                              {profit >= 0 ? (
+                                <TrendingUp size={14} />
+                              ) : (
+                                <TrendingDown size={14} />
+                              )}
+                              {profit >= 0 ? "+" : ""}₹
+                              {Math.abs(profit).toLocaleString()}
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-medium">
+                              {t("billing.net_profit")}
+                            </p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p
+                              className={`font-black uppercase tracking-widest text-xs ${profit >= 0 ? "text-emerald-500" : "text-rose-500"}`}
+                            >
+                              {profitPerc.toFixed(1)}%
+                            </p>
+                            <p className="text-[10px] text-slate-400 font-medium">
+                              {t("billing.margin")}
+                            </p>
+                          </td>
+                        </>
+                      )}
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 border border-slate-100">
@@ -1533,6 +1582,14 @@ const Sales = () => {
                               (sale.additionalItems?.length || 0)}
                           </p>
                         </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="font-bold text-slate-600">
+                          {typeof sale.createdBy === 'object' ? (sale.createdBy as any).name : 'Owner'}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-medium uppercase tracking-widest">
+                          Staff Member
+                        </p>
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
