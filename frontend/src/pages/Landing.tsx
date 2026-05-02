@@ -17,6 +17,7 @@ import {
   LineChart,
   BookOpen,
   Globe,
+  ShieldCheck,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { clsx, type ClassValue } from "clsx";
@@ -59,18 +60,25 @@ const Landing = () => {
       bg: "bg-primary-50",
     },
     {
-      icon: Users,
-      title: t("landing.staff_attendance"),
-      description: t("landing.staff_desc"),
+      icon: Globe,
+      title: t("landing.digital_catalog"),
+      description: t("landing.digital_catalog_desc"),
       color: "text-emerald-600",
       bg: "bg-emerald-50",
+    },
+    {
+      icon: ShieldCheck,
+      title: t("landing.staff_rbac"),
+      description: t("landing.staff_rbac_desc"),
+      color: "text-indigo-600",
+      bg: "bg-indigo-50",
     },
     {
       icon: BookOpen,
       title: t("landing.customer_ledger"),
       description: t("landing.customer_ledger_desc"),
-      color: "text-indigo-600",
-      bg: "bg-indigo-50",
+      color: "text-sky-600",
+      bg: "bg-sky-50",
     },
     {
       icon: LineChart,
@@ -78,13 +86,6 @@ const Landing = () => {
       description: t("landing.analytics_reports_desc"),
       color: "text-rose-600",
       bg: "bg-rose-50",
-    },
-    {
-      icon: Globe,
-      title: t("landing.offline_pwa"),
-      description: t("landing.offline_pwa_desc"),
-      color: "text-sky-600",
-      bg: "bg-sky-50",
     },
   ];
 
@@ -240,14 +241,16 @@ const Landing = () => {
               <a href="#how-it-works" onClick={() => setIsMenuOpen(false)}>
                 {t("landing.how_it_works")}
               </a>
-              <button
-                onClick={() => {
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
                   navigate("/pricing");
                   setIsMenuOpen(false);
                 }}
               >
                 {t("landing.pricing")}
-              </button>
+              </a>
               
               {/* Mobile Language Switcher */}
               <div className="flex items-center gap-4 pt-4 border-t border-slate-100">

@@ -29,8 +29,9 @@ const PLANS = [
             '50 Bills per Month',
             'Up to 100 Products',
             'WhatsApp Sharing',
+            'Customer Ledger (Udhaar)',
             'Single User Only',
-            'AI Assistant (5 Trial Questions)'
+            'Basic Inventory'
         ]
     },
     {
@@ -49,10 +50,10 @@ const PLANS = [
         features: [
             'Unlimited Bills & Products',
             'WhatsApp & Printing',
-            'Basic GST Reports',
-            'Single User Only',
-            'Email Receipts',
-            'AI Assistant (5 Trial Questions)'
+            'Digital Catalog (Basic)',
+            '1 Staff Account',
+            'Low Stock Alerts',
+            'Basic GST Reports'
         ]
     },
     {
@@ -71,11 +72,11 @@ const PLANS = [
         popular: true,
         features: [
             'Everything in Basic',
-            'Bulk Inventory Upload',
+            'Digital Catalog (Advanced)',
             'Staff Management (5 Staff)',
-            'Advanced Analytics',
+            'Daily Profit/Loss Analytics',
             'Expense Tracking',
-            'Unlimited AI Assistant',
+            'AI Smart Assistant',
             'Priority Support'
         ]
     }
@@ -87,6 +88,7 @@ const Pricing = () => {
     const navigate = useNavigate();
     const [isYearly, setIsYearly] = useState(true);
     const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+    const [selectedPlan, setSelectedPlan] = useState(PLANS[1]);
 
     const loadRazorpayScript = () => {
         return new Promise((resolve) => {
@@ -135,8 +137,8 @@ const Pricing = () => {
                 currency: order.currency,
                 name: 'BuildMate ERP',
                 description: isYearly 
-                    ? `${plan.name} - Annual Membership (₹${plan.prices.yearly}/mo x 12)` 
-                    : `${plan.name} - Monthly Subscription (₹${plan.prices.monthly}/mo)`,
+                    ? `${plan.name} Plan - Annual Membership (Breakdown: ₹${plan.prices.yearly}/mo x 12 Months)` 
+                    : `${plan.name} Plan - Monthly Subscription (Breakdown: ₹${plan.prices.monthly}/mo x 1 Month)`,
                 image: '/logo.png',
                 order_id: order.id,
                 handler: async (response: any) => {
@@ -218,24 +220,40 @@ const Pricing = () => {
                     </div>
 
                     {/* Dynamic Order Summary */}
-                    <div className="bg-white/80 backdrop-blur-md border border-slate-200 rounded-2xl px-8 py-4 shadow-sm flex items-center gap-8 group animate-in fade-in slide-in-from-top-4 duration-500">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-primary-50 text-primary-600 rounded-xl flex items-center justify-center">
-                                <CreditCard size={20} />
+                    <div className="bg-white/80 backdrop-blur-md border border-slate-200 rounded-3xl p-6 shadow-xl flex flex-col md:flex-row items-center gap-8 group animate-in fade-in slide-in-from-top-4 duration-500 max-w-3xl w-full">
+                        <div className="flex items-center gap-4 border-r border-slate-100 pr-8">
+                            <div className="w-12 h-12 bg-primary-50 text-primary-600 rounded-2xl flex items-center justify-center">
+                                {selectedPlan?.icon}
                             </div>
                             <div className="text-left">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 leading-none mb-1">Payment Detail</p>
-                                <p className="text-sm font-bold text-slate-700">
-                                    {isYearly ? 'Annual Membership' : 'Monthly Subscription'}
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 leading-none mb-1">Selected Plan</p>
+                                <p className="text-sm font-black text-slate-700">
+                                    {selectedPlan?.name} ({isYearly ? 'Annual' : 'Monthly'})
                                 </p>
                             </div>
                         </div>
-                        <div className="h-10 w-px bg-slate-200" />
-                        <div className="text-left">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 leading-none mb-1">Total Billable</p>
-                            <p className="text-sm font-black text-primary-600">
-                                {isYearly ? '₹1,668 (Basic) / ₹3,588 (Pro)' : '₹179 (Basic) / ₹399 (Pro)'}
-                            </p>
+
+                        <div className="flex-grow grid grid-cols-2 gap-8">
+                            <div className="text-left">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 leading-none mb-1">Calculation</p>
+                                <div className="space-y-1">
+                                    <p className="text-xs font-bold text-slate-600">
+                                        ₹{isYearly ? selectedPlan?.prices.yearly : selectedPlan?.prices.monthly} x {isYearly ? '12 Months' : '1 Month'}
+                                    </p>
+                                    {isYearly && selectedPlan?.id !== 'free' && (
+                                        <p className="text-[10px] font-black text-emerald-500 uppercase tracking-tight">
+                                            Savings: ₹{((selectedPlan?.prices.monthly || 0) - (selectedPlan?.prices.yearly || 0)) * 12} / year
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 leading-none mb-1">Total Payable</p>
+                                <p className="text-2xl font-black text-primary-600 tracking-tighter">
+                                    ₹{isYearly ? selectedPlan?.amounts.yearly.toLocaleString() : selectedPlan?.amounts.monthly.toLocaleString()}
+                                </p>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">+ 0% GST (Introductory)</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -245,7 +263,8 @@ const Pricing = () => {
                 {PLANS.map((plan) => (
                     <div 
                         key={plan.id}
-                        className={`relative bg-white rounded-[3rem] p-10 shadow-xl border-2 transition-all duration-300 hover:scale-[1.02] ${plan.popular ? 'border-primary-500 shadow-primary-100' : 'border-slate-100'}`}
+                        onMouseEnter={() => setSelectedPlan(plan)}
+                        className={`relative bg-white rounded-[3rem] p-10 shadow-xl border-2 transition-all duration-300 hover:scale-[1.02] cursor-pointer ${plan.popular ? 'border-primary-500 shadow-primary-100' : 'border-slate-100'} ${selectedPlan?.id === plan.id ? 'ring-4 ring-primary-100 border-primary-400' : ''}`}
                     >
                         {plan.popular && (
                             <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-primary-600 text-white px-6 py-2 rounded-full text-xs font-black uppercase tracking-widest shadow-lg">
@@ -331,5 +350,6 @@ const Pricing = () => {
         </div>
     );
 };
+
 
 export default Pricing;

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useQuery } from '@tanstack/react-query';
+import { useQuery } from "@tanstack/react-query";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -12,6 +12,7 @@ import {
   Bar,
 } from "recharts";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import {
   TrendingUp,
   Package,
@@ -34,12 +35,16 @@ import {
   Receipt,
   ArrowUpCircle,
   Search,
+  Lock,
 } from "lucide-react";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
 import { DashboardSkeleton } from "../components/Skeleton";
 import { useToast } from "../context/ToastContext";
 import { format } from "date-fns";
+import { canUseFeature } from "../utils/planLimits";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const MetricCard = ({ title, subtitle, value, icon, trend, color }: any) => {
   const colorMap: any = {
@@ -165,9 +170,16 @@ const CustomTooltip = ({ active, payload, label, timeRange }: any) => {
     const d = new Date(label.replace(" ", "T"));
     let labelText = "";
     if (timeRange === "today" || timeRange === "yesterday") {
-      labelText = d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+      labelText = d.toLocaleTimeString("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
     } else {
-      labelText = d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+      labelText = d.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
     }
 
     return (
@@ -177,11 +189,14 @@ const CustomTooltip = ({ active, payload, label, timeRange }: any) => {
         </p>
         <div className="space-y-4">
           {payload.map((entry: any, index: number) => (
-            <div key={index} className="flex items-center justify-between gap-6">
+            <div
+              key={index}
+              className="flex items-center justify-between gap-6"
+            >
               <div className="flex items-center gap-3">
-                <div 
-                  className="w-2.5 h-2.5 rounded-full" 
-                  style={{ backgroundColor: entry.color || entry.fill }} 
+                <div
+                  className="w-2.5 h-2.5 rounded-full"
+                  style={{ backgroundColor: entry.color || entry.fill }}
                 />
                 <span className="text-xs font-bold text-slate-500 capitalize">
                   {entry.name}
@@ -257,26 +272,33 @@ const ActivityItem = ({ activity, onClick }: any) => {
 
 const Dashboard = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { showToast } = useToast();
   const [timeRange, setTimeRange] = useState("today");
-  const [stockValueDisplay, setStockValueDisplay] = useState<"purchase" | "sell">("purchase");
-  const { data: dashboardData, isLoading: loading, error: queryError, refetch } = useQuery({
-    queryKey: ['dashboard-stats', timeRange],
+  const [stockValueDisplay, setStockValueDisplay] = useState<
+    "purchase" | "sell"
+  >("purchase");
+  const {
+    data: dashboardData,
+    isLoading: loading,
+    error: queryError,
+    refetch,
+  } = useQuery({
+    queryKey: ["dashboard-stats", timeRange],
     queryFn: async () => {
       const response = await axios.get(
         `/api/dashboard/stats?timeRange=${timeRange}`,
       );
       return response.data;
     },
-    enabled: !!user?.token
+    enabled: !!user?.token,
   });
 
   const stats = dashboardData?.stats;
   const chartData = dashboardData?.chartData || [];
   const recentActivity = dashboardData?.recentActivity || [];
   const alerts = dashboardData?.alerts || [];
-  
 
   const [selectedSale, setSelectedSale] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -289,14 +311,76 @@ const Dashboard = () => {
   };
 
   const filteredActivity = (recentActivity || [])
-    .filter((act: any) => 
-      act.customerName?.toLowerCase().includes(transactionSearch.toLowerCase()) ||
-      act.invoiceNumber?.toLowerCase().includes(transactionSearch.toLowerCase()) ||
-      act.amount?.toString().includes(transactionSearch)
+    .filter(
+      (act: any) =>
+        act.customerName
+          ?.toLowerCase()
+          .includes(transactionSearch.toLowerCase()) ||
+        act.invoiceNumber
+          ?.toLowerCase()
+          .includes(transactionSearch.toLowerCase()) ||
+        act.amount?.toString().includes(transactionSearch),
     )
-    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    .sort(
+      (a: any, b: any) =>
+        new Date(b.date).getTime() - new Date(a.date).getTime(),
+    );
 
-  const error = queryError ? (queryError as any).response?.data?.message || "Failed to load dashboard" : null;
+  const handlePrint = (sale: any) => {
+    if (!sale) return;
+    // We can use a hidden printable component or just generate PDF and print
+    handleDownloadPDF(sale, true);
+  };
+
+  const handleDownloadPDF = (sale: any, shouldPrint = false) => {
+    if (!sale) return;
+    const doc = new jsPDF();
+
+    // Simple PDF generation for dashboard view
+    doc.setFontSize(20);
+    doc.text(user?.companyName || "BuildMate ERP", 105, 20, {
+      align: "center",
+    });
+    doc.setFontSize(10);
+    doc.text(`Invoice: ${sale.invoiceNumber}`, 20, 40);
+    doc.text(`Date: ${format(new Date(sale.date), "dd MMM, yyyy")}`, 20, 45);
+    doc.text(`Customer: ${sale.customerName || "Cash Sale"}`, 20, 50);
+
+    const tableData = [
+      ...(sale.items || []).map((item: any) => [
+        item.productId?.name || "Item",
+        item.quantity,
+        `Rs.${item.sellingPrice}`,
+        `Rs.${item.quantity * item.sellingPrice}`,
+      ]),
+      ...(sale.additionalItems || []).map((item: any) => [
+        item.name,
+        1,
+        `Rs.${item.price}`,
+        `Rs.${item.price}`,
+      ]),
+    ];
+
+    autoTable(doc, {
+      startY: 60,
+      head: [["Item", "Qty", "Price", "Total"]],
+      body: tableData,
+      foot: [["", "", "Grand Total", `Rs.${sale.amount}`]],
+      theme: "grid",
+      headStyles: { fillColor: [37, 99, 235] },
+    });
+
+    if (shouldPrint) {
+      doc.autoPrint();
+      window.open(doc.output("bloburl"), "_blank");
+    } else {
+      doc.save(`Invoice_${sale.invoiceNumber}.pdf`);
+    }
+  };
+
+  const error = queryError
+    ? (queryError as any).response?.data?.message || "Failed to load dashboard"
+    : null;
 
   const getFilterLabel = () => {
     switch (timeRange) {
@@ -321,9 +405,9 @@ const Dashboard = () => {
     <div className="space-y-8 animate-in fade-in duration-500">
       {/* Invoice Modal */}
       {selectedSale && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-white rounded-[3rem] w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-300 border border-white/20 flex flex-col">
-            <div className="p-10 overflow-y-auto flex-1 custom-scrollbar">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2.5rem] sm:rounded-[3rem] w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-300 border border-white/20 flex flex-col">
+            <div className="p-6 sm:p-10 overflow-y-auto flex-1 custom-scrollbar">
               {/* Modal Header */}
               <div className="flex justify-between items-start mb-8">
                 <div>
@@ -368,14 +452,18 @@ const Dashboard = () => {
               </div>
 
               {/* Items Table */}
-              <div className="mb-8 overflow-hidden rounded-[2rem] border border-slate-100">
-                <table className="w-full text-left border-collapse">
+              <div className="mb-8 overflow-x-auto rounded-[2rem] border border-slate-100">
+                <table className="w-full min-w-[500px] text-left border-collapse">
                   <thead className="bg-slate-50">
                     <tr className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                      <th className="px-6 py-4">{t("inventory.product_details")}</th>
+                      <th className="px-6 py-4">
+                        {t("inventory.product_details")}
+                      </th>
                       <th className="px-6 py-4">{t("common.qty")}</th>
                       <th className="px-6 py-4">{t("common.price")}</th>
-                      <th className="px-6 py-4 text-right">{t("common.total")}</th>
+                      <th className="px-6 py-4 text-right">
+                        {t("common.total")}
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -394,7 +482,9 @@ const Dashboard = () => {
                           {item.quantity}{" "}
                           {item.unit || item.productId?.unit || "units"}
                         </td>
-                        <td className="px-6 py-4">₹{item.sellingPrice}</td>
+                        <td className="px-6 py-4">
+                          ₹{(item.sellingPrice || 0).toLocaleString()}
+                        </td>
                         <td className="px-6 py-4 text-right font-black text-slate-800">
                           ₹{item.quantity * item.sellingPrice}
                         </td>
@@ -426,14 +516,17 @@ const Dashboard = () => {
 
               {/* Status and Total */}
               <div className="bg-slate-50 p-6 rounded-[2rem] space-y-4">
-                {typeof selectedSale.roundOffAmount === 'number' && selectedSale.roundOffAmount !== 0 && (
-                  <div className="flex justify-between items-center text-sm font-bold text-slate-500 italic">
-                    <span>Round Off:</span>
-                    <span>{selectedSale.roundOffAmount > 0 ? '+' : ''}{selectedSale.roundOffAmount.toFixed(2)}</span>
-                  </div>
-                )}
-                </div>
-                <div className="flex justify-between items-center">
+                {typeof selectedSale.roundOffAmount === "number" &&
+                  selectedSale.roundOffAmount !== 0 && (
+                    <div className="flex justify-between items-center text-sm font-bold text-slate-500 italic">
+                      <span>Round Off:</span>
+                      <span>
+                        {selectedSale.roundOffAmount > 0 ? "+" : ""}
+                        {selectedSale.roundOffAmount.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                <div className="flex justify-between items-center mt-6">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
                       {t("dashboard.status")}
@@ -449,22 +542,29 @@ const Dashboard = () => {
                     </span>
                   </div>
                   <div className="text-right">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                    {t("common.total")}
-                  </p>
-                  <h3 className="text-3xl font-black text-primary-600 tracking-tighter">
-                    ₹{(selectedSale.amount || 0).toLocaleString()}
-                  </h3>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                      {t("common.total")}
+                    </p>
+                    <h3 className="text-3xl font-black text-primary-600 tracking-tighter">
+                      ₹{(selectedSale.amount || 0).toLocaleString()}
+                    </h3>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="bg-slate-50/50 p-6 border-t border-slate-100 flex justify-between gap-4">
-              <button className="flex-1 py-4 bg-white border border-slate-200 rounded-2xl font-black uppercase tracking-widest text-[10px] text-slate-600 hover:bg-slate-100 transition-all flex items-center justify-center gap-2">
+            <div className="bg-slate-50/50 p-6 border-t border-slate-100 flex flex-col sm:flex-row justify-between gap-4">
+              <button
+                onClick={() => handleDownloadPDF(selectedSale)}
+                className="flex-1 py-4 bg-white border border-slate-200 rounded-2xl font-black uppercase tracking-widest text-[10px] text-slate-600 hover:bg-slate-100 transition-all flex items-center justify-center gap-2"
+              >
                 <Download size={16} />
                 {t("dashboard.download_pdf")}
               </button>
-              <button className="flex-1 py-4 bg-primary-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-primary-700 shadow-lg shadow-primary-200 transition-all flex items-center justify-center gap-2">
+              <button
+                onClick={() => handlePrint(selectedSale)}
+                className="flex-1 py-4 bg-primary-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-primary-700 shadow-lg shadow-primary-200 transition-all flex items-center justify-center gap-2"
+              >
                 <Printer size={16} />
                 {t("dashboard.print_invoice")}
               </button>
@@ -539,8 +639,11 @@ const Dashboard = () => {
               </div>
               <div className="flex items-center gap-3 w-full md:w-auto">
                 <div className="relative flex-1 md:w-64 group">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={16} />
-                  <input 
+                  <Search
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary-500 transition-colors"
+                    size={16}
+                  />
+                  <input
                     type="text"
                     placeholder="Search invoices, customers..."
                     className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 pl-11 pr-4 text-sm font-bold focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all outline-none"
@@ -576,7 +679,9 @@ const Dashboard = () => {
                     <div className="w-20 h-20 bg-white shadow-xl shadow-slate-100 text-slate-200 rounded-[2rem] flex items-center justify-center mx-auto mb-6 animate-pulse">
                       <Banknote size={40} />
                     </div>
-                    <h3 className="text-lg font-black text-slate-800 mb-1">No transactions found</h3>
+                    <h3 className="text-lg font-black text-slate-800 mb-1">
+                      No transactions found
+                    </h3>
                     <p className="text-slate-400 font-medium tracking-tight">
                       Try adjusting your search terms
                     </p>
@@ -591,27 +696,29 @@ const Dashboard = () => {
             <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity pointer-events-none">
               <TrendingUp size={140} />
             </div>
-            
+
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10 relative z-10">
               <div>
                 <div className="flex items-center gap-3 mb-2">
                   <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-100">
                     <TrendingUp size={20} />
                   </div>
-                  <h3 className="text-2xl font-black text-slate-800 tracking-tight">{t("dashboard.sales_report")}</h3>
+                  <h3 className="text-2xl font-black text-slate-800 tracking-tight">
+                    {t("dashboard.sales_report")}
+                  </h3>
                 </div>
                 <p className="text-slate-400 text-sm font-medium ml-1">
                   {chartData.length > 0
-                    ? `${new Date(chartData[0]?.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} to ${new Date(chartData[chartData.length - 1]?.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`
-                    : t("dashboard.no_data")
-                  }
+                    ? `${new Date(chartData[0]?.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })} to ${new Date(chartData[chartData.length - 1]?.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`
+                    : t("dashboard.no_data")}
                 </p>
               </div>
-              
+
               <div className="flex flex-col md:flex-row items-center gap-6">
-                 {/* Period Selector */}
-                 <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/60">
-                    {["today", "yesterday", "week", "month", "year"].map((range) => (
+                {/* Period Selector */}
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/60">
+                  {["today", "yesterday", "week", "month", "year"].map(
+                    (range) => (
                       <button
                         key={range}
                         onClick={() => setTimeRange(range)}
@@ -623,20 +730,42 @@ const Dashboard = () => {
                       >
                         {t(`dashboard.${range}`)}
                       </button>
-                    ))}
-                 </div>
+                    ),
+                  )}
+                </div>
 
-                 {/* Legend */}
-                 <div className="flex items-center gap-4 text-xs font-bold">
-                    <div className="flex items-center gap-2">
-                       <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
-                       <span className="text-slate-500">{t("dashboard.revenue")}</span>
+                {/* Legend */}
+                {user?.role !== "staff" &&
+                  canUseFeature(
+                    user?.planType || "free",
+                    "hasProfitAnalytics",
+                  ) && (
+                    <div className="flex items-center gap-4 text-xs font-bold">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                        <span className="text-slate-500">
+                          {t("dashboard.revenue")}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-primary-500"></div>
+                        <span className="text-slate-500">
+                          {t("dashboard.profit")}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                       <div className="w-3 h-3 rounded-full bg-primary-500"></div>
-                       <span className="text-slate-500">{t("dashboard.profit")}</span>
-                    </div>
-                 </div>
+                  )}
+                {!canUseFeature(
+                  user?.planType || "free",
+                  "hasProfitAnalytics",
+                ) && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                    <span className="text-slate-500">
+                      {t("dashboard.revenue")}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -644,22 +773,60 @@ const Dashboard = () => {
               {chartData.length === 0 ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300">
                   <TrendingUp size={48} className="mb-2 opacity-20" />
-                  <p className="text-[10px] font-black uppercase tracking-widest">{t("dashboard.no_data")}</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest">
+                    {t("dashboard.no_data")}
+                  </p>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 30 }}>
+                  <AreaChart
+                    data={chartData}
+                    margin={{ top: 10, right: 10, left: 0, bottom: 30 }}
+                  >
                     <defs>
-                      <linearGradient id="colorSalesGreen" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0.02} />
+                      <linearGradient
+                        id="colorSalesGreen"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="5%"
+                          stopColor="#10b981"
+                          stopOpacity={0.3}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor="#10b981"
+                          stopOpacity={0.02}
+                        />
                       </linearGradient>
-                      <linearGradient id="colorProfitBlue" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.02} />
+                      <linearGradient
+                        id="colorProfitBlue"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="5%"
+                          stopColor="#3b82f6"
+                          stopOpacity={0.3}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor="#3b82f6"
+                          stopOpacity={0.02}
+                        />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid vertical={false} stroke="#E2E8F0" strokeDasharray="5 5" opacity={0.3} />
+                    <CartesianGrid
+                      vertical={false}
+                      stroke="#E2E8F0"
+                      strokeDasharray="5 5"
+                      opacity={0.3}
+                    />
                     <XAxis
                       dataKey="date"
                       axisLine={false}
@@ -668,23 +835,40 @@ const Dashboard = () => {
                       dy={20}
                       tickFormatter={(str) => {
                         const d = new Date(str.replace(" ", "T"));
-                        if (timeRange === "today" || timeRange === "yesterday") return d.getHours() + ":00";
-                        if (timeRange === "month") return d.getDate().toString();
-                        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                        if (timeRange === "today" || timeRange === "yesterday")
+                          return d.getHours() + ":00";
+                        if (timeRange === "month")
+                          return d.getDate().toString();
+                        const days = [
+                          "Sun",
+                          "Mon",
+                          "Tue",
+                          "Wed",
+                          "Thu",
+                          "Fri",
+                          "Sat",
+                        ];
                         return timeRange === "year"
                           ? d.toLocaleDateString("en-US", { month: "short" })
-                          : (days[d.getDay()] || d.getDate().toString());
+                          : days[d.getDay()] || d.getDate().toString();
                       }}
                     />
                     <YAxis
                       axisLine={false}
                       tickLine={false}
                       tick={{ fill: "#94a3b8", fontSize: 10, fontWeight: 900 }}
-                      tickFormatter={(v) => `₹${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`}
+                      tickFormatter={(v) =>
+                        `₹${v >= 1000 ? (v / 1000).toFixed(0) + "k" : v}`
+                      }
                     />
                     <Tooltip
                       content={<CustomTooltip timeRange={timeRange} />}
-                      cursor={{ stroke: '#E2E8F0', strokeWidth: 2, strokeDasharray: '8 8', opacity: 0.2 }}
+                      cursor={{
+                        stroke: "#E2E8F0",
+                        strokeWidth: 2,
+                        strokeDasharray: "8 8",
+                        opacity: 0.2,
+                      }}
                     />
                     <Area
                       type="monotone"
@@ -694,22 +878,38 @@ const Dashboard = () => {
                       strokeWidth={4}
                       fillOpacity={1}
                       fill="url(#colorSalesGreen)"
-                      activeDot={{ r: 8, strokeWidth: 4, stroke: '#fff', fill: '#10b981' }}
+                      activeDot={{
+                        r: 8,
+                        strokeWidth: 4,
+                        stroke: "#fff",
+                        fill: "#10b981",
+                      }}
                       dot={false}
                       animationDuration={2000}
                     />
-                    <Area
-                      type="monotone"
-                      name={t("dashboard.profit")}
-                      dataKey="profit"
-                      stroke="#3b82f6"
-                      strokeWidth={4}
-                      fillOpacity={1}
-                      fill="url(#colorProfitBlue)"
-                      activeDot={{ r: 8, strokeWidth: 4, stroke: '#fff', fill: '#3b82f6' }}
-                      dot={false}
-                      animationDuration={2500}
-                    />
+                    {user?.role !== "staff" &&
+                      canUseFeature(
+                        user?.planType || "free",
+                        "hasProfitAnalytics",
+                      ) && (
+                        <Area
+                          type="monotone"
+                          name={t("dashboard.profit")}
+                          dataKey="profit"
+                          stroke="#3b82f6"
+                          strokeWidth={4}
+                          fillOpacity={1}
+                          fill="url(#colorProfitBlue)"
+                          activeDot={{
+                            r: 8,
+                            strokeWidth: 4,
+                            stroke: "#fff",
+                            fill: "#3b82f6",
+                          }}
+                          dot={false}
+                          animationDuration={2500}
+                        />
+                      )}
                   </AreaChart>
                 </ResponsiveContainer>
               )}
@@ -727,66 +927,6 @@ const Dashboard = () => {
               color="emerald"
             />
             <MetricCard
-              title={`${getFilterLabel()} ${t("dashboard.profit")}`}
-              subtitle={t("dashboard.growth_analysis")}
-              value={`₹${stats?.periodProfit?.toLocaleString() || 0}`}
-              icon={<ArrowUpCircle size={24} />}
-              trend={stats?.profitTrend}
-              color="primary"
-            />
-            <MetricCard
-              title={`${getFilterLabel()} ${t("dashboard.expenses")}`}
-              subtitle={t("dashboard.budget_vs_spending")}
-              value={`₹${stats?.periodExpenses?.toLocaleString() || 0}`}
-              icon={<Receipt size={24} />}
-              trend={stats?.expensesTrend}
-              color="amber"
-            />
-            <MetricCard
-              title={t("dashboard.to_collect")}
-              subtitle={t("billing.receivable")}
-              value={`₹${stats?.toCollect?.toLocaleString() || 0}`}
-              icon={<Clock size={24} />}
-              trend={t("billing.pending")}
-              color="indigo"
-            />
-            <MetricCard
-              title={t("dashboard.to_pay")}
-              subtitle={t("billing.payable")}
-              value={`₹${stats?.toPay?.toLocaleString() || 0}`}
-              icon={<HandCoins size={24} />}
-              trend={t("billing.pending")}
-              color="indigo"
-            />
-            <div className="relative group">
-              <MetricCard
-                title={t("dashboard.stock_value")}
-                subtitle={`${stockValueDisplay === "purchase" ? "At Purchase Price" : "At Selling Price"}`}
-                value={`₹${(stockValueDisplay === "purchase" ? stats?.stockValue : stats?.stockSellingValue)?.toLocaleString() || 0}`}
-                icon={<Package size={24} />}
-                trend={stats?.lowStockCount > 0 ? `${stats?.lowStockCount} items low` : t("dashboard.all_clear")}
-                color="blue"
-              />
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setStockValueDisplay(stockValueDisplay === "purchase" ? "sell" : "purchase");
-                }}
-                className="absolute top-8 right-8 p-2 bg-white/80 backdrop-blur-md border border-slate-100 rounded-xl shadow-sm hover:bg-white hover:shadow-md transition-all z-20 text-slate-400 hover:text-primary-600"
-                title="Toggle Purchase/Selling Value"
-              >
-                <RefreshCw size={14} className={stockValueDisplay === "sell" ? "rotate-180 transition-transform" : "transition-transform"} />
-              </button>
-            </div>
-            <MetricCard
-              title={t("dashboard.est_balance")}
-              subtitle={t("dashboard.stats.monthly_revenue")}
-              value={`₹${stats?.estimatedBalance?.toLocaleString() || 0}`}
-              icon={<Wallet size={24} />}
-              trend="Real-time"
-              color="emerald"
-            />
-            <MetricCard
               title={t("dashboard.staff_present")}
               subtitle={`${stats?.presentToday || 0}/${stats?.totalStaff || 0} active today`}
               value={(stats?.presentToday || 0).toString()}
@@ -794,12 +934,180 @@ const Dashboard = () => {
               trend={stats?.presentToday > 0 ? "Active" : "N/A"}
               color="slate"
             />
+            {user?.role !== "staff" && (
+              <>
+                {canUseFeature(
+                  user?.planType || "free",
+                  "hasProfitAnalytics",
+                ) ? (
+                  <MetricCard
+                    title={`${getFilterLabel()} ${t("dashboard.profit")}`}
+                    subtitle={t("dashboard.growth_analysis")}
+                    value={`₹${stats?.periodProfit?.toLocaleString() || 0}`}
+                    icon={<ArrowUpCircle size={24} />}
+                    trend={stats?.profitTrend}
+                    color="primary"
+                  />
+                ) : (
+                  <div className="relative group overflow-hidden rounded-[2.5rem] bg-slate-50 border border-slate-100 p-8 h-56 flex flex-col justify-center items-center text-center">
+                    <Lock size={32} className="text-slate-300 mb-4" />
+                    <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-1">
+                      Profit Analytics
+                    </h4>
+                    <p className="text-[10px] text-slate-400 font-bold mb-4">
+                      Available in Business Plan
+                    </p>
+                    <button
+                      onClick={() => navigate("/pricing")}
+                      className="px-4 py-2 bg-white text-[10px] font-black uppercase tracking-widest text-primary-600 rounded-xl shadow-sm hover:shadow-md transition-all"
+                    >
+                      Upgrade
+                    </button>
+                  </div>
+                )}
+
+                {canUseFeature(
+                  user?.planType || "free",
+                  "hasExpenseTracking",
+                ) ? (
+                  <MetricCard
+                    title={`${getFilterLabel()} ${t("dashboard.expenses")}`}
+                    subtitle={t("dashboard.budget_vs_spending")}
+                    value={`₹${stats?.periodExpenses?.toLocaleString() || 0}`}
+                    icon={<Receipt size={24} />}
+                    trend={stats?.expensesTrend}
+                    color="amber"
+                  />
+                ) : (
+                  <div className="relative group overflow-hidden rounded-[2.5rem] bg-slate-50 border border-slate-100 p-8 h-56 flex flex-col justify-center items-center text-center">
+                    <Lock size={32} className="text-slate-300 mb-4" />
+                    <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-1">
+                      Expense Tracking
+                    </h4>
+                    <p className="text-[10px] text-slate-400 font-bold mb-4">
+                      Available in Business Plan
+                    </p>
+                    <button
+                      onClick={() => navigate("/pricing")}
+                      className="px-4 py-2 bg-white text-[10px] font-black uppercase tracking-widest text-primary-600 rounded-xl shadow-sm hover:shadow-md transition-all"
+                    >
+                      Upgrade
+                    </button>
+                  </div>
+                )}
+
+                <MetricCard
+                  title={t("dashboard.to_collect")}
+                  subtitle={t("billing.receivable")}
+                  value={`₹${stats?.toCollect?.toLocaleString() || 0}`}
+                  icon={<Clock size={24} />}
+                  trend={t("billing.pending")}
+                  color="indigo"
+                />
+                <MetricCard
+                  title={t("dashboard.to_pay")}
+                  subtitle={t("billing.payable")}
+                  value={`₹${stats?.toPay?.toLocaleString() || 0}`}
+                  icon={<HandCoins size={24} />}
+                  trend={t("billing.pending")}
+                  color="indigo"
+                />
+
+                {canUseFeature(
+                  user?.planType || "free",
+                  "hasProfitAnalytics",
+                ) ? (
+                  <div className="relative group">
+                    <MetricCard
+                      title={t("dashboard.stock_value")}
+                      subtitle={`${stockValueDisplay === "purchase" ? "At Purchase Price" : "At Selling Price"}`}
+                      value={`₹${(stockValueDisplay === "purchase" ? stats?.stockValue : stats?.stockSellingValue)?.toLocaleString() || 0}`}
+                      icon={<Package size={24} />}
+                      trend={
+                        stats?.lowStockCount > 0
+                          ? `${stats?.lowStockCount} items low`
+                          : t("dashboard.all_clear")
+                      }
+                      color="blue"
+                    />
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setStockValueDisplay(
+                          stockValueDisplay === "purchase"
+                            ? "sell"
+                            : "purchase",
+                        );
+                      }}
+                      className="absolute top-8 right-8 p-2 bg-white/80 backdrop-blur-md border border-slate-100 rounded-xl shadow-sm hover:bg-white hover:shadow-md transition-all z-20 text-slate-400 hover:text-primary-600"
+                      title="Toggle Purchase/Selling Value"
+                    >
+                      <RefreshCw
+                        size={14}
+                        className={
+                          stockValueDisplay === "sell"
+                            ? "rotate-180 transition-transform"
+                            : "transition-transform"
+                        }
+                      />
+                    </button>
+                  </div>
+                ) : (
+                  <MetricCard
+                    title={t("dashboard.stock_value")}
+                    subtitle="At Purchase Price"
+                    value={`₹${stats?.stockValue?.toLocaleString() || 0}`}
+                    icon={<Package size={24} />}
+                    trend={
+                      stats?.lowStockCount > 0
+                        ? `${stats?.lowStockCount} items low`
+                        : t("dashboard.all_clear")
+                    }
+                    color="blue"
+                  />
+                )}
+
+                {canUseFeature(
+                  user?.planType || "free",
+                  "hasProfitAnalytics",
+                ) ? (
+                  <MetricCard
+                    title={t("dashboard.est_balance")}
+                    subtitle={t("dashboard.stats.monthly_revenue")}
+                    value={`₹${stats?.estimatedBalance?.toLocaleString() || 0}`}
+                    icon={<Wallet size={24} />}
+                    trend="Real-time"
+                    color="primary"
+                  />
+                ) : (
+                  <div className="relative group overflow-hidden rounded-[2.5rem] bg-slate-50 border border-slate-100 p-8 h-56 flex flex-col justify-center items-center text-center">
+                    <Lock size={32} className="text-slate-300 mb-4" />
+                    <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-1">
+                      Balance Analysis
+                    </h4>
+                    <p className="text-[10px] text-slate-400 font-bold mb-4">
+                      Available in Business Plan
+                    </p>
+                    <button
+                      onClick={() => navigate("/pricing")}
+                      className="px-4 py-2 bg-white text-[10px] font-black uppercase tracking-widest text-primary-600 rounded-xl shadow-sm hover:shadow-md transition-all"
+                    >
+                      Upgrade
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
             <MetricCard
               title={t("dashboard.system_alerts")}
               subtitle={`${alerts?.length || 0} items need attention`}
               value={(alerts?.length || 0).toString()}
               icon={<AlertTriangle size={24} />}
-              trend={alerts?.length > 0 ? t("dashboard.action_reqd") : t("dashboard.all_clear")}
+              trend={
+                alerts?.length > 0
+                  ? t("dashboard.action_reqd")
+                  : t("dashboard.all_clear")
+              }
               color={alerts?.length > 0 ? "amber" : "emerald"}
             />
           </div>
@@ -809,8 +1117,12 @@ const Dashboard = () => {
               <div className="bg-white/70 backdrop-blur-md rounded-[3rem] border border-white/40 shadow-xl p-8 h-full">
                 <div className="flex items-center justify-between mb-8">
                   <div>
-                    <h3 className="text-xl font-black text-slate-800 tracking-tight">{t("dashboard.revenue_vs_expenses")}</h3>
-                    <p className="text-slate-400 text-sm font-medium">{t("dashboard.budget_vs_spending")}</p>
+                    <h3 className="text-xl font-black text-slate-800 tracking-tight">
+                      {t("dashboard.revenue_vs_expenses")}
+                    </h3>
+                    <p className="text-slate-400 text-sm font-medium">
+                      {t("dashboard.budget_vs_spending")}
+                    </p>
                   </div>
                   <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl">
                     <Receipt size={24} />
@@ -820,17 +1132,42 @@ const Dashboard = () => {
                   {chartData.length === 0 ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300">
                       <Receipt size={48} className="mb-2 opacity-20" />
-                      <p className="text-[10px] font-black uppercase tracking-widest">{t("dashboard.no_data")}</p>
+                      <p className="text-[10px] font-black uppercase tracking-widest">
+                        {t("dashboard.no_data")}
+                      </p>
                     </div>
                   ) : (
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                        <CartesianGrid vertical={false} stroke="#E2E8F0" strokeDasharray="3 3" opacity={0.4} />
+                      <BarChart
+                        data={chartData}
+                        margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                      >
+                        <CartesianGrid
+                          vertical={false}
+                          stroke="#E2E8F0"
+                          strokeDasharray="3 3"
+                          opacity={0.4}
+                        />
                         <XAxis dataKey="date" hide />
                         <YAxis hide />
-                        <Tooltip content={<CustomTooltip timeRange={timeRange} />} cursor={{ fill: '#F8FAFC', opacity: 0.4 }} />
-                        <Bar name={t("dashboard.revenue")} dataKey="revenue" fill="#0284c7" radius={[6, 6, 0, 0]} barSize={12} />
-                        <Bar name={t("dashboard.expenses")} dataKey="expenses" fill="#f59e0b" radius={[6, 6, 0, 0]} barSize={12} />
+                        <Tooltip
+                          content={<CustomTooltip timeRange={timeRange} />}
+                          cursor={{ fill: "#F8FAFC", opacity: 0.4 }}
+                        />
+                        <Bar
+                          name={t("dashboard.revenue")}
+                          dataKey="revenue"
+                          fill="#0284c7"
+                          radius={[6, 6, 0, 0]}
+                          barSize={12}
+                        />
+                        <Bar
+                          name={t("dashboard.expenses")}
+                          dataKey="expenses"
+                          fill="#f59e0b"
+                          radius={[6, 6, 0, 0]}
+                          barSize={12}
+                        />
                       </BarChart>
                     </ResponsiveContainer>
                   )}
@@ -846,15 +1183,26 @@ const Dashboard = () => {
                       <AlertTriangle size={18} />
                       {t("dashboard.critical_alerts")}
                     </h2>
-                    <span className="px-2 py-1 bg-rose-200/50 text-rose-700 rounded-lg text-[10px] font-black">{alerts.length}</span>
+                    <span className="px-2 py-1 bg-rose-200/50 text-rose-700 rounded-lg text-[10px] font-black">
+                      {alerts.length}
+                    </span>
                   </div>
                   <div className="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
                     {alerts.map((alert: any, i: number) => (
-                      <div key={i} className="flex gap-4 p-4 bg-white/60 rounded-2xl border border-rose-100 group hover:bg-white transition-all">
-                        <div className="shrink-0 p-2 bg-rose-100 text-rose-600 rounded-xl h-fit"><Package size={18} /></div>
+                      <div
+                        key={i}
+                        className="flex gap-4 p-4 bg-white/60 rounded-2xl border border-rose-100 group hover:bg-white transition-all"
+                      >
+                        <div className="shrink-0 p-2 bg-rose-100 text-rose-600 rounded-xl h-fit">
+                          <Package size={18} />
+                        </div>
                         <div>
-                          <p className="text-sm font-black text-slate-800 tracking-tight">{alert.title}</p>
-                          <p className="text-xs text-rose-600 font-medium">{alert.message}</p>
+                          <p className="text-sm font-black text-slate-800 tracking-tight">
+                            {alert.title}
+                          </p>
+                          <p className="text-xs text-rose-600 font-medium">
+                            {alert.message}
+                          </p>
                         </div>
                       </div>
                     ))}

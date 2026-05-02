@@ -33,6 +33,7 @@ const PublicInvoice = lazy(() => import("./pages/PublicInvoice"));
 const Contact = lazy(() => import("./pages/Contact"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Terms = lazy(() => import("./pages/Terms"));
+const Catalog = lazy(() => import("./pages/Catalog"));
 
 const PageLoader = () => (
   <div className="flex items-center justify-center min-h-screen bg-slate-50">
@@ -50,14 +51,15 @@ const App: React.FC = () => {
         <Routes>
           {/* Public Routes */}
           <Route path="/" element={<Landing />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+          <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <Login />} />
+          <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <Register />} />
           <Route path="/reset-password/:token" element={<ResetPassword />} />
           <Route path="/public-invoice/:id" element={<PublicInvoice />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/terms" element={<Terms />} />
           <Route path="/pricing" element={<Pricing />} />
+          <Route path="/catalog/:slug" element={<Catalog />} />
 
           {/* Protected Dashboard Routes */}
           <Route

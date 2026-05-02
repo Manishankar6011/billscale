@@ -46,18 +46,19 @@ const Layout = () => {
     },
     { name: t("common.sales"), path: "/dashboard/sales", icon: Receipt },
     { name: "Customers", path: "/dashboard/customers", icon: UserRound },
-    { name: t("common.staff"), path: "/dashboard/staff", icon: Users },
+    { name: t("common.staff"), path: "/dashboard/staff", icon: Users, ownerOnly: true },
     {
       name: t("common.attendance"),
       path: "/dashboard/attendance",
       icon: CalendarCheck,
+      ownerOnly: true
     },
-    { name: t("common.salary"), path: "/dashboard/salary", icon: Wallet },
-    { name: t("common.ledger"), path: "/dashboard/ledger", icon: FileText },
-    { name: "Reports", path: "/dashboard/reports", icon: BarChart3 },
-    { name: t("common.settings"), path: "/dashboard/settings", icon: Settings },
+    { name: t("common.salary"), path: "/dashboard/salary", icon: Wallet, ownerOnly: true },
+    { name: t("common.ledger"), path: "/dashboard/ledger", icon: FileText, ownerOnly: true },
+    { name: "Reports", path: "/dashboard/reports", icon: BarChart3, ownerOnly: true },
+    { name: t("common.settings"), path: "/dashboard/settings", icon: Settings, ownerOnly: true },
     { name: "Refer & Earn", path: "/dashboard/referral", icon: Gift },
-  ];
+  ].filter(item => !item.ownerOnly || (user?.role === 'owner' || user?.role === 'accountant' || user?.role === 'super-admin'));
 
   if (!user) return null;
 
