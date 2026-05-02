@@ -51,8 +51,8 @@ const App: React.FC = () => {
         <Routes>
           {/* Public Routes */}
           <Route path="/" element={<Landing />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+          <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <Login />} />
+          <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <Register />} />
           <Route path="/reset-password/:token" element={<ResetPassword />} />
           <Route path="/public-invoice/:id" element={<PublicInvoice />} />
           <Route path="/contact" element={<Contact />} />

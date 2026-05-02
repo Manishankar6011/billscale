@@ -327,6 +327,7 @@
         "change_to_return": "Change to Return",
         "balance_due": "Balance Due",
         "complete_sale": "Complete Sale",
+        "scan_products": "Scan & Add Product",
         "no_sales_found": "No sales found for this period"
     },
     "ledger": {

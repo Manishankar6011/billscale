@@ -241,14 +241,16 @@ const Landing = () => {
               <a href="#how-it-works" onClick={() => setIsMenuOpen(false)}>
                 {t("landing.how_it_works")}
               </a>
-              <button
-                onClick={() => {
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
                   navigate("/pricing");
                   setIsMenuOpen(false);
                 }}
               >
                 {t("landing.pricing")}
-              </button>
+              </a>
               
               {/* Mobile Language Switcher */}
               <div className="flex items-center gap-4 pt-4 border-t border-slate-100">

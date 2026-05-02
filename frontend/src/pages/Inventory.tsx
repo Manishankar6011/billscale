@@ -678,19 +678,19 @@ const Inventory = () => {
           </h1>
           <p className="text-slate-500">{t("inventory.subtitle")}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 md:gap-3">
+        <div className="grid grid-cols-2 lg:flex lg:flex-nowrap items-center gap-2 md:gap-3 w-full md:w-auto">
           {/* Export Dropdown */}
-          <div className="relative">
+          <div className="relative w-full sm:w-auto">
             <button
               onClick={() => setIsExportOpen(!isExportOpen)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+              className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
             >
               <Download size={18} /> {t("inventory.export")}{" "}
               <ChevronDown size={14} />
             </button>
 
             {isExportOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2">
+              <div className="absolute right-0 sm:right-0 left-0 sm:left-auto mt-2 w-full sm:w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2">
                 <button
                   onClick={exportToPDF}
                   className="w-full px-4 py-3 text-left text-sm font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-3"
@@ -728,7 +728,7 @@ const Inventory = () => {
                 setIsSmartModalOpen(true);
               }
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-600 to-indigo-600 border-none rounded-2xl text-sm font-bold text-white hover:shadow-lg hover:shadow-primary-200 transition-all shadow-sm active:scale-95"
+            className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-primary-600 to-indigo-600 border-none rounded-2xl text-sm font-bold text-white hover:shadow-lg hover:shadow-primary-200 transition-all shadow-sm active:scale-95 whitespace-nowrap"
           >
             <ShoppingBag size={18} /> Smart Add
           </button>
@@ -744,7 +744,7 @@ const Inventory = () => {
                 setIsBulkModalOpen(true);
               }
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-600 hover:bg-primary-50 hover:border-primary-200 hover:text-primary-600 transition-all shadow-sm"
+            className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-600 hover:bg-primary-50 hover:border-primary-200 hover:text-primary-600 transition-all shadow-sm whitespace-nowrap"
           >
             <FileSpreadsheet size={18} /> {t("inventory.bulk_upload")}
           </button>
@@ -759,7 +759,7 @@ const Inventory = () => {
               }
               setIsModalOpen(true);
             }}
-            className="btn-primary flex items-center gap-2"
+            className="btn-primary flex items-center justify-center gap-2 w-full sm:w-auto whitespace-nowrap"
           >
             <Plus size={20} />
             {t("inventory.add_product")}
@@ -897,7 +897,7 @@ const Inventory = () => {
                 >
                   <Box size={24} />
                 </div>
-                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-2 transition-opacity">
                   <button
                     onClick={() => handleEdit(product)}
                     className="p-2 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg"
@@ -1046,7 +1046,7 @@ const Inventory = () => {
       {/* Add Product Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl p-8 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto custom-scrollbar border border-white/20">
+          <div className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl p-6 sm:p-8 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto overflow-x-hidden custom-scrollbar border border-white/20">
             <div className="flex justify-between items-center mb-8">
               <h2 className="text-2xl font-black text-slate-800 tracking-tighter">
                 {editingId
@@ -1156,7 +1156,7 @@ const Inventory = () => {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-8 items-center bg-white p-5 rounded-3xl border-2 border-slate-100 shadow-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8 items-center bg-white p-5 rounded-3xl border-2 border-slate-100 shadow-sm">
                     <div className="flex flex-col">
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
                         Current Stock
@@ -1195,7 +1195,7 @@ const Inventory = () => {
                     <input
                       type="number"
                       className="flex-1 bg-transparent text-slate-800 px-4 py-2 text-md font-black outline-none placeholder:text-slate-300 tracking-tight"
-                      placeholder="Enter Quantity to adjust..."
+                      placeholder="Qty to adjust..."
                       value={adjustmentValue}
                       onChange={(e) => setAdjustmentValue(e.target.value)}
                       onWheel={(e) => e.currentTarget.blur()}
@@ -1215,7 +1215,7 @@ const Inventory = () => {
                   </h3>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">
                       {t("inventory.cost_price")}

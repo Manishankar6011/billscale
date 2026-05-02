@@ -325,6 +325,7 @@
         "change_to_return": "वापस करने के लिए राशि",
         "balance_due": "बकाया राशि",
         "complete_sale": "बिक्री पूरी करें",
+        "scan_products": "स्कैन करें और आइटम जोड़ें",
         "no_sales_found": "इस अवधि के लिए कोई बिक्री नहीं मिली"
     },
     "ledger": {
