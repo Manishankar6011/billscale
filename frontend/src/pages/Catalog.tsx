@@ -148,7 +148,15 @@ const Catalog = () => {
     message += `--------------------------\n\n`;
     message += `Please confirm my order. Thank you!`;
 
-    const targetNumber = (data.phone || "").replace(/\D/g, "");
+    let targetNumber = (data.phone || "").replace(/\D/g, "");
+    
+    // Auto-fix Indian numbers: if 10 digits, add 91. If 11 digits starting with 0, replace 0 with 91.
+    if (targetNumber.length === 10) {
+      targetNumber = "91" + targetNumber;
+    } else if (targetNumber.length === 11 && targetNumber.startsWith("0")) {
+      targetNumber = "91" + targetNumber.substring(1);
+    }
+
     const whatsappUrl = `https://wa.me/${targetNumber}?text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, "_blank");
   };

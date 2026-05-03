@@ -300,6 +300,7 @@ const Settings = () => {
                                             <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                                             <input type="tel" className="input pl-11 py-4 font-bold bg-slate-50 border-none rounded-2xl" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} placeholder={t('placeholders.phone')} />
                                         </div>
+                                        <p className="text-[9px] text-emerald-600 font-bold ml-1">Used for WhatsApp Catalog Orders. Prefix 91 for India.</p>
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('settings.billing_email_label')}</label>
