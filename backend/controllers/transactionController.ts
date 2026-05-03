@@ -43,7 +43,11 @@ export const getSales = async (req: AuthRequest, res: Response) => {
 
         if (startDate || endDate) {
             query.date = {};
-            if (startDate) query.date.$gte = new Date(startDate);
+            if (startDate) {
+                const start = new Date(startDate);
+                start.setHours(0, 0, 0, 0);
+                query.date.$gte = start;
+            }
             if (endDate) {
                 const end = new Date(endDate);
                 end.setHours(23, 59, 59, 999);
