@@ -186,23 +186,22 @@ const Sales = () => {
   const handleRangeSelect = (range: string) => {
     const today = new Date();
     let start = "";
-    let end = today.toISOString().split("T")[0] || "";
+    let end = format(today, "yyyy-MM-dd");
 
     if (range === "today") {
       start = end;
     } else if (range === "yesterday") {
       const yesterday = new Date(today);
       yesterday.setDate(yesterday.getDate() - 1);
-      start = yesterday.toISOString().split("T")[0] || "";
+      start = format(yesterday, "yyyy-MM-dd");
       end = start;
     } else if (range === "week") {
-      const lastWeek = new Date(today);
-      lastWeek.setDate(lastWeek.getDate() - 7);
-      start = lastWeek.toISOString().split("T")[0] || "";
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - today.getDay());
+      start = format(startOfWeek, "yyyy-MM-dd");
     } else if (range === "month") {
-      const lastMonth = new Date(today);
-      lastMonth.setMonth(lastMonth.getMonth() - 1);
-      start = lastMonth.toISOString().split("T")[0] || "";
+      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      start = format(startOfMonth, "yyyy-MM-dd");
     } else if (range === "custom") {
       // Don't change dates, just set range label
       setTimeRange("custom");
