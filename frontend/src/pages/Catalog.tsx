@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import axios from "axios";
-import { ShoppingCart, MessageCircle, Phone, MapPin, Search, Package, IndianRupee, Loader2 } from "lucide-react";
+import { ShoppingCart, MessageCircle, Phone, MapPin, Search, Package, IndianRupee, Loader2, Plus, Minus, Trash2, X } from "lucide-react";
+import { createPortal } from "react-dom";
 
 interface CatalogProduct {
   _id: string;
@@ -12,6 +13,10 @@ interface CatalogProduct {
   imageUrl?: string;
   category?: string;
   stock: number;
+}
+
+interface CartItem extends CatalogProduct {
+  quantity: number;
 }
 
 interface CatalogData {
@@ -29,6 +34,8 @@ const Catalog = () => {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [isCartOpen, setIsCartOpen] = useState(false);
 
   useEffect(() => {
     const fetchCatalog = async () => {
@@ -43,6 +50,25 @@ const Catalog = () => {
     };
     fetchCatalog();
   }, [slug]);
+
+  useEffect(() => {
+    // Load cart from localStorage
+    const savedCart = localStorage.getItem(`cart_${slug}`);
+    if (savedCart) {
+      try {
+        setCart(JSON.parse(savedCart));
+      } catch (e) {
+        console.error("Failed to parse cart", e);
+      }
+    }
+  }, [slug]);
+
+  useEffect(() => {
+    // Save cart to localStorage
+    if (data) {
+      localStorage.setItem(`cart_${slug}`, JSON.stringify(cart));
+    }
+  }, [cart, slug, data]);
 
   if (loading) {
     return (
@@ -77,9 +103,53 @@ const Catalog = () => {
     return matchesSearch && matchesCategory;
   });
 
-  const handleWhatsAppOrder = (product: CatalogProduct) => {
-    const message = `Hello ${data.shopName}! I'm interested in ordering:\n\n*Product:* ${product.name}\n*Price:* ₹${product.pricePerUnit}/${product.unit}\n\nPlease let me know if it's available.`;
-    const whatsappUrl = `https://wa.me/${data.phone?.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
+  const addToCart = (product: CatalogProduct) => {
+    setCart(prev => {
+      const existing = prev.find(item => item._id === product._id);
+      if (existing) {
+        return prev.map(item => item._id === product._id ? { ...item, quantity: item.quantity + 1 } : item);
+      }
+      return [...prev, { ...product, quantity: 1 }];
+    });
+  };
+
+  const removeFromCart = (productId: string) => {
+    setCart(prev => prev.filter(item => item._id !== productId));
+  };
+
+  const updateQuantity = (productId: string, delta: number) => {
+    setCart(prev => prev.map(item => {
+      if (item._id === productId) {
+        const newQty = Math.max(1, item.quantity + delta);
+        return { ...item, quantity: newQty };
+      }
+      return item;
+    }));
+  };
+
+  const cartTotal = cart.reduce((sum, item) => sum + (item.pricePerUnit * item.quantity), 0);
+  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+  const handlePlaceOrder = () => {
+    if (cart.length === 0) return;
+
+    let message = `*NEW ORDER FROM CATALOG*\n`;
+    message += `--------------------------\n`;
+    message += `*Shop:* ${data.shopName}\n\n`;
+    
+    cart.forEach((item, index) => {
+      message += `${index + 1}. *${item.name}*\n`;
+      message += `   Qty: ${item.quantity} ${item.unit}\n`;
+      message += `   Price: ₹${item.pricePerUnit} | Total: ₹${item.pricePerUnit * item.quantity}\n\n`;
+    });
+
+    message += `--------------------------\n`;
+    message += `*GRAND TOTAL: ₹${cartTotal}*\n`;
+    message += `--------------------------\n\n`;
+    message += `Please confirm my order. Thank you!`;
+
+    const targetNumber = (data.phone || "").replace(/\D/g, "");
+    const whatsappUrl = `https://wa.me/${targetNumber}?text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, "_blank");
   };
 
@@ -105,12 +175,25 @@ const Catalog = () => {
                 </div>
               </div>
             </div>
-            <a 
-              href={`tel:${data.phone}`}
-              className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm active:scale-95"
-            >
-              <Phone size={20} />
-            </a>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setIsCartOpen(true)}
+                className="p-3 bg-primary-50 text-primary-600 rounded-2xl hover:bg-primary-600 hover:text-white transition-all shadow-sm active:scale-95 relative"
+              >
+                <ShoppingCart size={20} />
+                {cartCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white animate-in zoom-in duration-300">
+                    {cartCount}
+                  </span>
+                )}
+              </button>
+              <a 
+                href={`tel:${data.phone}`}
+                className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm active:scale-95"
+              >
+                <Phone size={20} />
+              </a>
+            </div>
           </div>
         </div>
       </header>
@@ -199,8 +282,7 @@ const Catalog = () => {
                     <h3 className="text-lg font-black text-slate-800 leading-snug mb-1 group-hover:text-primary-600 transition-colors">{product.name}</h3>
                     <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Available in {product.unit}</p>
                   </div>
-                  
-                  <div className="flex items-center justify-between mb-6">
+                               <div className="flex items-center justify-between mb-6">
                     <div className="flex flex-col">
                       <span className="text-slate-400 text-[10px] line-through font-bold decoration-rose-500/50 decoration-2">₹{product.mrp}</span>
                       <div className="flex items-center gap-1 text-2xl font-black text-slate-800">
@@ -215,19 +297,58 @@ const Catalog = () => {
                     )}
                   </div>
 
-                  <button
-                    onClick={() => handleWhatsAppOrder(product)}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-2xl flex items-center justify-center gap-3 font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-100 transition-all active:scale-95 group-hover:-translate-y-1"
-                  >
-                    <MessageCircle size={18} />
-                    Order on WhatsApp
-                  </button>
+                  {cart.find(item => item._id === product._id) ? (
+                    <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-100">
+                      <button 
+                        onClick={() => {
+                          const item = cart.find(i => i._id === product._id);
+                          if (item?.quantity === 1) removeFromCart(product._id);
+                          else updateQuantity(product._id, -1);
+                        }}
+                        className="w-10 h-10 bg-white text-slate-600 rounded-xl flex items-center justify-center hover:bg-rose-50 hover:text-rose-500 transition-all shadow-sm"
+                      >
+                        <Minus size={16} />
+                      </button>
+                      <div className="flex-grow text-center font-black text-slate-800">
+                        {cart.find(item => item._id === product._id)?.quantity}
+                      </div>
+                      <button 
+                        onClick={() => updateQuantity(product._id, 1)}
+                        className="w-10 h-10 bg-primary-600 text-white rounded-xl flex items-center justify-center hover:bg-primary-700 transition-all shadow-lg shadow-primary-100"
+                      >
+                        <Plus size={16} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => addToCart(product)}
+                      className="w-full bg-slate-900 hover:bg-slate-800 text-white py-4 rounded-2xl flex items-center justify-center gap-3 font-black text-xs uppercase tracking-widest shadow-lg shadow-slate-100 transition-all active:scale-95 group-hover:-translate-y-1"
+                    >
+                      <ShoppingCart size={18} />
+                      Add to Cart
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
           </div>
         )}
       </main>
+
+      {/* Floating Cart Button (Mobile) */}
+      {cartCount > 0 && (
+        <div className="fixed bottom-6 right-6 z-40 sm:hidden">
+          <button 
+            onClick={() => setIsCartOpen(true)}
+            className="w-16 h-16 bg-primary-600 text-white rounded-full flex items-center justify-center shadow-2xl animate-in slide-in-from-bottom-20 duration-500"
+          >
+            <ShoppingCart size={24} />
+            <span className="absolute -top-1 -right-1 w-6 h-6 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white">
+              {cartCount}
+            </span>
+          </button>
+        </div>
+      )}
 
       {/* Footer Branding */}
       <footer className="mt-20 py-12 bg-white border-t border-slate-100 text-center">
@@ -237,6 +358,107 @@ const Catalog = () => {
            <span className="text-slate-800 font-black tracking-tight">BuildMate ERP</span>
         </div>
       </footer>
+
+      {/* Cart Drawer / Modal */}
+      {isCartOpen && createPortal(
+        <div className="fixed inset-0 z-[100] flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setIsCartOpen(false)} />
+          <div className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 ease-out">
+            {/* Cart Header */}
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
+              <div>
+                <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Your Cart</h2>
+                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{cartCount} Items Selected</p>
+              </div>
+              <button onClick={() => setIsCartOpen(false)} className="p-2 hover:bg-slate-50 rounded-xl transition-all">
+                <X size={24} className="text-slate-400" />
+              </button>
+            </div>
+
+            {/* Cart Items */}
+            <div className="flex-grow overflow-y-auto p-6 space-y-6">
+              {cart.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center">
+                  <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-slate-200 mb-4">
+                    <ShoppingCart size={40} />
+                  </div>
+                  <p className="text-slate-400 font-black uppercase tracking-widest text-xs">Your cart is empty</p>
+                  <button 
+                    onClick={() => setIsCartOpen(false)}
+                    className="mt-4 text-primary-600 font-black uppercase tracking-widest text-[10px] hover:underline"
+                  >
+                    Start Shopping
+                  </button>
+                </div>
+              ) : (
+                cart.map(item => (
+                  <div key={item._id} className="flex gap-4 group/item">
+                    <div className="w-20 h-20 bg-slate-50 rounded-2xl overflow-hidden flex-shrink-0 border border-slate-100">
+                      {item.imageUrl ? (
+                        <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-slate-200">
+                          <Package size={24} />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-grow">
+                      <div className="flex justify-between items-start mb-1">
+                        <h4 className="font-black text-slate-800 text-sm leading-tight">{item.name}</h4>
+                        <button onClick={() => removeFromCart(item._id)} className="text-slate-300 hover:text-rose-500 transition-colors">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-3">₹{item.pricePerUnit} / {item.unit}</p>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3 bg-slate-50 rounded-xl p-1 border border-slate-100">
+                          <button 
+                            onClick={() => updateQuantity(item._id, -1)}
+                            className="w-7 h-7 bg-white text-slate-400 rounded-lg flex items-center justify-center hover:text-primary-600 shadow-sm transition-all"
+                          >
+                            <Minus size={14} />
+                          </button>
+                          <span className="text-xs font-black text-slate-800 w-4 text-center">{item.quantity}</span>
+                          <button 
+                            onClick={() => updateQuantity(item._id, 1)}
+                            className="w-7 h-7 bg-white text-slate-400 rounded-lg flex items-center justify-center hover:text-primary-600 shadow-sm transition-all"
+                          >
+                            <Plus size={14} />
+                          </button>
+                        </div>
+                        <div className="font-black text-slate-800">
+                          ₹{item.pricePerUnit * item.quantity}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Cart Footer */}
+            {cart.length > 0 && (
+              <div className="p-6 bg-slate-50 border-t border-slate-100 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400 font-black uppercase tracking-widest text-[10px]">Total Amount</span>
+                  <span className="text-2xl font-black text-slate-800">₹{cartTotal}</span>
+                </div>
+                <button 
+                  onClick={handlePlaceOrder}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-5 rounded-[2rem] flex items-center justify-center gap-3 font-black text-sm uppercase tracking-widest shadow-xl shadow-emerald-100 transition-all active:scale-[0.98]"
+                >
+                  <MessageCircle size={20} />
+                  Order on WhatsApp
+                </button>
+                <p className="text-center text-[10px] text-slate-400 font-medium">
+                  We will send your order summary to WhatsApp for confirmation.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };
