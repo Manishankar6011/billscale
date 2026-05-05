@@ -28,6 +28,21 @@ const saleSchema: Schema = new mongoose.Schema({
         type: String,
         trim: true
     },
+    customerGSTIN: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+    customerState: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+    customerStateCode: {
+        type: String,
+        trim: true,
+        default: ''
+    },
     items: [{
         productId: {
             type: mongoose.Schema.Types.ObjectId,
@@ -57,6 +72,19 @@ const saleSchema: Schema = new mongoose.Schema({
         mrpAtTime: {
             type: Number,
             required: true
+        },
+        taxRate: {
+            type: Number,
+            default: 0
+        },
+        taxAmount: {
+            type: Number,
+            default: 0
+        },
+        hsnCode: {
+            type: String,
+            trim: true,
+            default: ''
         }
     }],
     totalAmount: {

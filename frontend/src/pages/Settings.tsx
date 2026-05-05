@@ -40,7 +40,12 @@ const Settings = () => {
         logoUrl: '',
         signature: '',
         upiId: '',
-        slug: ''
+        slug: '',
+        gstin: '',
+        pan: '',
+        stateName: '',
+        stateCode: '',
+        invoiceFormat: 'modern' as 'modern' | 'gst'
     });
 
     const logoInputRef = useRef<HTMLInputElement>(null);
@@ -73,6 +78,11 @@ const Settings = () => {
                 signature: profile.tenantId?.signature || '',
                 upiId: profile.tenantId?.upiId || '',
                 slug: profile.tenantId?.slug || '',
+                gstin: profile.tenantId?.gstin || '',
+                pan: profile.tenantId?.pan || '',
+                stateName: profile.tenantId?.stateName || '',
+                stateCode: profile.tenantId?.stateCode || '',
+                invoiceFormat: profile.tenantId?.invoiceFormat || 'modern',
             });
         }
     }, [profile]);
@@ -370,6 +380,40 @@ const Settings = () => {
                     </div>
                 </div>
 
+                {/* GST & Compliance Card */}
+                <div className="card p-10 bg-white shadow-2xl shadow-slate-200 border-none rounded-[2.5rem] relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-8 text-slate-50 opacity-10 group-hover:scale-110 transition-transform">
+                        <ShieldCheck size={120} />
+                    </div>
+                    <div className="relative z-10">
+                        <div className="flex items-center gap-4 mb-8">
+                            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg">
+                                <ShieldCheck size={24} />
+                            </div>
+                            <h2 className="text-xl font-black text-slate-800 tracking-tight uppercase">GST & Compliance</h2>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">GSTIN</label>
+                                <input type="text" className="input py-4 font-bold bg-slate-50 border-none rounded-2xl" value={formData.gstin} onChange={(e) => setFormData({...formData, gstin: e.target.value.toUpperCase()})} placeholder="27AAAAA0000A1Z5" />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">PAN Number</label>
+                                <input type="text" className="input py-4 font-bold bg-slate-50 border-none rounded-2xl" value={formData.pan} onChange={(e) => setFormData({...formData, pan: e.target.value.toUpperCase()})} placeholder="ABCDE1234F" />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">State Name</label>
+                                <input type="text" className="input py-4 font-bold bg-slate-50 border-none rounded-2xl" value={formData.stateName} onChange={(e) => setFormData({...formData, stateName: e.target.value})} placeholder="Bihar" />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">State Code</label>
+                                <input type="text" className="input py-4 font-bold bg-slate-50 border-none rounded-2xl" value={formData.stateCode} onChange={(e) => setFormData({...formData, stateCode: e.target.value})} placeholder="10" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 {/* Preferences Card */}
                 <div className="card p-10 bg-white shadow-2xl shadow-slate-200 border-none rounded-[2.5rem] relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-8 text-primary-50 opacity-10 group-hover:scale-110 transition-transform -z-0">
@@ -388,6 +432,14 @@ const Settings = () => {
                                 <select className="input py-4 font-bold bg-slate-50 border-none rounded-2xl cursor-pointer hover:bg-slate-100 transition-colors" value={i18n.language} onChange={(e) => i18n.changeLanguage(e.target.value)}>
                                     <option value="en">{t('settings.english_lang')}</option>
                                     <option value="hi">{t('settings.hindi_lang')}</option>
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Default Invoice Format</label>
+                                <select className="input py-4 font-bold bg-slate-50 border-none rounded-2xl cursor-pointer hover:bg-slate-100 transition-colors" value={formData.invoiceFormat} onChange={(e) => setFormData({...formData, invoiceFormat: e.target.value as any})}>
+                                    <option value="thermal">Thermal Receipt (80mm)</option>
+                                    <option value="modern">Modern Professional (A4)</option>
+                                    <option value="gst">GST Tax Invoice (A4)</option>
                                 </select>
                             </div>
                         </div>

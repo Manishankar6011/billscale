@@ -164,6 +164,8 @@ const Inventory = () => {
     mrp: "",
     barcode: "",
     batchNumber: "",
+    hsnCode: "",
+    gstRate: "0",
   });
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [showLeaveWarning, setShowLeaveWarning] = useState(false);
@@ -213,6 +215,8 @@ const Inventory = () => {
       mrp: "",
       barcode: "",
       batchNumber: "",
+      hsnCode: "",
+      gstRate: "0",
     });
     setAdjustmentType("add");
     setAdjustmentValue("");
@@ -259,6 +263,8 @@ const Inventory = () => {
           mrp: "",
           barcode: "",
           batchNumber: "",
+          hsnCode: "",
+          gstRate: "0",
         });
         setTimeout(() => nameInputRef.current?.focus(), 100);
       } else {
@@ -274,6 +280,8 @@ const Inventory = () => {
           mrp: "",
           barcode: "",
           batchNumber: "",
+          hsnCode: "",
+          gstRate: "0",
         });
       }
     },
@@ -314,6 +322,8 @@ const Inventory = () => {
       mrp: product.mrp.toString(),
       barcode: product.barcode || "",
       batchNumber: product.batchNumber || "",
+      hsnCode: product.hsnCode || "",
+      gstRate: (product.gstRate || 0).toString(),
     });
     setIsModalOpen(true);
   };
@@ -337,6 +347,8 @@ const Inventory = () => {
       mrp: Number(formData.mrp),
       barcode: formData.barcode,
       batchNumber: formData.batchNumber,
+      hsnCode: formData.hsnCode,
+      gstRate: Number(formData.gstRate),
     };
     saveMutation.mutate(data);
   };
@@ -1077,6 +1089,41 @@ const Inventory = () => {
                     setFormData({ ...formData, name: e.target.value })
                   }
                 />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
+                    HSN Code (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold placeholder:font-medium"
+                    placeholder="e.g. 8413"
+                    value={formData.hsnCode}
+                    onChange={(e) =>
+                      setFormData({ ...formData, hsnCode: e.target.value })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
+                    GST Rate (%)
+                  </label>
+                  <select
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold"
+                    value={formData.gstRate}
+                    onChange={(e) =>
+                      setFormData({ ...formData, gstRate: e.target.value })
+                    }
+                  >
+                    <option value="0">Exempt (0%)</option>
+                    <option value="5">GST 5%</option>
+                    <option value="12">GST 12%</option>
+                    <option value="18">GST 18%</option>
+                    <option value="28">GST 28%</option>
+                  </select>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

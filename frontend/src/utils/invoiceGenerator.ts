@@ -12,7 +12,11 @@ export const generateInvoice = async (
     companyPhone?: string,
     companyEmail?: string,
     signature?: string,
-    upiId?: string
+    upiId?: string,
+    gstin?: string,
+    pan?: string,
+    stateName?: string,
+    stateCode?: string
 ) => {
     try {
         const doc = new jsPDF();
@@ -30,10 +34,10 @@ export const generateInvoice = async (
             try {
                 doc.addImage(companyLogo, 'PNG', 20, currentY, 30, 30);
                 // Adjust info position if logo is present
-                doc.setFontSize(14);
+                doc.setFontSize(16);
                 doc.text(businessName, 55, currentY + 5);
                 
-                doc.setFontSize(9);
+                doc.setFontSize(11);
                 doc.setFont('helvetica', 'normal');
                 let infoY = currentY + 12;
                 if (ownerName) { doc.text(`Proprietor: ${ownerName}`, 55, infoY); infoY += 5; }
@@ -42,21 +46,24 @@ export const generateInvoice = async (
                 if (companyAddress) {
                     const splitAddress = doc.splitTextToSize(companyAddress, 130);
                     doc.text(splitAddress, 55, infoY);
+                    infoY += (splitAddress.length * 5);
                 }
+                if (gstin) { doc.setFont('helvetica', 'bold'); doc.text(`GSTIN: ${gstin}`, 55, infoY); infoY += 5; }
+                if (pan) { doc.setFont('helvetica', 'bold'); doc.text(`PAN: ${pan}`, 55, infoY); infoY += 5; }
+                if (stateName) { doc.setFont('helvetica', 'bold'); doc.text(`State: ${stateName} (${stateCode || ''})`, 55, infoY); }
                 currentY += 35;
             } catch (err) {
                 console.error("Logo failed to load", err);
-                // Fallback if logo fails
                 doc.setFontSize(14);
                 doc.text(businessName, 20, currentY);
                 currentY += 7;
             }
         } else {
-            doc.setFontSize(14);
+            doc.setFontSize(16);
             doc.text(businessName, 20, currentY);
             currentY += 7;
             
-            doc.setFontSize(9);
+            doc.setFontSize(11);
             doc.setFont('helvetica', 'normal');
             if (ownerName) { doc.text(`Proprietor: ${ownerName}`, 20, currentY); currentY += 5; }
             if (companyPhone) { doc.text(`Phone: ${companyPhone}`, 20, currentY); currentY += 5; }
@@ -66,6 +73,9 @@ export const generateInvoice = async (
                 doc.text(splitAddress, 20, currentY);
                 currentY += (splitAddress.length * 5);
             }
+            if (gstin) { doc.setFont('helvetica', 'bold'); doc.text(`GSTIN: ${gstin}`, 20, currentY); currentY += 5; }
+            if (pan) { doc.setFont('helvetica', 'bold'); doc.text(`PAN: ${pan}`, 20, currentY); currentY += 5; }
+            if (stateName) { doc.setFont('helvetica', 'bold'); doc.text(`State: ${stateName} (${stateCode || ''})`, 20, currentY); currentY += 5; }
             currentY += 5;
         }
         
@@ -85,22 +95,37 @@ export const generateInvoice = async (
         doc.text(sale.customerName || 'Walk-in Customer', 35, currentY);
         if (sale.customerPhone) {
             currentY += 5;
-            doc.setFontSize(9);
+            doc.setFontSize(11);
             doc.text(`Phone: ${sale.customerPhone}`, 35, currentY);
+        }
+        if (sale.customerGSTIN) {
+            currentY += 5;
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`GSTIN: ${sale.customerGSTIN}`, 35, currentY);
+            doc.setFont('helvetica', 'normal');
+        }
+        if (sale.customerState) {
+            currentY += 5;
+            doc.setFontSize(11);
+            doc.text(`State: ${sale.customerState} (${sale.customerStateCode || ''})`, 35, currentY);
         }
 
         // Items Table
-        const tableColumn = ["Product", "Quantity", "Price", "Total"];
+        const tableColumn = ["Product", "HSN", "Quantity", "Price", "Total"];
         const tableRows: any[] = [];
+        let totalTax = 0;
 
         (sale.items || []).forEach((item: any) => {
             const itemData = [
                 item.productId?.name || 'Unknown Product',
-                `${item.quantity} ${item.productId?.unit || ''}`,
+                item.hsnCode || '-',
+                `${item.quantity} ${item.unit || ''}`,
                 `Rs.${(item.sellingPrice || 0).toFixed(2)}`,
-                `Rs.${((item.quantity || 0) * (item.sellingPrice || 0)).toFixed(2)}`
+                `Rs.${((item.quantity || 0) * (item.sellingPrice || 0) * (100 / (100 + (item.taxRate || 0)))).toFixed(2)}`
             ];
             tableRows.push(itemData);
+            if (item.taxAmount) totalTax += item.taxAmount;
         });
 
         if (sale.additionalItems && sale.additionalItems.length > 0) {
@@ -120,16 +145,55 @@ export const generateInvoice = async (
             startY: currentY + 10,
             theme: 'striped',
             headStyles: { fillColor: [79, 70, 229] }, // primary-600
-            styles: { fontSize: 10, cellPadding: 5 },
+            styles: { fontSize: 11, cellPadding: 4 },
             columnStyles: {
-                2: { halign: 'right' },
-                3: { halign: 'right' }
+                2: { halign: 'center' },
+                3: { halign: 'right' },
+                4: { halign: 'right' }
             }
         });
 
         let finalY = (doc as any).lastAutoTable.finalY + 10;
 
+        // Tax Summary if applicable
+        if (totalTax > 0) {
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Tax Breakdown:', 20, finalY);
+            finalY += 5;
+
+            const taxBreakdown: Record<string, { rate: number, tax: number }> = {};
+            (sale.items || []).forEach((item: any) => {
+                if (item.taxRate > 0) {
+                    const rate = item.taxRate;
+                    if (!taxBreakdown[rate]) taxBreakdown[rate] = { rate, tax: 0 };
+                    taxBreakdown[rate].tax += (item.taxAmount || 0);
+                }
+            });
+
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'normal');
+            Object.values(taxBreakdown).forEach((t: any) => {
+                doc.text(`CGST (${t.rate/2}%): Rs.${(t.tax/2).toFixed(2)}`, 20, finalY);
+                doc.text(`SGST (${t.rate/2}%): Rs.${(t.tax/2).toFixed(2)}`, 60, finalY);
+                finalY += 5;
+            });
+            finalY += 2;
+        }
+
         // Summary
+        const totalTaxableAmount = (sale.items || []).reduce((acc: number, item: any) => acc + ((item.quantity || 0) * (item.sellingPrice || 0) * (100 / (100 + (item.taxRate || 0)))), 0);
+        doc.setFontSize(10);
+        doc.text(`Total Taxable Amount: Rs.${totalTaxableAmount.toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' });
+        finalY += 6;
+
+        if (sale.roundOffAmount !== 0) {
+            doc.setFont('helvetica', 'italic');
+            doc.setFontSize(9);
+            doc.text(`Round Off: ${sale.roundOffAmount > 0 ? '+' : ''}${sale.roundOffAmount.toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' });
+            finalY += 6;
+        }
+
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(12);
         doc.text(`Grand Total: Rs.${(sale.totalAmount || 0).toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' });

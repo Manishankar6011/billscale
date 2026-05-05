@@ -128,7 +128,7 @@ export const getCustomers = async (req: AuthRequest, res: Response) => {
 // @access  Private
 export const createCustomer = async (req: AuthRequest, res: Response) => {
     try {
-        const { name, phone, email, address } = req.body;
+        const { name, phone, email, address, gstin, state, stateCode } = req.body;
         const tenantId = req.tenantId;
 
         // Check if phone already exists for this tenant
@@ -144,11 +144,42 @@ export const createCustomer = async (req: AuthRequest, res: Response) => {
             name,
             phone: phone || undefined,
             email,
-            address
+            address,
+            gstin,
+            state,
+            stateCode
         });
 
         await customer.save();
         res.status(201).json(customer);
+    } catch (err: any) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
+// @desc    Update customer
+// @route   PUT /api/customers/:id
+// @access  Private
+export const updateCustomer = async (req: AuthRequest, res: Response) => {
+    try {
+        const { name, phone, email, address, gstin, state, stateCode } = req.body;
+        const tenantId = req.tenantId;
+
+        const customer = await Customer.findOne({ _id: req.params.id, tenantId });
+        if (!customer) {
+            return res.status(404).json({ message: 'Customer not found' });
+        }
+
+        if (name) customer.name = name;
+        if (phone !== undefined) customer.phone = phone;
+        if (email !== undefined) customer.email = email;
+        if (address !== undefined) customer.address = address;
+        if (gstin !== undefined) customer.gstin = gstin;
+        if (state !== undefined) customer.state = state;
+        if (stateCode !== undefined) customer.stateCode = stateCode;
+
+        await customer.save();
+        res.status(200).json(customer);
     } catch (err: any) {
         res.status(500).json({ message: err.message });
     }

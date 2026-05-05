@@ -4,13 +4,17 @@ import { format } from 'date-fns';
 interface A4InvoiceProps {
     sale: any;
     businessName: string;
-    ownerName?: string | undefined;
-    companyLogo?: string | undefined;
-    companyPhone?: string | undefined;
-    companyAddress?: string | undefined;
-    companyEmail?: string | undefined;
-    signature?: string | undefined;
-    upiId?: string | undefined;
+    ownerName?: string;
+    companyLogo?: string;
+    companyPhone?: string;
+    companyAddress?: string;
+    companyEmail?: string;
+    signature?: string;
+    upiId?: string;
+    gstin?: string;
+    pan?: string;
+    stateName?: string;
+    stateCode?: string;
     isPreview?: boolean;
 }
 
@@ -24,6 +28,10 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
     companyEmail,
     signature,
     upiId,
+    gstin,
+    pan,
+    stateName,
+    stateCode,
     isPreview = false
 }) => {
     const [qrDataUrl, setQrDataUrl] = React.useState<string>('');
@@ -41,10 +49,8 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
 
     if (!sale) return null;
 
-    const totalItems = (sale.items?.length || 0) + (sale.additionalItems?.length || 0);
-
     return (
-        <div id="a4-invoice" className={`${isPreview ? 'block shadow-2xl' : 'hidden print:block'} bg-white text-black p-12 w-[210mm] min-h-[297mm] mx-auto font-sans text-sm`}>
+        <div id="a4-invoice" className={`${isPreview ? 'block shadow-2xl' : 'hidden print:block'} bg-white text-black p-12 w-[210mm] min-h-[297mm] mx-auto font-sans text-base`}>
             {/* Top Toolbar Info */}
             <div className="flex justify-between items-start mb-6">
                 <div className="space-y-2">
@@ -59,6 +65,13 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                         {companyAddress && <p className="max-w-xs whitespace-pre-wrap font-medium">{companyAddress}</p>}
                         {companyPhone && <p className="font-medium">Phone: {companyPhone}</p>}
                         {companyEmail && <p className="font-medium">Email: {companyEmail}</p>}
+                        {gstin && <p className="font-bold">GSTIN: {gstin}</p>}
+                        {pan && <p className="font-bold">PAN: {pan}</p>}
+                        {(stateName || stateCode) && (
+                            <p className="font-bold">
+                                State: {stateName || ''} {stateCode ? `(${stateCode})` : ''}
+                            </p>
+                        )}
                     </div>
                 </div>
                 <div className="text-right">
@@ -72,16 +85,22 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-8 mb-2 py-2 border-t border-black/10">
-                <div>
-                    <p className="text-lg font-black text-black">Bill To : {sale.customerName || 'Cash Customer'}</p>
-                    <p className="text-black font-bold text-sm">Phone: {sale.customerPhone}</p>
-                    <p className="text-black font-medium text-xs mt-1">{sale.customerAddress}</p>
+            <div className="grid grid-cols-2 gap-8 mb-0 py-1 border-t border-black/10">
+                <div className="space-y-0.5">
+                    <p className="text-lg font-black text-black leading-tight">Bill To : {sale.customerName || 'Cash Customer'}</p>
+                    {sale.customerPhone && <p className="text-black font-bold text-sm">Phone: {sale.customerPhone}</p>}
+                    {sale.customerAddress && <p className="text-black font-medium text-xs leading-tight">{sale.customerAddress}</p>}
+                    {sale.customerGSTIN && <p className="text-black font-bold text-xs uppercase">GSTIN: {sale.customerGSTIN}</p>}
+                    {(sale.customerState || sale.customerStateCode) && (
+                        <p className="text-black font-bold text-xs uppercase">
+                            State: {sale.customerState || ''} {sale.customerStateCode ? `(${sale.customerStateCode})` : ''}
+                        </p>
+                    )}
                 </div>
-                <div className="text-right text-xs uppercase tracking-tight text-black">
-                    <p className="font-black mb-1">Payment Info:</p>
-                    <p className="font-bold">Mode: {sale.paymentMode || 'CASH'}</p>
-                    <p className="font-bold">
+                <div className="text-right text-[12px] uppercase tracking-tight text-black flex flex-col justify-center">
+                    <p className="font-black mb-0.5">Payment Info:</p>
+                    <p className="font-bold opacity-70">Mode: {sale.paymentMode || 'CASH'}</p>
+                    <p className="font-bold opacity-70">
                         Status: {sale.status === 'pending' ? 'DUE' : sale.status?.toUpperCase()}
                     </p>
                 </div>
@@ -110,7 +129,7 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                                 <td className="py-5 px-2 text-right font-bold text-black">₹{(item.mrpAtTime || 0).toFixed(0)}</td>
                                 <td className="py-5 px-2 text-center font-black text-black text-base">{item.quantity}</td>
                                 <td className="py-5 px-2 text-right font-bold text-black">₹{(item.sellingPrice || 0).toFixed(0)}</td>
-                                <td className="py-5 px-2 text-right font-black text-black text-base">₹{((item.quantity || 0) * (item.sellingPrice || 0)).toFixed(0)}</td>
+                                <td className="py-5 px-2 text-right font-black text-black text-base">₹{((item.quantity || 0) * (item.sellingPrice || 0) * (100 / (100 + (item.taxRate || 0)))).toFixed(2)}</td>
                             </tr>
                         ))}
                         {(sale.additionalItems || []).map((item: any, i: number) => (
@@ -133,21 +152,65 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
             <div className="flex justify-end pt-4 border-t-2 border-black">
                 <div className="w-full max-w-sm space-y-3">
                     <div className="flex justify-between text-black font-bold text-base">
-                        <span>Items Subtotal</span>
-                        <span>₹{((sale.items || []).reduce((acc: number, item: any) => acc + (item.quantity * item.sellingPrice), 0)).toFixed(2)}</span>
+                        <span>Total Taxable Amount</span>
+                        <span>₹{((sale.items || []).reduce((acc: number, item: any) => acc + ((item.quantity || 0) * (item.sellingPrice || 0) * (100 / (100 + (item.taxRate || 0)))), 0)).toFixed(2)}</span>
                     </div>
+
+                    {/* Tax Breakdown */}
+                    {(() => {
+                        const hsnSummary: Record<string, { taxable: number; rate: number; tax: number }> = {};
+                        (sale.items || []).forEach((item: any) => {
+                            const hsn = item.hsnCode || "N/A";
+                            const itemTotal = (item.quantity || 0) * (item.sellingPrice || 0);
+                            const taxRate = item.taxRate || 0;
+                            const taxableValue = itemTotal * (100 / (100 + taxRate));
+                            const taxAmount = itemTotal - taxableValue;
+
+                            if (taxRate > 0) {
+                                if (!hsnSummary[hsn]) {
+                                    hsnSummary[hsn] = { taxable: 0, rate: taxRate, tax: 0 };
+                                }
+                                hsnSummary[hsn].taxable += taxableValue;
+                                hsnSummary[hsn].tax += taxAmount;
+                            }
+                        });
+
+                        const taxes = Object.values(hsnSummary);
+                        if (taxes.length === 0) return null;
+
+                        return (
+                            <div className="space-y-1 border-y border-black/10 py-2">
+                                {taxes.map((t, idx) => (
+                                    <div key={idx} className="text-[11px] text-slate-600 font-medium">
+                                        <div className="flex justify-between">
+                                            <span>CGST ({t.rate / 2}%)</span>
+                                            <span>₹{(t.tax / 2).toFixed(2)}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span>SGST ({t.rate / 2}%)</span>
+                                            <span>₹{(t.tax / 2).toFixed(2)}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        );
+                    })()}
+
                     {(sale.additionalItems || []).length > 0 && (
                         <div className="flex justify-between text-black font-bold text-base">
                             <span>Service & Charges</span>
                             <span>₹{((sale.additionalItems || []).reduce((acc: number, item: any) => acc + Number(item.price), 0)).toFixed(2)}</span>
                         </div>
                     )}
-                    {typeof sale.roundOffAmount === 'number' && sale.roundOffAmount !== 0 && (
-                        <div className="flex justify-between text-black font-bold italic">
-                            <span>Round Off</span>
-                            <span>{sale.roundOffAmount > 0 ? '+' : ''}{sale.roundOffAmount.toFixed(2)}</span>
-                        </div>
-                    )}
+                    {(() => {
+                        const rOff = Number(sale.roundOffAmount || (sale as any).roundoffAmount || 0);
+                        return (
+                            <div className="flex justify-between text-black font-bold italic">
+                                <span>Round Off</span>
+                                <span>{rOff >= 0 ? '(+)' : '(-)'}{Math.abs(rOff).toFixed(2)}</span>
+                            </div>
+                        );
+                    })()}
                     <div className="flex justify-between text-4xl font-black text-black pt-3 border-t-2 border-black">
                         <span>TOTAL</span>
                         <span>₹{(sale.totalAmount || 0).toLocaleString()}</span>

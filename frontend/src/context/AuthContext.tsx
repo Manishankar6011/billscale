@@ -38,6 +38,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             phone: t.phone || data.phone,
             signature: t.signature || data.signature,
             upiId: t.upiId || data.upiId,
+            gstin: t.gstin || data.gstin,
+            pan: t.pan || data.pan,
+            stateName: t.stateName || data.stateName,
+            stateCode: t.stateCode || data.stateCode,
+            invoiceFormat: t.invoiceFormat || data.invoiceFormat,
             token: token || data.token
         };
     };

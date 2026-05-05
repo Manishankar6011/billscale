@@ -70,6 +70,31 @@ const tenantSchema: Schema = new mongoose.Schema({
         lowercase: true,
         sparse: true // Allows nulls while enforcing uniqueness on non-nulls during migration
     },
+    gstin: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+    pan: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+    stateName: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+    stateCode: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+    invoiceFormat: {
+        type: String,
+        enum: ['thermal', 'modern', 'gst'],
+        default: 'modern'
+    },
     createdAt: {
         type: Date,
         default: Date.now

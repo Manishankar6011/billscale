@@ -15,6 +15,11 @@ export interface Tenant {
   referralCode?: string;
   upiId?: string;
   slug?: string;
+  gstin?: string;
+  pan?: string;
+  stateName?: string;
+  stateCode?: string;
+  invoiceFormat?: 'thermal' | 'modern' | 'gst';
 }
 
 export interface User {
@@ -37,6 +42,11 @@ export interface User {
   phone?: string;
   signature?: string;
   upiId?: string;
+  gstin?: string;
+  pan?: string;
+  stateName?: string;
+  stateCode?: string;
+  invoiceFormat?: 'thermal' | 'modern' | 'gst';
 }
 
 export interface Product {
@@ -48,9 +58,11 @@ export interface Product {
   pricePerUnit: number;
   purchasePrice: number;
   mrp: number;
-  barcode?: string;
-  batchNumber?: string;
-  imageUrl?: string;
+  barcode?: string | undefined;
+  batchNumber?: string | undefined;
+  imageUrl?: string | undefined;
+  hsnCode?: string | undefined;
+  gstRate?: number | undefined;
 }
 
 export interface PaginatedResponse<T> {
@@ -103,6 +115,9 @@ export interface Customer {
   phone?: string;
   email?: string;
   address?: string;
+  gstin?: string;
+  state?: string;
+  stateCode?: string;
 }
 
 export interface Staff {
@@ -121,6 +136,9 @@ export interface Sale {
   customerName: string;
   customerPhone?: string;
   customerAddress?: string;
+  customerGSTIN?: string;
+  customerState?: string;
+  customerStateCode?: string;
   items: {
     productId: Product | string;
     quantity: number;
@@ -129,6 +147,9 @@ export interface Sale {
     sellingPrice: number;
     purchasePriceAtTime: number;
     mrpAtTime: number;
+    taxRate?: number | undefined;
+    taxAmount?: number | undefined;
+    hsnCode?: string | undefined;
   }[];
   totalAmount: number;
   totalProfit: number;

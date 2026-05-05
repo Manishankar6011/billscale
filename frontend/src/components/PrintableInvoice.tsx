@@ -13,6 +13,10 @@ interface PrintableInvoiceProps {
     changeAmount?: number | undefined;
     roundOffAmount?: number | undefined;
     upiId?: string | undefined;
+    gstin?: string | undefined;
+    pan?: string | undefined;
+    stateName?: string | undefined;
+    stateCode?: string | undefined;
     isPreview?: boolean;
 }
 
@@ -28,6 +32,10 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
     changeAmount,
     roundOffAmount,
     upiId,
+    gstin,
+    pan,
+    stateName,
+    stateCode,
     isPreview = false
 }) => {
     const [qrDataUrl, setQrDataUrl] = React.useState<string>('');
@@ -60,6 +68,13 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                     {companyPhone && <p>Contact: {companyPhone}</p>}
                     {companyEmail && <p>Email: {companyEmail}</p>}
                     {companyAddress && <p className="text-[10px] uppercase">{companyAddress}</p>}
+                    {gstin && <p className="font-bold">GSTIN: {gstin}</p>}
+                    {pan && <p className="font-bold">PAN: {pan}</p>}
+                    {(stateName || stateCode) && (
+                        <p className="font-bold">
+                            State: {stateName || ''} {stateCode ? `(${stateCode})` : ''}
+                        </p>
+                    )}
                 </div>
             </div>
 
@@ -106,7 +121,7 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                             </td>
                             <td className="py-2 text-center font-black">{item.quantity}</td>
                             <td className="py-2 text-right">{(item.sellingPrice || 0).toFixed(2)}</td>
-                            <td className="py-2 text-right font-black">{((item.quantity || 0) * (item.sellingPrice || 0)).toFixed(2)}</td>
+                            <td className="py-2 text-right font-black">{((item.quantity || 0) * (item.sellingPrice || 0) * (100 / (100 + (item.taxRate || 0)))).toFixed(2)}</td>
                         </tr>
                     ))}
                     {(sale.additionalItems || []).map((item: any, i: number) => (
@@ -123,15 +138,56 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
             {/* Totals Section */}
             <div className="border-t-2 border-black pt-2 space-y-1">
                 <div className="flex justify-between items-center text-[12px] font-bold">
-                    <span>Subtotal:</span>
-                    <span className="font-black">₹{(sale.totalAmount - (sale.roundOffAmount || 0)).toLocaleString()}</span>
+                    <span>Total Taxable Amount:</span>
+                    <span className="font-black">₹{((sale.items || []).reduce((acc: number, item: any) => acc + ((item.quantity || 0) * (item.sellingPrice || 0) * (100 / (100 + (item.taxRate || 0)))), 0)).toFixed(2)}</span>
                 </div>
-                {typeof sale.roundOffAmount === 'number' && sale.roundOffAmount !== 0 && (
-                    <div className="flex justify-between items-center text-[11px] font-bold italic text-slate-600">
-                        <span>Round Off:</span>
-                        <span>{sale.roundOffAmount >= 0 ? '+' : ''}{sale.roundOffAmount.toFixed(2)}</span>
-                    </div>
-                )}
+
+                {/* Tax Breakdown */}
+                {(() => {
+                    const hsnSummary: Record<string, { rate: number; tax: number }> = {};
+                    (sale.items || []).forEach((item: any) => {
+                        const itemTotal = (item.quantity || 0) * (item.sellingPrice || 0);
+                        const taxRate = item.taxRate || 0;
+                        const taxableValue = itemTotal * (100 / (100 + taxRate));
+                        const taxAmount = itemTotal - taxableValue;
+
+                        if (taxRate > 0) {
+                            const key = `${taxRate}`;
+                            if (!hsnSummary[key]) hsnSummary[key] = { rate: taxRate, tax: 0 };
+                            hsnSummary[key].tax += taxAmount;
+                        }
+                    });
+
+                    const taxes = Object.values(hsnSummary);
+                    if (taxes.length === 0) return null;
+
+                    return (
+                        <div className="py-1 border-y border-black border-dashed">
+                            {taxes.map((t, idx) => (
+                                <div key={idx} className="text-[10px] space-y-0.5">
+                                    <div className="flex justify-between">
+                                        <span>CGST ({t.rate / 2}%)</span>
+                                        <span>₹{(t.tax / 2).toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span>SGST ({t.rate / 2}%)</span>
+                                        <span>₹{(t.tax / 2).toFixed(2)}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    );
+                })()}
+
+                {(() => {
+                    const rOff = Number(sale.roundOffAmount || (sale as any).roundoffAmount || 0);
+                    return (
+                        <div className="flex justify-between items-center text-[11px] font-bold italic text-slate-600">
+                            <span>Round Off:</span>
+                            <span>{rOff >= 0 ? '(+)' : '(-)'}{Math.abs(rOff).toFixed(2)}</span>
+                        </div>
+                    );
+                })()}
                 <div className="flex justify-between items-center text-[16px] font-black border-y-2 border-black py-2 my-1">
                     <span>GRAND TOTAL:</span>
                     <span>₹{(sale.totalAmount || 0).toLocaleString()}</span>

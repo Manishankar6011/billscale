@@ -55,6 +55,15 @@ const productSchema: Schema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    hsnCode: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+    gstRate: {
+        type: Number,
+        default: 0
+    },
     createdAt: {
         type: Date,
         default: Date.now

@@ -22,6 +22,8 @@ interface BulkItem {
     mrp: string | number;
     stockValue?: string | number | undefined;
     unit: string;
+    hsnCode?: string;
+    gstRate?: string | number;
     errors?: Record<string, string> | undefined;
 }
 
@@ -40,10 +42,10 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
     }, [isOpen, initialData]);
 
     const downloadTemplate = () => {
-        const headers = [['Product Name', 'Batch Number', 'Item Code', 'Purchase Price', 'Selling Price', 'MRP', 'Stock Quantity', 'Unit']];
+        const headers = [['Product Name', 'Batch Number', 'Item Code', 'HSN Code', 'GST Rate (%)', 'Purchase Price', 'Selling Price', 'MRP', 'Stock Quantity', 'Unit']];
         const sampleData = [
-            ['Example Cement', 'B-101', 'CX-1002', 400, 450, 500, 100, 'piece'],
-            ['Steel Rod 12mm', 'ST-22', 'BAR-12', 60, 75, 500, 'kg']
+            ['Example Cement', 'B-101', 'CX-1002', '2523', 18, 400, 450, 500, 100, 'piece'],
+            ['Steel Rod 12mm', 'ST-22', 'BAR-12', '7214', 12, 60, 75, 500, 10, 'kg']
         ];
         const rows = [...headers, ...sampleData];
         const wb = XLSX.utils.book_new();
@@ -179,6 +181,8 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
                         stock: String(findValue(['Stock Quantity', 'stock', 'qty', 'quantity', 'initialstock']) || '0'),
                         stockValue: String(findValue(['Stock Value', 'stock_value', 'total_value', 'value']) || ''),
                         unit: String(findValue(['Unit', 'unit', 'uom']) || 'piece').toLowerCase(),
+                        hsnCode: String(findValue(['HSN Code', 'hsn', 'hsncode', 'sac']) || ''),
+                        gstRate: String(findValue(['GST Rate', 'gst', 'tax', 'rate_gst']) || '0'),
                     };
                 }).filter((item): item is BulkItem => item !== null);
 
@@ -248,7 +252,9 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
             pricePerUnit: 0,
             mrp: 0,
             stock: 0,
-            unit: 'piece'
+            unit: 'piece',
+            hsnCode: '',
+            gstRate: '0'
         };
         setData(validateData([...data, newItem]));
     };
@@ -279,6 +285,8 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
             purchasePrice: Number(item.purchasePrice) || 0,
             pricePerUnit: Number(item.pricePerUnit) || 0,
             mrp: Number(item.mrp) || 0,
+            hsnCode: item.hsnCode || '',
+            gstRate: Number(item.gstRate) || 0,
             stock: parseFloat(String(item.stock).replace(/[^\d.]/g, '')) || 0 // Extract numeric part for DB
         }));
 
@@ -393,6 +401,8 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
                                             <th className="px-4 py-4 text-left">MRP</th>
                                             <th className="px-4 py-4 text-left">Stock</th>
                                             <th className="px-4 py-4 text-left">Unit*</th>
+                                            <th className="px-4 py-4 text-left">HSN</th>
+                                            <th className="px-4 py-4 text-left">GST%</th>
                                             <th className="px-4 py-4 text-left text-blue-600">Total Cost</th>
                                             <th className="px-4 py-4 text-left text-emerald-600">Total Sale</th>
                                             <th className="px-4 py-4 text-center w-12"></th>
@@ -487,6 +497,26 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
                                                             onChange={e => handleCellChange(idx, 'unit', e.target.value)}
                                                             onKeyDown={e => handleKeyDown(e, idx, 'unit')}
                                                         />
+                                                    </td>
+                                                    <td className="p-1">
+                                                        <input 
+                                                            id={`cell-${idx}-hsnCode`}
+                                                            className={`w-full p-2.5 bg-transparent border-0 ring-1 focus:ring-2 rounded-xl text-slate-500 transition-all ${item.errors?.hsnCode ? 'bg-rose-50/50 ring-rose-400/50 focus:ring-rose-500' : 'ring-transparent focus:ring-primary-500'}`}
+                                                            value={item.hsnCode}
+                                                            onChange={e => handleCellChange(idx, 'hsnCode', e.target.value)}
+                                                            onKeyDown={e => handleKeyDown(e, idx, 'hsnCode')}
+                                                            placeholder="HSN"
+                                                        />
+                                                    </td>
+                                                    <td className="p-1">
+                                                        <select 
+                                                            id={`cell-${idx}-gstRate`}
+                                                            className="w-full p-2.5 bg-transparent border-0 ring-1 focus:ring-2 rounded-xl text-slate-500 transition-all ring-transparent focus:ring-primary-500"
+                                                            value={item.gstRate}
+                                                            onChange={e => handleCellChange(idx, 'gstRate', e.target.value)}
+                                                        >
+                                                            {['0', '5', '12', '18', '28'].map(r => <option key={r} value={r}>{r}%</option>)}
+                                                        </select>
                                                     </td>
                                                     <td className="px-4 py-3 text-blue-700 font-black bg-blue-50/20">
                                                         ₹{totalCost.toLocaleString()}
