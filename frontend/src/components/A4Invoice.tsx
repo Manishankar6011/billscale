@@ -46,7 +46,7 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
     return (
         <div id="a4-invoice" className={`${isPreview ? 'block shadow-2xl' : 'hidden print:block'} bg-white text-black p-12 w-[210mm] min-h-[297mm] mx-auto font-sans text-sm`}>
             {/* Top Toolbar Info */}
-            <div className="flex justify-between items-start mb-12">
+            <div className="flex justify-between items-start mb-6">
                 <div className="space-y-2">
                     {companyLogo ? (
                         <img src={companyLogo} alt="Logo" className="h-16 object-contain mb-4" />
@@ -72,23 +72,22 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-12 mb-12 p-8 bg-slate-50 rounded-3xl border-2 border-black">
+            <div className="grid grid-cols-2 gap-8 mb-2 py-2 border-t border-black/10">
                 <div>
-                    <h3 className="text-[10px] font-black text-black uppercase tracking-[0.2em] mb-3">BILL TO :</h3>
-                    <p className="text-xl font-black text-black mb-1">{sale.customerName || 'Cash Customer'}</p>
-                    <p className="text-black font-bold text-base">{sale.customerPhone || 'No Phone provided'}</p>
-                    {sale.customerAddress && <p className="text-black font-medium text-xs mt-2">{sale.customerAddress}</p>}
+                    <p className="text-lg font-black text-black">Bill To : {sale.customerName || 'Cash Customer'}</p>
+                    <p className="text-black font-bold text-sm">Phone: {sale.customerPhone}</p>
+                    <p className="text-black font-medium text-xs mt-1">{sale.customerAddress}</p>
                 </div>
-                <div className="text-right">
-                    <h3 className="text-[10px] font-black text-black uppercase tracking-[0.2em] mb-3">Payment Info</h3>
-                    <p className="text-lg font-black text-black uppercase tracking-tight">{sale.paymentMode || 'CASH'}</p>
-                    <p className="text-xs font-black uppercase tracking-widest mt-1 text-black">
+                <div className="text-right text-xs uppercase tracking-tight text-black">
+                    <p className="font-black mb-1">Payment Info:</p>
+                    <p className="font-bold">Mode: {sale.paymentMode || 'CASH'}</p>
+                    <p className="font-bold">
                         Status: {sale.status === 'pending' ? 'DUE' : sale.status?.toUpperCase()}
                     </p>
                 </div>
             </div>
 
-            <div className="mb-12">
+            <div className="mb-8">
                 <table className="w-full text-left border-collapse">
                     <thead>
                         <tr className="border-b-4 border-black text-[10px] font-black text-black uppercase tracking-widest">
@@ -131,7 +130,7 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                 </table>
             </div>
 
-            <div className="flex justify-end pt-8 border-t-4 border-black">
+            <div className="flex justify-end pt-4 border-t-2 border-black">
                 <div className="w-full max-w-sm space-y-3">
                     <div className="flex justify-between text-black font-bold text-base">
                         <span>Items Subtotal</span>
@@ -149,14 +148,14 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                             <span>{sale.roundOffAmount > 0 ? '+' : ''}{sale.roundOffAmount.toFixed(2)}</span>
                         </div>
                     )}
-                    <div className="flex justify-between text-4xl font-black text-black pt-5 border-t-4 border-black">
+                    <div className="flex justify-between text-4xl font-black text-black pt-3 border-t-2 border-black">
                         <span>TOTAL</span>
                         <span>₹{(sale.totalAmount || 0).toLocaleString()}</span>
                     </div>
 
                     {/* Balance Section */}
                     {sale.amountPaid < sale.totalAmount && (
-                        <div className="mt-6 p-6 bg-slate-50 rounded-[2rem] border-2 border-black space-y-3">
+                        <div className="mt-4 p-4 border-t border-black space-y-2">
                             <div className="flex justify-between text-base font-bold text-black">
                                 <span>Total Paid</span>
                                 <span>₹{(sale.amountPaid || 0).toLocaleString()}</span>
@@ -170,7 +169,7 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                 </div>
             </div>
 
-            <div className="mt-20 flex justify-between items-end">
+            <div className="mt-12 flex justify-between items-end">
                 <div className="text-black text-[11px] font-bold space-y-1">
                     <p className="uppercase tracking-widest text-black mb-2 border-b-2 border-black w-fit">Terms & Conditions</p>
                     <p>1. Goods once sold will not be taken back.</p>
