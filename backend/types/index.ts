@@ -75,11 +75,20 @@ export interface ICustomer extends Document {
 export interface IPurchase extends Document {
   tenantId: Types.ObjectId;
   supplierName: string;
-  productId: Types.ObjectId;
-  quantity: number;
-  purchasePrice: number;
-  sellingPrice?: number;
-  mrp?: number;
+  supplierGSTIN?: string;
+  supplierPhone?: string;
+  supplierAddress?: string;
+  billNumber?: string;
+  items: {
+    productId: Types.ObjectId;
+    name: string;
+    quantity: number;
+    unit: string;
+    purchasePrice: number;
+    taxRate?: number;
+    taxAmount?: number;
+    hsnCode?: string;
+  }[];
   totalAmount: number;
   taxAmount?: number;
   discount?: number;

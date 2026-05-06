@@ -12,19 +12,62 @@ const purchaseSchema: Schema = new mongoose.Schema({
         required: true,
         trim: true
     },
-    productId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Product',
-        required: true
+    supplierGSTIN: {
+        type: String,
+        trim: true,
+        default: ''
     },
-    quantity: {
-        type: Number,
-        required: true
+    supplierPhone: {
+        type: String,
+        trim: true,
+        default: ''
     },
-    purchasePrice: {
-        type: Number,
-        required: true
+    supplierAddress: {
+        type: String,
+        trim: true,
+        default: ''
     },
+    billNumber: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+    items: [{
+        productId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Product',
+            required: true
+        },
+        name: {
+            type: String,
+            required: true
+        },
+        quantity: {
+            type: Number,
+            required: true
+        },
+        unit: {
+            type: String,
+            required: true
+        },
+        purchasePrice: {
+            type: Number,
+            required: true
+        },
+        taxRate: {
+            type: Number,
+            default: 0
+        },
+        taxAmount: {
+            type: Number,
+            default: 0
+        },
+        hsnCode: {
+            type: String,
+            trim: true,
+            default: ''
+        }
+    }],
     totalAmount: {
         type: Number,
         required: true

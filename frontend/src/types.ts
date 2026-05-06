@@ -168,12 +168,24 @@ export interface Sale {
 export interface Purchase {
   _id?: string;
   supplierName: string;
-  productId: Product | string;
-  quantity: number;
-  purchasePrice: number;
-  sellingPrice?: number;
-  mrp?: number;
+  supplierGSTIN?: string;
+  supplierPhone?: string;
+  supplierAddress?: string;
+  billNumber?: string;
+  items: {
+    productId: string | Product;
+    name: string;
+    quantity: number;
+    unit: string;
+    purchasePrice: number;
+    taxRate?: number;
+    taxAmount?: number;
+    hsnCode?: string;
+  }[];
   totalAmount: number;
+  taxAmount?: number;
+  discount?: number;
+  paymentMode?: "cash" | "credit" | "upi" | "card" | "bank_transfer";
   paymentStatus: "paid" | "pending";
   date: string;
 }

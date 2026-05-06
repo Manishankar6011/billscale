@@ -154,6 +154,8 @@ const Inventory = () => {
     mrp: string;
     barcode: string;
     batchNumber: string;
+    hsnCode: string;
+    gstRate: string;
   }>({
     name: "",
     unit: "piece",

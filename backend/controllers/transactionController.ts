@@ -551,8 +551,8 @@ export const getPurchases = async (req: AuthRequest, res: Response) => {
 
     const [purchases, totalCount] = await Promise.all([
       Purchase.find(query)
-        .populate("productId", "name unit")
-        .sort({ createdAt: -1 })
+        .populate("items.productId", "name unit")
+        .sort({ date: -1 })
         .skip(skip)
         .limit(limit),
       Purchase.countDocuments(query),
@@ -577,11 +577,15 @@ export const getPurchases = async (req: AuthRequest, res: Response) => {
 export const processPurchase = async (req: AuthRequest, res: Response) => {
   const {
     supplierName,
-    productId,
-    quantity,
-    purchasePrice,
-    sellingPrice,
-    mrp,
+    supplierGSTIN,
+    supplierPhone,
+    supplierAddress,
+    billNumber,
+    items,
+    totalAmount,
+    taxAmount,
+    discount,
+    paymentMode,
     paymentStatus,
     date,
   } = req.body;
@@ -589,82 +593,109 @@ export const processPurchase = async (req: AuthRequest, res: Response) => {
   session.startTransaction();
 
   try {
-    if (Number(quantity) <= 0)
-      throw new Error("Quantity must be greater than 0");
-    if (Number(purchasePrice) < 0)
-      throw new Error("Purchase price cannot be negative");
-
-    const totalAmount = quantity * purchasePrice;
-
-    // 1. Find the selected product
-    const originalProduct = await Product.findOne({
-      _id: productId,
-      tenantId: req.tenantId,
-    }).session(session);
-    if (!originalProduct) throw new Error("Product not found");
-
-    let targetProduct = originalProduct;
-
-    // 2. If price/mrp/sellingPrice differs, find or create a new batch
-    const numPurchasePrice = Number(purchasePrice);
-    const numSellingPrice = Number(sellingPrice);
-    const numMRP = Number(mrp);
-
-    if (
-      numPurchasePrice !== originalProduct.purchasePrice ||
-      numSellingPrice !== originalProduct.pricePerUnit ||
-      numMRP !== originalProduct.mrp
-    ) {
-      const existingBatch = await Product.findOne({
-        tenantId: req.tenantId,
-        name: originalProduct.name,
-        purchasePrice: numPurchasePrice,
-        pricePerUnit: numSellingPrice,
-        mrp: numMRP,
-      }).session(session);
-
-      if (existingBatch) {
-        targetProduct = existingBatch;
-      } else {
-        // Create a new batch/product entry
-        const count = await Product.countDocuments({
-          tenantId: req.tenantId,
-          name: originalProduct.name,
-        }).session(session);
-
-        targetProduct = new Product({
-          tenantId: req.tenantId,
-          name: originalProduct.name,
-          category: originalProduct.category,
-          unit: originalProduct.unit,
-          barcode: originalProduct.barcode,
-          pricePerUnit: numSellingPrice,
-          mrp: numMRP,
-          purchasePrice: numPurchasePrice,
-          stock: 0, // Will be updated below
-          batchNumber: `Batch ${count + 1}`,
-          minStockAlert: originalProduct.minStockAlert,
-        });
-        await targetProduct.save({ session });
-      }
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      throw new Error("At least one item is required");
     }
 
-    // 3. Create Purchase Record linked to the target batch
+    const processedItems = [];
+
+    for (const item of items) {
+      const { productId, quantity, purchasePrice, sellingPrice, mrp, name, unit, taxRate, taxAmount: itemTaxAmount, hsnCode } = item;
+
+      if (Number(quantity) <= 0)
+        throw new Error(`Quantity for ${name || 'item'} must be greater than 0`);
+      if (Number(purchasePrice) < 0)
+        throw new Error(`Purchase price for ${name || 'item'} cannot be negative`);
+
+      // 1. Find the selected product
+      const originalProduct = await Product.findOne({
+        _id: productId,
+        tenantId: req.tenantId,
+      }).session(session);
+      if (!originalProduct) throw new Error(`Product not found: ${productId}`);
+
+      let targetProduct = originalProduct;
+
+      // 2. If price/mrp/sellingPrice differs, find or create a new batch
+      const numPurchasePrice = Number(purchasePrice);
+      const numSellingPrice = sellingPrice !== undefined ? Number(sellingPrice) : originalProduct.pricePerUnit;
+      const numMRP = mrp !== undefined ? Number(mrp) : originalProduct.mrp;
+
+      if (
+        numPurchasePrice !== originalProduct.purchasePrice ||
+        (sellingPrice !== undefined && numSellingPrice !== originalProduct.pricePerUnit) ||
+        (mrp !== undefined && numMRP !== originalProduct.mrp)
+      ) {
+        const existingBatch = await Product.findOne({
+          tenantId: req.tenantId,
+          name: originalProduct.name,
+          purchasePrice: numPurchasePrice,
+          pricePerUnit: numSellingPrice,
+          mrp: numMRP,
+        }).session(session);
+
+        if (existingBatch) {
+          targetProduct = existingBatch;
+        } else {
+          // Create a new batch/product entry
+          const count = await Product.countDocuments({
+            tenantId: req.tenantId,
+            name: originalProduct.name,
+          }).session(session);
+
+          targetProduct = new Product({
+            tenantId: req.tenantId,
+            name: originalProduct.name,
+            category: originalProduct.category,
+            unit: originalProduct.unit || unit,
+            barcode: originalProduct.barcode,
+            pricePerUnit: numSellingPrice,
+            mrp: numMRP,
+            purchasePrice: numPurchasePrice,
+            stock: 0, // Will be updated below
+            batchNumber: `Batch ${count + 1}`,
+            minStockAlert: originalProduct.minStockAlert,
+            hsnCode: hsnCode || originalProduct.hsnCode,
+            gstRate: taxRate !== undefined ? taxRate : originalProduct.gstRate
+          });
+          await targetProduct.save({ session });
+        }
+      }
+
+      // Update Target Product Stock
+      targetProduct.stock += Number(quantity);
+      targetProduct.purchasePrice = numPurchasePrice;
+      await targetProduct.save({ session });
+
+      processedItems.push({
+        productId: targetProduct._id,
+        name: name || targetProduct.name,
+        quantity: Number(quantity),
+        unit: unit || targetProduct.unit,
+        purchasePrice: numPurchasePrice,
+        taxRate: taxRate || 0,
+        taxAmount: itemTaxAmount || 0,
+        hsnCode: hsnCode || targetProduct.hsnCode || ""
+      });
+    }
+
+    // 3. Create Purchase Record
     const purchase = new Purchase({
       tenantId: req.tenantId,
       supplierName,
-      productId: targetProduct._id,
-      quantity,
-      purchasePrice,
-      totalAmount,
-      paymentStatus,
-      date,
+      supplierGSTIN,
+      supplierPhone,
+      supplierAddress,
+      billNumber,
+      items: processedItems,
+      totalAmount: totalAmount || processedItems.reduce((acc, item) => acc + (item.quantity * item.purchasePrice), 0),
+      taxAmount: taxAmount || 0,
+      discount: discount || 0,
+      paymentMode: paymentMode || "cash",
+      paymentStatus: paymentStatus || "paid",
+      date: date || new Date(),
     });
 
-    // 4. Update Target Product Stock
-    targetProduct.stock += Number(quantity);
-    targetProduct.purchasePrice = Number(purchasePrice); // Ensure it's set
-    await targetProduct.save({ session });
     await purchase.save({ session });
 
     await session.commitTransaction();
@@ -682,11 +713,15 @@ export const processPurchase = async (req: AuthRequest, res: Response) => {
 export const updatePurchase = async (req: AuthRequest, res: Response) => {
   const {
     supplierName,
-    productId,
-    quantity,
-    purchasePrice,
-    sellingPrice,
-    mrp,
+    supplierGSTIN,
+    supplierPhone,
+    supplierAddress,
+    billNumber,
+    items,
+    totalAmount,
+    taxAmount,
+    discount,
+    paymentMode,
     paymentStatus,
     date,
   } = req.body;
@@ -700,80 +735,109 @@ export const updatePurchase = async (req: AuthRequest, res: Response) => {
     }).session(session);
     if (!oldPurchase) throw new Error("Purchase not found");
 
-    // 1. Revert Old Stock from the ORIGINAL product ID
-    const oldProduct = await Product.findOne({
-      _id: oldPurchase.productId,
-      tenantId: req.tenantId,
-    }).session(session);
-    if (oldProduct) {
-      oldProduct.stock -= Number(oldPurchase.quantity);
-      await oldProduct.save({ session });
-    }
-
-    // 2. Identify Target Product for new state
-    const selectedProduct = await Product.findOne({
-      _id: productId,
-      tenantId: req.tenantId,
-    }).session(session);
-    if (!selectedProduct) throw new Error("Selected product not found");
-
-    let targetProduct = selectedProduct;
-
-    // Check if price/mrp/sellingPrice matches selectedProduct. If not, find or create the correct batch
-    const numPurchasePrice = Number(purchasePrice);
-    const numSellingPrice = Number(sellingPrice);
-    const numMRP = Number(mrp);
-
-    if (
-      numPurchasePrice !== selectedProduct.purchasePrice ||
-      numSellingPrice !== selectedProduct.pricePerUnit ||
-      numMRP !== selectedProduct.mrp
-    ) {
-      const existingBatch = await Product.findOne({
+    // 1. Revert Old Stock from all items
+    for (const oldItem of oldPurchase.items) {
+      const oldProduct = await Product.findOne({
+        _id: oldItem.productId,
         tenantId: req.tenantId,
-        name: selectedProduct.name,
-        purchasePrice: numPurchasePrice,
-        pricePerUnit: numSellingPrice,
-        mrp: numMRP,
       }).session(session);
-
-      if (existingBatch) {
-        targetProduct = existingBatch;
-      } else {
-        const count = await Product.countDocuments({
-          tenantId: req.tenantId,
-          name: selectedProduct.name,
-        }).session(session);
-
-        targetProduct = new Product({
-          tenantId: req.tenantId,
-          name: selectedProduct.name,
-          category: selectedProduct.category,
-          unit: selectedProduct.unit,
-          barcode: selectedProduct.barcode,
-          pricePerUnit: numSellingPrice,
-          mrp: numMRP,
-          purchasePrice: numPurchasePrice,
-          stock: 0,
-          batchNumber: `Batch ${count + 1}`,
-          minStockAlert: selectedProduct.minStockAlert,
-        });
-        await targetProduct.save({ session });
+      if (oldProduct) {
+        oldProduct.stock -= Number(oldItem.quantity);
+        await oldProduct.save({ session });
       }
     }
 
-    // 3. Apply New Stock
-    targetProduct.stock += Number(quantity);
-    await targetProduct.save({ session });
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      throw new Error("At least one item is required");
+    }
+
+    const processedItems = [];
+
+    // 2. Process New Items
+    for (const item of items) {
+      const { productId, quantity, purchasePrice, sellingPrice, mrp, name, unit, taxRate, taxAmount: itemTaxAmount, hsnCode } = item;
+
+      const selectedProduct = await Product.findOne({
+        _id: productId,
+        tenantId: req.tenantId,
+      }).session(session);
+      if (!selectedProduct) throw new Error(`Selected product not found: ${productId}`);
+
+      let targetProduct = selectedProduct;
+
+      const numPurchasePrice = Number(purchasePrice);
+      const numSellingPrice = sellingPrice !== undefined ? Number(sellingPrice) : selectedProduct.pricePerUnit;
+      const numMRP = mrp !== undefined ? Number(mrp) : selectedProduct.mrp;
+
+      if (
+        numPurchasePrice !== selectedProduct.purchasePrice ||
+        (sellingPrice !== undefined && numSellingPrice !== selectedProduct.pricePerUnit) ||
+        (mrp !== undefined && numMRP !== selectedProduct.mrp)
+      ) {
+        const existingBatch = await Product.findOne({
+          tenantId: req.tenantId,
+          name: selectedProduct.name,
+          purchasePrice: numPurchasePrice,
+          pricePerUnit: numSellingPrice,
+          mrp: numMRP,
+        }).session(session);
+
+        if (existingBatch) {
+          targetProduct = existingBatch;
+        } else {
+          const count = await Product.countDocuments({
+            tenantId: req.tenantId,
+            name: selectedProduct.name,
+          }).session(session);
+
+          targetProduct = new Product({
+            tenantId: req.tenantId,
+            name: selectedProduct.name,
+            category: selectedProduct.category,
+            unit: selectedProduct.unit || unit,
+            barcode: selectedProduct.barcode,
+            pricePerUnit: numSellingPrice,
+            mrp: numMRP,
+            purchasePrice: numPurchasePrice,
+            stock: 0,
+            batchNumber: `Batch ${count + 1}`,
+            minStockAlert: selectedProduct.minStockAlert,
+            hsnCode: hsnCode || selectedProduct.hsnCode,
+            gstRate: taxRate !== undefined ? taxRate : selectedProduct.gstRate
+          });
+          await targetProduct.save({ session });
+        }
+      }
+
+      // 3. Apply New Stock
+      targetProduct.stock += Number(quantity);
+      await targetProduct.save({ session });
+
+      processedItems.push({
+        productId: targetProduct._id,
+        name: name || targetProduct.name,
+        quantity: Number(quantity),
+        unit: unit || targetProduct.unit,
+        purchasePrice: numPurchasePrice,
+        taxRate: taxRate || 0,
+        taxAmount: itemTaxAmount || 0,
+        hsnCode: hsnCode || targetProduct.hsnCode || ""
+      });
+    }
 
     // 4. Update Purchase Record
     oldPurchase.supplierName = supplierName;
-    oldPurchase.productId = targetProduct._id; // Switch to the new target batch ID if changed
-    oldPurchase.quantity = Number(quantity);
-    oldPurchase.purchasePrice = Number(purchasePrice);
-    oldPurchase.totalAmount = Number(quantity) * Number(purchasePrice);
-    oldPurchase.paymentStatus = paymentStatus;
-    oldPurchase.date = date;
+    oldPurchase.supplierGSTIN = supplierGSTIN || oldPurchase.supplierGSTIN;
+    oldPurchase.supplierPhone = supplierPhone || oldPurchase.supplierPhone;
+    oldPurchase.supplierAddress = supplierAddress || oldPurchase.supplierAddress;
+    oldPurchase.billNumber = billNumber || oldPurchase.billNumber;
+    oldPurchase.items = processedItems;
+    oldPurchase.totalAmount = totalAmount || processedItems.reduce((acc, item) => acc + (item.quantity * item.purchasePrice), 0);
+    oldPurchase.taxAmount = taxAmount !== undefined ? taxAmount : oldPurchase.taxAmount;
+    oldPurchase.discount = discount !== undefined ? discount : oldPurchase.discount;
+    oldPurchase.paymentMode = paymentMode || oldPurchase.paymentMode;
+    oldPurchase.paymentStatus = paymentStatus || oldPurchase.paymentStatus;
+    oldPurchase.date = date || oldPurchase.date;
 
     await oldPurchase.save({ session });
 
@@ -800,14 +864,16 @@ export const deletePurchase = async (req: AuthRequest, res: Response) => {
     }).session(session);
     if (!purchase) throw new Error("Purchase not found");
 
-    // Revert Stock
-    const product = await Product.findOne({
-      _id: purchase.productId,
-      tenantId: req.tenantId,
-    }).session(session);
-    if (product) {
-      product.stock -= Number(purchase.quantity);
-      await product.save({ session });
+    // Revert Stock for all items
+    for (const item of purchase.items) {
+      const product = await Product.findOne({
+        _id: item.productId,
+        tenantId: req.tenantId,
+      }).session(session);
+      if (product) {
+        product.stock -= Number(item.quantity);
+        await product.save({ session });
+      }
     }
 
     await Purchase.deleteOne({

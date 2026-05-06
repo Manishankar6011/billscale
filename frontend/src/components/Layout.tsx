@@ -24,6 +24,8 @@ import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/utils";
 import AIAssistant from "./AIAssistant";
 
+import { canUseFeature, type PlanType } from "../utils/planLimits";
+
 const Layout = () => {
   const { logout, user } = useAuth();
   const { t } = useTranslation();
@@ -56,9 +58,25 @@ const Layout = () => {
     { name: t("common.salary"), path: "/dashboard/salary", icon: Wallet, ownerOnly: true },
     { name: t("common.ledger"), path: "/dashboard/ledger", icon: FileText, ownerOnly: true },
     { name: "Reports", path: "/dashboard/reports", icon: BarChart3, ownerOnly: true },
+    { 
+      name: "GST Reports", 
+      path: "/dashboard/gst-reports", 
+      icon: ShieldCheck, 
+      ownerOnly: true,
+      planRestricted: 'hasGSTReports' 
+    },
     { name: t("common.settings"), path: "/dashboard/settings", icon: Settings, ownerOnly: true },
     { name: "Refer & Earn", path: "/dashboard/referral", icon: Gift },
-  ].filter(item => !item.ownerOnly || (user?.role === 'owner' || user?.role === 'accountant' || user?.role === 'super-admin'));
+  ].filter(item => {
+    const isOwner = (user?.role === 'owner' || user?.role === 'accountant' || user?.role === 'super-admin');
+    if (item.ownerOnly && !isOwner) return false;
+    
+    if (item.planRestricted) {
+      return canUseFeature((user?.planType as PlanType) || 'free', item.planRestricted as any);
+    }
+    
+    return true;
+  });
 
   if (!user) return null;
 

@@ -17,10 +17,12 @@ const Ledger = () => {
   const { data: sales = [], isLoading: salesLoading } = useQuery<Sale[]>({
     queryKey: ["sales", "credit"],
     queryFn: async () => {
-      const res = await axios.get<Sale[]>("/api/transactions/sales", {
+      const res = await axios.get("/api/transactions/sales", {
         headers: { Authorization: `Bearer ${user?.token}` },
       });
-      return res.data.filter((s: Sale) => s.paymentMode === "credit");
+      // Extract sales from paginated response
+      const salesArray = res.data.sales || [];
+      return salesArray.filter((s: Sale) => s.paymentMode === "credit");
     },
     enabled: !!user?.token,
   });
@@ -30,10 +32,12 @@ const Ledger = () => {
   >({
     queryKey: ["purchases", "pending"],
     queryFn: async () => {
-      const res = await axios.get<Purchase[]>("/api/transactions/purchases", {
+      const res = await axios.get("/api/transactions/purchases", {
         headers: { Authorization: `Bearer ${user?.token}` },
       });
-      return res.data.filter((p: Purchase) => p.paymentStatus === "pending");
+      // Extract purchases from paginated response
+      const purchasesArray = res.data.purchases || [];
+      return purchasesArray.filter((p: Purchase) => p.paymentStatus === "pending");
     },
     enabled: !!user?.token,
   });
@@ -187,10 +191,16 @@ const Ledger = () => {
                         </p>
                       </td>
                       <td className="px-8 py-5">
-                        <span className="text-sm font-medium text-slate-600">
-                          {(purchase.productId as any)?.name} (
-                          {purchase.quantity})
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          {purchase.items.map((item, i) => (
+                            <span
+                              key={i}
+                              className="text-sm font-medium text-slate-600"
+                            >
+                              {item.name} ({item.quantity})
+                            </span>
+                          ))}
+                        </div>
                       </td>
                       <td className="px-8 py-5 text-right">
                         <p className="text-lg font-black text-amber-600">

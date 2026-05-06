@@ -37,6 +37,8 @@ import supportRoutes from "./routes/supportRoutes";
 import masterProductRoutes from "./routes/masterProductRoutes";
 import analyticsRoutes from "./routes/analyticsRoutes";
 import catalogRoutes from "./routes/catalogRoutes";
+import purchaseRoutes from "./routes/purchaseRoutes";
+import gstRoutes from "./routes/gstRoutes";
 
 // Use API Routes
 app.use("/api/auth", authRoutes);
@@ -50,6 +52,8 @@ app.use("/api/customers", customerRoutes);
 app.use("/api/support", supportRoutes);
 app.use("/api/master-products", masterProductRoutes);
 app.use("/api/analytics", analyticsRoutes);
+app.use("/api/purchases", purchaseRoutes);
+app.use("/api/reports", gstRoutes);
 app.use("/api/catalog", catalogRoutes);
 
 // Keep-Alive & Health Check
