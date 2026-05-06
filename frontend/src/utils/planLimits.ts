@@ -8,6 +8,7 @@ export interface PlanLimits {
     hasProfitAnalytics: boolean;
     hasExpenseTracking: boolean;
     hasAISmartAssistant: boolean;
+    hasGSTReports: boolean;
 }
 
 export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
@@ -19,6 +20,7 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
         hasProfitAnalytics: false,
         hasExpenseTracking: false,
         hasAISmartAssistant: false,
+        hasGSTReports: false,
     },
     basic: {
         maxBillsPerMonth: Infinity,
@@ -28,6 +30,7 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
         hasProfitAnalytics: false,
         hasExpenseTracking: false,
         hasAISmartAssistant: false,
+        hasGSTReports: true,
     },
     business: {
         maxBillsPerMonth: Infinity,
@@ -37,6 +40,7 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
         hasProfitAnalytics: true,
         hasExpenseTracking: true,
         hasAISmartAssistant: true,
+        hasGSTReports: true,
     }
 };
 

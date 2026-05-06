@@ -58,6 +58,7 @@ import { useToast } from "../context/ToastContext";
 import { format } from "date-fns";
 import PrintableInvoice from "../components/PrintableInvoice";
 import A4Invoice from "../components/A4Invoice";
+import GSTInvoice from "../components/GSTInvoice";
 import { generateInvoice } from "../utils/invoiceGenerator";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -92,6 +93,8 @@ type CartItem = {
   mrp: number;
   unit: string;
   conversionFactor: number;
+  hsnCode?: string | undefined;
+  gstRate?: number | undefined;
 };
 
 const SummaryCard = ({
@@ -223,6 +226,7 @@ const Sales = () => {
   const [itemSearch, setItemSearch] = useState("");
   const [debouncedItemSearch, setDebouncedItemSearch] = useState("");
   const [scannedProducts, setScannedProducts] = useState<Product[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<Record<string, Product>>({});
   const [itemsModalMode, setItemsModalMode] = useState<"all" | "scan" | null>(null);
 
   // Debounce search terms
@@ -429,11 +433,21 @@ const Sales = () => {
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
+  const [customerGSTIN, setCustomerGSTIN] = useState("");
+  const [customerState, setCustomerState] = useState("");
+  const [customerStateCode, setCustomerStateCode] = useState("");
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [paymentMode, setPaymentMode] = useState<"cash" | "credit">("cash");
-  const [invoiceFormat, setInvoiceFormat] = useState<"thermal" | "a4">(
+  const [invoiceFormat, setInvoiceFormat] = useState<"thermal" | "modern" | "gst">(
     "thermal",
   );
+
+  // Sync default invoice format from user settings
+  useEffect(() => {
+    if (user?.invoiceFormat) {
+      setInvoiceFormat(user.invoiceFormat as any);
+    }
+  }, [user?.invoiceFormat]);
 
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
 
@@ -533,6 +547,9 @@ const Sales = () => {
     setCustomerName("");
     setCustomerPhone("");
     setCustomerAddress("");
+    setCustomerGSTIN("");
+    setCustomerState("");
+    setCustomerStateCode("");
     setCustomerId(null);
     setCart([]);
     setAdditionalItems([]);
@@ -540,6 +557,7 @@ const Sales = () => {
     setAmountReceived("");
     setRoundOff(false);
     setScannedProducts([]);
+    setSelectedProducts({});
   };
 
   const closeModal = () => {
@@ -712,6 +730,9 @@ const Sales = () => {
       customerName: customerName.trim() || "Cash Sale",
       customerPhone,
       customerAddress,
+      customerGSTIN,
+      customerState,
+      customerStateCode,
       items: cart.map((i) => ({
         productId: i.productId,
         quantity: i.quantity,
@@ -720,6 +741,9 @@ const Sales = () => {
         sellingPrice: i.sellingPrice,
         purchasePriceAtTime: i.purchasePrice,
         mrpAtTime: i.mrp,
+        hsnCode: i.hsnCode,
+        taxRate: i.gstRate || 0,
+        taxAmount: i.gstRate ? (i.quantity * i.sellingPrice * i.gstRate) / (100 + i.gstRate) : 0
       })),
       additionalItems: [
         ...additionalItems.map((i) => ({
@@ -801,6 +825,10 @@ const Sales = () => {
             ...prev,
             [pid]: product!.pricePerUnit.toString(),
           }));
+          setSelectedProducts((prev) => ({
+            ...prev,
+            [pid]: product!,
+          }));
           setItemSearch("");
           showToast(`${product.name} qty increased in list`, "success");
         } else {
@@ -823,6 +851,8 @@ const Sales = () => {
                 sellingPrice: product!.pricePerUnit,
                 purchasePrice: product!.purchasePrice,
                 mrp: product!.mrp || 0,
+                hsnCode: product!.hsnCode,
+                gstRate: product!.gstRate,
               },
               ...prev,
             ];
@@ -875,7 +905,7 @@ const Sales = () => {
     const newItems: CartItem[] = [];
     Object.entries(itemQtyMap).forEach(([productId, qty]) => {
       if (Number(qty) > 0) {
-        const product = products.find((p) => p._id === productId);
+        const product = products.find((p) => p._id === productId) || selectedProducts[productId];
         if (product) {
           const price = Number(itemPriceMap[productId]) || product.pricePerUnit;
           newItems.push({
@@ -887,6 +917,8 @@ const Sales = () => {
             mrp: product.mrp,
             unit: product.unit,
             conversionFactor: 1,
+            hsnCode: product.hsnCode,
+            gstRate: product.gstRate,
           });
         }
       }
@@ -915,6 +947,7 @@ const Sales = () => {
     });
     setItemQtyMap({});
     setItemPriceMap({});
+    setSelectedProducts({});
     setItemSearch("");
     setItemsModalMode(null);
   };
@@ -1017,6 +1050,9 @@ const Sales = () => {
     setCustomerName(customer.name);
     setCustomerPhone(customer.phone ?? "");
     setCustomerAddress(customer.address || "");
+    setCustomerGSTIN(customer.gstin || "");
+    setCustomerState(customer.state || "");
+    setCustomerStateCode(customer.stateCode || "");
     setCustomerId(customer._id || null);
   };
   const handleAddNewCustomer = (query: string) => {
@@ -1037,6 +1073,9 @@ const Sales = () => {
     setCustomerName(sale.customerName);
     setCustomerPhone(sale.customerPhone || "");
     setCustomerAddress(sale.customerAddress || "");
+    setCustomerGSTIN(sale.customerGSTIN || "");
+    setCustomerState(sale.customerState || "");
+    setCustomerStateCode(sale.customerStateCode || "");
     setCustomerId(sale.customerId || null);
     setPaymentMode(sale.paymentMode as any);
     setDate(new Date(sale.date).toISOString().split("T")[0]);
@@ -1061,6 +1100,8 @@ const Sales = () => {
           mrp: i.mrpAtTime,
           unit: i.unit,
           conversionFactor: i.conversionFactor,
+          gstRate: i.taxRate,
+          hsnCode: i.hsnCode,
         };
       }),
     );
@@ -1734,16 +1775,57 @@ const Sales = () => {
                     </div>
                   )}
                 </div>
-                <div>
-                  <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
-                    {t("billing.invoice_date")}
-                  </label>
-                  <input
-                    type="date"
-                    className="w-full bg-slate-50 border-none rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold text-sm"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
+                      {t("billing.invoice_date")}
+                    </label>
+                    <input
+                      type="date"
+                      className="w-full bg-slate-50 border-none rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold text-sm"
+                      value={date}
+                      onChange={(e) => setDate(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
+                      Customer GSTIN (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full bg-slate-50 border-none rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold text-sm"
+                      value={customerGSTIN}
+                      onChange={(e) => setCustomerGSTIN(e.target.value.toUpperCase())}
+                      placeholder="27AAAAA0000A1Z5"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
+                      Customer State
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full bg-slate-50 border-none rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold text-sm"
+                      value={customerState}
+                      onChange={(e) => setCustomerState(e.target.value)}
+                      placeholder="e.g. Bihar"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
+                      State Code
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full bg-slate-50 border-none rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold text-sm"
+                      value={customerStateCode}
+                      onChange={(e) => setCustomerStateCode(e.target.value)}
+                      placeholder="e.g. 10"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1782,6 +1864,18 @@ const Sales = () => {
                           <p className="font-bold text-slate-800 tracking-tight">
                             {item.name}
                           </p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {item.hsnCode && (
+                              <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                                HSN: {item.hsnCode}
+                              </span>
+                            )}
+                            {item.gstRate !== undefined && item.gstRate > 0 && (
+                              <span className="text-[9px] font-black uppercase tracking-widest text-primary-500">
+                                GST: {item.gstRate}%
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-2 mt-1">
                             <button
                               type="button"
@@ -2143,54 +2237,111 @@ const Sales = () => {
               >
                 {invoiceFormat === "thermal" ? (
                   <PrintableInvoice
-                    sale={printData}
+                    sale={printData || {
+                      customerName: customerName || "Cash Sale",
+                      customerPhone,
+                      customerAddress,
+                      customerGSTIN,
+                      customerState,
+                      customerStateCode,
+                      items: cart.map(i => ({
+                        ...i,
+                        taxRate: i.gstRate,
+                        taxAmount: i.gstRate ? (i.quantity * i.sellingPrice * i.gstRate) / (100 + i.gstRate) : 0
+                      })),
+                      additionalItems,
+                      totalAmount: grandTotal,
+                      amountPaid: Number(amountReceived) || 0,
+                      balanceDue: grandTotal - (Number(amountReceived) || 0),
+                      roundOffAmount: roundOffAmount,
+                      paymentMode,
+                      date: date || new Date().toISOString(),
+                      invoiceNumber: "PREVIEW",
+                    }}
                     businessName={user?.companyName || "BuildMate ERP"}
                     ownerName={user?.name}
-                    companyLogo={
-                      user?.logoUrl || (user?.tenantId as any)?.logoUrl
-                    }
-                    companyEmail={
-                      user?.billingEmail ||
-                      (user?.tenantId as any)?.billingEmail
-                    }
-                    companyAddress={
-                      user?.billingAddress ||
-                      (user?.tenantId as any)?.billingAddress
-                    }
+                    companyLogo={user?.logoUrl || (user?.tenantId as any)?.logoUrl}
+                    companyEmail={user?.billingEmail || (user?.tenantId as any)?.billingEmail}
+                    companyAddress={user?.billingAddress || (user?.tenantId as any)?.billingAddress}
                     companyPhone={user?.phone || (user?.tenantId as any)?.phone}
-                    signature={
-                      user?.signature || (user?.tenantId as any)?.signature
-                    }
+                    signature={user?.signature || (user?.tenantId as any)?.signature}
                     upiId={showQRCode ? (user?.upiId || (user?.tenantId as any)?.upiId) : undefined}
-                    changeAmount={
-                      changeAmount !== null && changeAmount > 0
-                        ? changeAmount
-                        : undefined
-                    }
-                    roundOffAmount={printData?.roundOffAmount || roundOffAmount}
+                    changeAmount={changeAmount !== null && changeAmount > 0 ? changeAmount : undefined}
+                    roundOffAmount={printData?.roundOffAmount ?? roundOffAmount}
+                    isPreview={true}
+                  />
+                ) : invoiceFormat === "gst" ? (
+                  <GSTInvoice
+                    sale={printData || {
+                      customerName: customerName || "Cash Sale",
+                      customerPhone,
+                      customerAddress,
+                      customerGSTIN,
+                      customerState,
+                      customerStateCode,
+                      items: cart.map(i => ({
+                        ...i,
+                        taxRate: i.gstRate,
+                        taxAmount: i.gstRate ? (i.quantity * i.sellingPrice * i.gstRate) / (100 + i.gstRate) : 0
+                      })),
+                      additionalItems,
+                      totalAmount: grandTotal,
+                      amountPaid: Number(amountReceived) || 0,
+                      balanceDue: grandTotal - (Number(amountReceived) || 0),
+                      roundOffAmount: roundOffAmount,
+                      paymentMode,
+                      date: date || new Date().toISOString(),
+                      invoiceNumber: "PREVIEW",
+                    }}
+                    businessName={user?.companyName || "BuildMate ERP"}
+                    ownerName={user?.name ?? ""}
+                    companyLogo={user?.logoUrl || (user?.tenantId as any)?.logoUrl}
+                    companyEmail={user?.billingEmail || (user?.tenantId as any)?.billingEmail}
+                    companyAddress={user?.billingAddress || (user?.tenantId as any)?.billingAddress}
+                    companyPhone={user?.phone || (user?.tenantId as any)?.phone}
+                    signature={user?.signature || (user?.tenantId as any)?.signature}
+                    upiId={showQRCode ? (user?.upiId || (user?.tenantId as any)?.upiId) : undefined}
+                    gstin={user?.gstin || (user?.tenantId as any)?.gstin}
+                    pan={user?.pan || (user?.tenantId as any)?.pan}
+                    stateName={user?.stateName || (user?.tenantId as any)?.stateName}
+                    stateCode={user?.stateCode || (user?.tenantId as any)?.stateCode}
                     isPreview={true}
                   />
                 ) : (
                   <A4Invoice
-                    sale={printData}
+                    sale={printData || {
+                      customerName: customerName || "Cash Sale",
+                      customerPhone,
+                      customerAddress,
+                      customerGSTIN,
+                      customerState,
+                      customerStateCode,
+                      items: cart.map(i => ({
+                        ...i,
+                        taxRate: i.gstRate,
+                        taxAmount: i.gstRate ? (i.quantity * i.sellingPrice * i.gstRate) / (100 + i.gstRate) : 0
+                      })),
+                      additionalItems,
+                      totalAmount: grandTotal,
+                      amountPaid: Number(amountReceived) || 0,
+                      balanceDue: grandTotal - (Number(amountReceived) || 0),
+                      roundOffAmount: roundOffAmount,
+                      paymentMode,
+                      date: date || new Date().toISOString(),
+                      invoiceNumber: "PREVIEW",
+                    }}
                     businessName={user?.companyName || "BuildMate ERP"}
-                    ownerName={user?.name}
-                    companyLogo={
-                      user?.logoUrl || (user?.tenantId as any)?.logoUrl
-                    }
-                    companyEmail={
-                      user?.billingEmail ||
-                      (user?.tenantId as any)?.billingEmail
-                    }
-                    companyAddress={
-                      user?.billingAddress ||
-                      (user?.tenantId as any)?.billingAddress
-                    }
+                    ownerName={user?.name ?? ""}
+                    companyLogo={user?.logoUrl || (user?.tenantId as any)?.logoUrl}
+                    companyEmail={user?.billingEmail || (user?.tenantId as any)?.billingEmail}
+                    companyAddress={user?.billingAddress || (user?.tenantId as any)?.billingAddress}
                     companyPhone={user?.phone || (user?.tenantId as any)?.phone}
-                    signature={
-                      user?.signature || (user?.tenantId as any)?.signature
-                    }
+                    signature={user?.signature || (user?.tenantId as any)?.signature}
                     upiId={showQRCode ? (user?.upiId || (user?.tenantId as any)?.upiId) : undefined}
+                    gstin={user?.gstin || (user?.tenantId as any)?.gstin}
+                    pan={user?.pan || (user?.tenantId as any)?.pan}
+                    stateName={user?.stateName || (user?.tenantId as any)?.stateName}
+                    stateCode={user?.stateCode || (user?.tenantId as any)?.stateCode}
                     isPreview={true}
                   />
                 )}
@@ -2246,10 +2397,16 @@ const Sales = () => {
                       {t("billing.thermal_format")}
                     </button>
                     <button
-                      onClick={() => setInvoiceFormat("a4")}
-                      className={`flex-1 py-3 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${invoiceFormat === "a4" ? "bg-white text-primary-600 shadow-md" : "text-slate-400 hover:text-slate-600"}`}
+                      onClick={() => setInvoiceFormat("modern")}
+                      className={`flex-1 py-3 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${invoiceFormat === "modern" ? "bg-white text-primary-600 shadow-md" : "text-slate-400 hover:text-slate-600"}`}
                     >
                       {t("billing.a4_format")}
+                    </button>
+                    <button
+                      onClick={() => setInvoiceFormat("gst")}
+                      className={`flex-1 py-3 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${invoiceFormat === "gst" ? "bg-white text-primary-600 shadow-md" : "text-slate-400 hover:text-slate-600"}`}
+                    >
+                      GST (A4)
                     </button>
                   </div>
                 </div>
@@ -2297,7 +2454,11 @@ const Sales = () => {
                         user?.phone || (user?.tenantId as any)?.phone,
                         user?.billingEmail || (user?.tenantId as any)?.billingEmail,
                         user?.signature || (user?.tenantId as any)?.signature,
-                        showQRCode ? (user?.upiId || (user?.tenantId as any)?.upiId) : undefined
+                        showQRCode ? (user?.upiId || (user?.tenantId as any)?.upiId) : undefined,
+                        user?.gstin || (user?.tenantId as any)?.gstin,
+                        user?.pan || (user?.tenantId as any)?.pan,
+                        user?.stateName || (user?.tenantId as any)?.stateName,
+                        user?.stateCode || (user?.tenantId as any)?.stateCode
                       )
                     }
                     className="w-full py-4 bg-slate-50 text-slate-600 rounded-[1.5rem] font-black uppercase tracking-widest text-xs hover:bg-slate-100 transition-all flex items-center justify-center gap-3 border border-slate-200 shadow-sm"
@@ -2453,6 +2614,10 @@ const Sales = () => {
                                 setItemPriceMap((prev) => ({
                                   ...prev,
                                   [p._id!]: p.pricePerUnit.toString(),
+                                }));
+                                setSelectedProducts((prev) => ({
+                                  ...prev,
+                                  [p._id!]: p,
                                 }));
                               }}
                               className="flex items-center gap-2 px-6 py-2.5 bg-primary-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-primary-700 shadow-lg shadow-primary-100 transition-all active:scale-95"
@@ -2715,6 +2880,8 @@ const Sales = () => {
                         mrp: p.mrp,
                         unit: p.unit,
                         conversionFactor: 1,
+                        hsnCode: p.hsnCode,
+                        gstRate: p.gstRate,
                       },
                     ]);
                     showToast(`${p.name} added to bill`, "success");

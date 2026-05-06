@@ -26,6 +26,21 @@ const customerSchema: Schema = new mongoose.Schema({
         type: String,
         trim: true
     },
+    gstin: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+    state: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+    stateCode: {
+        type: String,
+        trim: true,
+        default: ''
+    },
     createdAt: {
         type: Date,
         default: Date.now

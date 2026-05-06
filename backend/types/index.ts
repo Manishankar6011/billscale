@@ -22,6 +22,11 @@ export interface ITenant extends Document {
   nextInvoiceNumber: number;
   upiId?: string;
   slug: string;
+  gstin?: string;
+  pan?: string;
+  stateName?: string;
+  stateCode?: string;
+  invoiceFormat?: 'thermal' | 'modern' | 'gst';
   createdAt: Date;
 }
 
@@ -50,6 +55,8 @@ export interface IProduct extends Document {
   barcode?: string;
   batchNumber?: string;
   imageUrl?: string;
+  hsnCode?: string;
+  gstRate?: number;
   createdAt: Date;
 }
 
@@ -59,17 +66,29 @@ export interface ICustomer extends Document {
   phone?: string;
   email?: string;
   address?: string;
+  gstin?: string;
+  state?: string;
+  stateCode?: string;
   createdAt: Date;
 }
 
 export interface IPurchase extends Document {
   tenantId: Types.ObjectId;
   supplierName: string;
-  productId: Types.ObjectId;
-  quantity: number;
-  purchasePrice: number;
-  sellingPrice?: number;
-  mrp?: number;
+  supplierGSTIN?: string;
+  supplierPhone?: string;
+  supplierAddress?: string;
+  billNumber?: string;
+  items: {
+    productId: Types.ObjectId;
+    name: string;
+    quantity: number;
+    unit: string;
+    purchasePrice: number;
+    taxRate?: number;
+    taxAmount?: number;
+    hsnCode?: string;
+  }[];
   totalAmount: number;
   taxAmount?: number;
   discount?: number;
@@ -85,6 +104,9 @@ export interface ISale extends Document {
   customerName: string;
   customerPhone?: string;
   customerAddress?: string;
+  customerGSTIN?: string;
+  customerState?: string;
+  customerStateCode?: string;
   createdBy?: Types.ObjectId;
   items: {
     productId: Types.ObjectId;
@@ -94,6 +116,9 @@ export interface ISale extends Document {
     sellingPrice: number;
     purchasePriceAtTime: number; // For historic profit tracking
     mrpAtTime: number;
+    taxRate?: number;
+    taxAmount?: number;
+    hsnCode?: string;
   }[];
   totalAmount: number;
   totalProfit: number;

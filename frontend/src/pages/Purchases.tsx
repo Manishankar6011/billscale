@@ -1,90 +1,63 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQueryClient,
-} from "@tanstack/react-query";
-import { useTranslation } from "react-i18next";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import React, { useState, useRef, useCallback, useMemo, useEffect } from "react";
+import axios from "axios";
 import {
   Plus,
+  Search,
   ShoppingCart,
   Trash2,
   Loader2,
-  Search,
-  ArrowLeft,
+  Calendar,
+  User,
+  PlusCircle,
+  X,
+  Package,
+  IndianRupee,
+  FileText,
+  Edit2
 } from "lucide-react";
-import axios from "axios";
-import type {
-  Purchase,
-  Product,
-  PaginatedResponse,
-  PaginatedPurchasesResponse,
-} from "../types";
-import { useAuth } from '../context/AuthContext';
-import { TableSkeleton } from '../components/Skeleton';
-import { useToast } from '../context/ToastContext';
-import { format } from 'date-fns';
+import { format } from "date-fns";
+import { useToast } from "../context/ToastContext";
+import { TableSkeleton } from "../components/Skeleton";
+import type { Purchase, Product } from "../types";
+import { cn } from "../lib/utils";
 
 const Purchases = () => {
-  const { t } = useTranslation();
-  const { user } = useAuth();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
-
-  // State Declarations
-  const [filterSearch, setFilterSearch] = useState("");
-  const [debouncedFilterSearch, setDebouncedFilterSearch] = useState("");
-  const [itemSearch, setItemSearch] = useState("");
-  const [debouncedItemSearch, setDebouncedItemSearch] = useState("");
-
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isItemSelectModalOpen, setIsItemSelectModalOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  
+  // Form State
+  const [supplierName, setSupplierName] = useState("");
+  const [supplierGSTIN, setSupplierGSTIN] = useState("");
+  const [billNumber, setBillNumber] = useState("");
+  const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [cart, setCart] = useState<any[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // Form State
-  const [formData, setFormData] = useState({
-    supplierName: '',
-    productId: '',
-    quantity: '',
-    purchasePrice: '',
-    sellingPrice: '',
-    mrp: '',
-    paymentStatus: 'pending',
-    date: new Date().toISOString().split('T')[0]
-  });
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
 
-  // Debounce search terms
+  // Debounce search term
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedFilterSearch(filterSearch), 500);
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 500);
     return () => clearTimeout(timer);
-  }, [filterSearch]);
+  }, [searchTerm]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedItemSearch(itemSearch), 500);
-    return () => clearTimeout(timer);
-  }, [itemSearch]);
-
-  // Infinite Query for Purchases
-  const {
-    data: purchasesData,
-    isLoading: purchasesLoading,
+  // Fetch Purchases with Infinite Query
+  const { 
+    data: purchasesData, 
+    isLoading,
     fetchNextPage: fetchNextPurchasesPage,
     hasNextPage: hasNextPurchasesPage,
-    isFetchingNextPage: isFetchingNextPurchasesPage,
-  } = useInfiniteQuery<PaginatedPurchasesResponse>({
-    queryKey: ["purchases", debouncedFilterSearch],
+    isFetchingNextPage: isFetchingNextPurchasesPage
+  } = useInfiniteQuery({
+    queryKey: ["purchases"],
     queryFn: async ({ pageParam = 1 }) => {
-      const res = await axios.get<PaginatedPurchasesResponse>(
-        "/api/transactions/purchases",
-        {
-          params: {
-            page: pageParam,
-            limit: 20,
-            search: debouncedFilterSearch,
-          },
-          headers: { Authorization: `Bearer ${user?.token}` },
-        },
-      );
+      const res = await axios.get(`/api/purchases?page=${pageParam}&limit=15`);
       return res.data;
     },
     getNextPageParam: (lastPage) => {
@@ -94,34 +67,40 @@ const Purchases = () => {
       return undefined;
     },
     initialPageParam: 1,
-    enabled: !!user?.token,
   });
 
   const purchases = useMemo(() => {
     return purchasesData?.pages.flatMap((page) => page.purchases) || [];
   }, [purchasesData]);
 
-  // Infinite Query for Products (Inventory)
-  const {
-    data: productsData,
-    isLoading: productsLoading,
+  // Infinite Scroll Observer for Purchases
+  const purchasesObserver = useRef<IntersectionObserver | null>(null);
+  const lastPurchaseRef = useCallback(
+    (node: HTMLTableRowElement) => {
+      if (isLoading) return;
+      if (purchasesObserver.current) purchasesObserver.current.disconnect();
+      purchasesObserver.current = new IntersectionObserver((entries) => {
+        if (entries[0]?.isIntersecting && hasNextPurchasesPage && !isFetchingNextPurchasesPage) {
+          fetchNextPurchasesPage();
+        }
+      });
+      if (node) purchasesObserver.current.observe(node);
+    },
+    [isLoading, hasNextPurchasesPage, isFetchingNextPurchasesPage, fetchNextPurchasesPage],
+  );
+
+  // Fetch Products for selection with Infinite Query
+  const { 
+    data: searchData, 
+    isLoading: searching,
     fetchNextPage: fetchNextProductsPage,
     hasNextPage: hasNextProductsPage,
-    isFetchingNextPage: isFetchingNextProductsPage,
-  } = useInfiniteQuery<PaginatedResponse<Product>>({
-    queryKey: ["inventory", debouncedItemSearch],
+    isFetchingNextPage: isFetchingNextProductsPage
+  } = useInfiniteQuery({
+    queryKey: ["products-search", debouncedSearchTerm],
     queryFn: async ({ pageParam = 1 }) => {
-      const res = await axios.get<PaginatedResponse<Product>>(
-        "/api/inventory",
-        {
-          params: {
-            page: pageParam,
-            limit: 20,
-            search: debouncedItemSearch,
-          },
-          headers: { Authorization: `Bearer ${user?.token}` },
-        },
-      );
+      if (!debouncedSearchTerm) return { products: [], pagination: { totalPages: 0, currentPage: 1 } };
+      const res = await axios.get(`/api/inventory?limit=10&search=${debouncedSearchTerm}&page=${pageParam}`);
       return res.data;
     },
     getNextPageParam: (lastPage) => {
@@ -131,509 +110,518 @@ const Purchases = () => {
       return undefined;
     },
     initialPageParam: 1,
-    enabled: !!user?.token,
+    enabled: debouncedSearchTerm.length > 1
   });
 
-  const products = useMemo(() => {
-    return productsData?.pages.flatMap((page) => page.products) || [];
-  }, [productsData]);
+  const searchResults = useMemo(() => {
+    return searchData?.pages.flatMap((page) => page.products) || [];
+  }, [searchData]);
 
-  // Infinite Scroll Observers
-  const purchasesObserver = useRef<IntersectionObserver | null>(null);
-  const lastPurchaseElementRef = useCallback(
-    (node: HTMLTableRowElement) => {
-      if (purchasesLoading) return;
-      if (purchasesObserver.current) purchasesObserver.current.disconnect();
-      purchasesObserver.current = new IntersectionObserver((entries) => {
-        if (
-          entries[0]?.isIntersecting &&
-          hasNextPurchasesPage &&
-          !isFetchingNextPurchasesPage
-        ) {
-          fetchNextPurchasesPage();
-        }
-      });
-      if (node) purchasesObserver.current.observe(node);
-    },
-    [
-      purchasesLoading,
-      hasNextPurchasesPage,
-      isFetchingNextPurchasesPage,
-      fetchNextPurchasesPage,
-    ],
-  );
-
+  // Infinite Scroll Observer for Product Search
   const productsObserver = useRef<IntersectionObserver | null>(null);
-  const lastProductElementRef = useCallback(
-    (node: HTMLTableRowElement) => {
-      if (productsLoading) return;
+  const lastProductRef = useCallback(
+    (node: HTMLButtonElement) => {
+      if (searching) return;
       if (productsObserver.current) productsObserver.current.disconnect();
       productsObserver.current = new IntersectionObserver((entries) => {
-        if (
-          entries[0]?.isIntersecting &&
-          hasNextProductsPage &&
-          !isFetchingNextProductsPage
-        ) {
+        if (entries[0]?.isIntersecting && hasNextProductsPage && !isFetchingNextProductsPage) {
           fetchNextProductsPage();
         }
       });
       if (node) productsObserver.current.observe(node);
     },
-    [
-      productsLoading,
-      hasNextProductsPage,
-      isFetchingNextProductsPage,
-      fetchNextProductsPage,
-    ],
+    [searching, hasNextProductsPage, isFetchingNextProductsPage, fetchNextProductsPage],
   );
 
-  const loading =
-    (purchasesLoading || productsLoading) &&
-    purchases.length === 0 &&
-    products.length === 0;
-
-  // Mutations
-  const saveMutation = useMutation({
-    mutationFn: async (data: Partial<Purchase>) => {
-      if (editingId) {
-        return axios.put<Purchase>(`/api/transactions/purchases/${editingId}`, data, {
-          headers: { Authorization: `Bearer ${user?.token}` }
-        });
-      } else {
-        return axios.post<Purchase>('/api/transactions/purchases', data, {
-          headers: { Authorization: `Bearer ${user?.token}` }
-        });
-      }
-    },
+  // Create Purchase Mutation
+  const createMutation = useMutation({
+    mutationFn: (newPurchase: any) => axios.post("/api/purchases", newPurchase),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['purchases'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-      showToast(editingId ? t('billing.purchase_updated') : t('billing.purchase_recorded'), 'success');
+      queryClient.invalidateQueries({ queryKey: ["purchases"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["products-search"] });
       setIsModalOpen(false);
-      setEditingId(null);
-      setFormData({
-        supplierName: '',
-        productId: '',
-        quantity: '',
-        purchasePrice: '',
-        sellingPrice: '',
-        mrp: '',
-        paymentStatus: 'pending',
-        date: new Date().toISOString().split('T')[0]
-      });
+      resetForm();
+      showToast("Purchase recorded and stock updated!", "success");
     },
-    onError: (err: any) => {
-      showToast(err.response?.data?.message || t('common.error'), 'error');
-    }
+    onError: (error: any) => {
+      showToast(error.response?.data?.message || "Error saving purchase", "error");
+    },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      return axios.delete(`/api/transactions/purchases/${id}`, {
-        headers: { Authorization: `Bearer ${user?.token}` }
-      });
-    },
+  // Update Purchase Mutation
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => axios.put(`/api/purchases/${id}`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['purchases'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-      showToast(t('billing.purchase_deleted'), 'success');
+      queryClient.invalidateQueries({ queryKey: ["purchases"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["products-search"] });
+      setIsModalOpen(false);
+      resetForm();
+      showToast("Purchase updated and stock adjusted!", "success");
     },
-    onError: () => {
-      showToast(t('common.error'), 'error');
-    }
+    onError: (error: any) => {
+      showToast(error.response?.data?.message || "Error updating purchase", "error");
+    },
   });
+
+  // Delete Purchase Mutation
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => axios.delete(`/api/purchases/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["purchases"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      showToast("Purchase deleted and stock rolled back", "success");
+    },
+  });
+
+  const resetForm = () => {
+    setSupplierName("");
+    setSupplierGSTIN("");
+    setBillNumber("");
+    setCart([]);
+    setDate(format(new Date(), "yyyy-MM-dd"));
+    setIsEditing(false);
+    setEditingId(null);
+  };
 
   const handleEdit = (purchase: Purchase) => {
+    setSupplierName(purchase.supplierName);
+    setSupplierGSTIN(purchase.supplierGSTIN || "");
+    setBillNumber(purchase.billNumber || "");
+    setDate(format(new Date(purchase.date), "yyyy-MM-dd"));
+    setCart(purchase.items.map(item => ({
+      productId: typeof item.productId === 'string' ? item.productId : item.productId._id,
+      name: item.name,
+      quantity: item.quantity,
+      unit: item.unit,
+      purchasePrice: item.purchasePrice,
+      taxRate: item.taxRate || 0,
+      taxAmount: item.taxAmount || 0,
+      hsnCode: item.hsnCode || ""
+    })));
+    setIsEditing(true);
     setEditingId(purchase._id!);
-    setFormData({
-      supplierName: purchase.supplierName,
-      productId: (purchase.productId as any)?._id || (purchase.productId as unknown as string),
-      quantity: purchase.quantity.toString(),
-      purchasePrice: purchase.purchasePrice.toString(),
-      sellingPrice: (purchase.productId as any)?.pricePerUnit?.toString() || '',
-      mrp: (purchase.productId as any)?.mrp?.toString() || '',
-      paymentStatus: purchase.paymentStatus,
-      date: new Date(purchase.date).toISOString().split('T')[0]
-    });
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm(t('common.confirm_delete_purchase'))) return;
-    deleteMutation.mutate(id);
+  const addToCart = (product: Product) => {
+    const existing = cart.find(item => item.productId === product._id);
+    if (existing) return;
+
+    setCart([...cart, {
+      productId: product._id,
+      name: product.name,
+      quantity: 1,
+      unit: product.unit,
+      purchasePrice: product.purchasePrice || 0,
+      taxRate: product.gstRate || 0,
+      taxAmount: 0,
+      hsnCode: product.hsnCode || ""
+    }]);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const updateCartItem = (index: number, field: string, value: any) => {
+    const newCart = [...cart];
+    newCart[index][field] = value;
+    
+    // Calculate Tax Amount if price or qty or taxRate changes
+    const item = newCart[index];
+    const totalBeforeTax = item.quantity * item.purchasePrice;
+    item.taxAmount = (totalBeforeTax * (item.taxRate / 100));
+    
+    setCart(newCart);
+  };
+
+  const removeFromCart = (index: number) => {
+    setCart(cart.filter((_, i) => i !== index));
+  };
+
+  const calculateTotal = () => {
+    return cart.reduce((acc, item) => {
+        const itemTotal = (item.quantity * item.purchasePrice);
+        const tax = itemTotal * (item.taxRate / 100);
+        return acc + itemTotal + tax;
+    }, 0);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const data: Partial<Purchase> = {
-      ...formData,
-      quantity: Number(formData.quantity),
-      purchasePrice: Number(formData.purchasePrice),
-      sellingPrice: Number(formData.sellingPrice),
-      mrp: Number(formData.mrp),
-      paymentStatus: formData.paymentStatus as 'pending' | 'paid',
-      date: (formData.date || new Date().toISOString().split('T')[0]) as string
-    };
-    saveMutation.mutate(data);
-  };
+    if (cart.length === 0) {
+      showToast("Please add at least one item", "error");
+      return;
+    }
 
-  if (loading) return <TableSkeleton rows={10} />;
+    const totalAmount = calculateTotal();
+    const totalTax = cart.reduce((acc, item) => acc + (item.quantity * item.purchasePrice * (item.taxRate / 100)), 0);
+
+    const payload = {
+      supplierName,
+      supplierGSTIN,
+      billNumber,
+      date,
+      items: cart,
+      totalAmount,
+      taxAmount: totalTax,
+      paymentMode: "cash",
+      paymentStatus: "paid"
+    };
+
+    if (isEditing && editingId) {
+      updateMutation.mutate({ id: editingId, data: payload });
+    } else {
+      createMutation.mutate(payload);
+    }
+  };
 
   return (
-    <>
-      <div className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-800">{t('billing.purchase_title')}</h1>
-            <p className="text-slate-500">{t('billing.purchase_subtitle')}</p>
-          </div>
-          <button
-            onClick={() => {
-              setEditingId(null);
-              setFormData({
-                supplierName: '',
-                productId: '',
-                quantity: '',
-                purchasePrice: '',
-                sellingPrice: '',
-                mrp: '',
-                paymentStatus: 'pending',
-                date: new Date().toISOString().split('T')[0]
-              });
-              setIsModalOpen(true);
-            }}
-            className="btn-primary flex items-center gap-2"
-          >
-            <Plus size={20} />
-            {t('billing.new_purchase')}
-          </button>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+            <ShoppingCart className="text-primary-600" />
+            Purchase Management
+          </h1>
+          <p className="text-slate-500 text-sm font-medium uppercase tracking-widest text-[10px]">Track inventory acquisitions and supplier bills</p>
         </div>
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-primary-200 hover:bg-primary-700 transition-all active:scale-95"
+        >
+          <Plus size={18} />
+          Record New Purchase
+        </button>
+      </div>
 
-        {/* Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-            <input
-              type="text"
-              className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-12 pr-4 text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all"
-              placeholder={t('billing.search_purchases_placeholder')}
-              value={filterSearch}
-              onChange={(e) => setFilterSearch(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+      {/* List */}
+      <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
+        {isLoading ? (
+          <TableSkeleton rows={5} />
+        ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left">
               <thead>
-                <tr className="bg-slate-50/50">
-                  <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">{t('common.date')}</th>
-                  <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">{t('billing.supplier')}</th>
-                  <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">{t('common.products')}</th>
-                  <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">{t('common.qty')}</th>
-                  <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">{t('common.total')}</th>
-                  <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">{t('common.status')}</th>
-                  <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest text-right">{t('common.actions')}</th>
+                <tr className="bg-slate-50/50 border-b border-slate-100">
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Date & Bill</th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Supplier</th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Items</th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Total Amount</th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {purchases.map((purchase, index) => {
-                  const isLast = index === purchases.length - 1;
-                  return (
-                    <tr
-                      key={purchase._id}
-                      ref={isLast ? lastPurchaseElementRef : null}
-                      className="hover:bg-slate-50/50 transition-colors"
-                    >
-                      <td className="px-6 py-4 text-sm text-slate-600">
-                        {format(new Date(purchase.date), 'dd MMM yyyy')}
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="font-bold text-slate-800">{purchase.supplierName}</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
-                            <ShoppingCart size={14} />
-                          </div>
-                          <span className="text-sm font-medium text-slate-700">{(purchase.productId as any)?.name}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm font-black text-slate-800">
-                        {purchase.quantity} <span className="text-slate-400 text-xs font-medium">{(purchase.productId as any)?.unit}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="text-sm font-black text-emerald-600">₹{purchase.totalAmount.toLocaleString()}</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${purchase.paymentStatus === 'paid' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
-                          }`}>
-                          {purchase.paymentStatus === 'paid' ? t('billing.paid') : t('billing.pending')}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right flex justify-end gap-2">
+                {(purchases || []).map((purchase: Purchase, index: number) => (
+                  <tr 
+                    key={purchase._id} 
+                    ref={index === purchases.length - 1 ? lastPurchaseRef : null}
+                    className="hover:bg-slate-50/50 transition-colors"
+                  >
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-black text-slate-700">{format(new Date(purchase.date), "dd MMM yyyy")}</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">{purchase.billNumber || 'No Bill #'}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-black text-slate-800">{purchase.supplierName}</span>
+                        {purchase.supplierGSTIN && <span className="text-[9px] font-black text-primary-600 uppercase tracking-tighter">GSTIN: {purchase.supplierGSTIN}</span>}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col gap-1">
+                        {purchase.items.slice(0, 2).map((item, i) => (
+                          <span key={i} className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full w-fit">
+                            {item.name} x {item.quantity}
+                          </span>
+                        ))}
+                        {purchase.items.length > 2 && <span className="text-[9px] font-bold text-slate-400">+{purchase.items.length - 2} more</span>}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm font-black text-slate-900">₹{purchase.totalAmount.toLocaleString()}</span>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => handleEdit(purchase)}
-                          className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
-                          title="Edit Purchase"
+                          className="p-2 text-primary-400 hover:text-primary-600 hover:bg-primary-50 rounded-xl transition-all"
                         >
-                          <ShoppingCart size={16} />
+                          <Edit2 size={18} />
                         </button>
                         <button
-                          onClick={() => handleDelete(purchase._id!)}
-                          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
-                          title="Delete Purchase"
+                          onClick={() => {
+                            if (window.confirm("Are you sure? This will decrease the stock of these items.")) {
+                              deleteMutation.mutate(purchase._id!);
+                            }
+                          }}
+                          className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
                         >
-                          <Trash2 size={16} />
+                          <Trash2 size={18} />
                         </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {(purchases || []).length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-20 text-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-16 h-16 bg-slate-50 text-slate-300 rounded-3xl flex items-center justify-center">
+                          <ShoppingCart size={32} />
+                        </div>
+                        <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">No purchases recorded yet</p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
-            {isFetchingNextPurchasesPage && (
-              <div className="p-4 flex justify-center">
-                <Loader2 className="animate-spin text-primary-600" size={24} />
-              </div>
-            )}
-            {purchases.length === 0 && !purchasesLoading && (
-              <div className="text-center py-20 bg-white">
-                <ShoppingCart className="mx-auto text-slate-200 mb-4" size={64} />
-                <h3 className="text-xl font-black text-slate-400 uppercase tracking-widest">{t('billing.no_purchases')}</h3>
-                <p className="text-slate-400 mt-1">{t('billing.no_purchases_found')}</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Purchase Modal */}
-        {isModalOpen && (
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-            <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-8 animate-in fade-in zoom-in duration-200">
-              <div className="flex justify-between items-center mb-8">
-                <h2 className="text-2xl font-black text-slate-800 tracking-tighter">
-                  {editingId ? t('billing.update_purchase') : t('billing.new_purchase')}
-                </h2>
-                <button onClick={() => {
-                  setIsModalOpen(false);
-                  setEditingId(null);
-                }} className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 transition-all">&times;</button>
-              </div>
-
-              <form onSubmit={handleSubmit} className="space-y-5">
-                <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 mb-2">
-                  <p className="text-[11px] font-black text-amber-700 uppercase tracking-widest leading-relaxed">
-                    ⚠️ Please enter the Per Unit Price, not the total amount.
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">{t('billing.supplier_name')}</label>
-                  <input
-                    required
-                    type="text"
-                    className="w-full bg-slate-50 border-none rounded-2xl p-4 text-slate-800 focus:ring-2 transition-all font-bold placeholder:font-medium"
-                    placeholder={t('billing.supplier_name')}
-                    value={formData.supplierName}
-                    onChange={(e) => setFormData({ ...formData, supplierName: e.target.value })}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">{t('common.products')}</label>
-                    <button
-                      type="button"
-                      onClick={() => setIsItemSelectModalOpen(true)}
-                      className="w-full bg-slate-50 border-none rounded-2xl p-4 text-slate-800 focus:ring-2 transition-all font-bold flex items-center justify-between group hover:bg-slate-100"
-                    >
-                      <span className={formData.productId ? 'text-slate-800' : 'text-slate-400 font-medium'}>
-                        {formData.productId
-                          ? products.find(p => p._id === formData.productId)?.name
-                          : t('inventory.select_product')}
-                      </span>
-                      <Search size={18} className="text-slate-300 group-hover:text-primary-500 transition-colors" />
-                    </button>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">{t('common.qty')}</label>
-                    <input
-                      required
-                      type="number"
-                      className="w-full bg-slate-50 border-none rounded-2xl p-4 text-slate-800 focus:ring-2 transition-all font-bold"
-                      placeholder="0"
-                      value={formData.quantity}
-                      onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                      onWheel={(e) => e.currentTarget.blur()}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">{t('inventory.cost_price')} (Unit)</label>
-                    <input
-                      required
-                      type="number"
-                      className="w-full bg-slate-50 border-none rounded-2xl p-4 text-slate-800 focus:ring-2 transition-all font-bold"
-                      placeholder="0"
-                      value={formData.purchasePrice}
-                      onChange={(e) => setFormData({ ...formData, purchasePrice: e.target.value })}
-                      onWheel={(e) => e.currentTarget.blur()}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">{t('inventory.selling_price')} (Unit)</label>
-                    <input
-                      required
-                      type="number"
-                      className="w-full bg-slate-50 border-none rounded-2xl p-4 text-slate-800 focus:ring-2 transition-all font-bold border-2 border-emerald-100/50"
-                      placeholder="0"
-                      value={formData.sellingPrice}
-                      onChange={(e) => setFormData({ ...formData, sellingPrice: e.target.value })}
-                      onWheel={(e) => e.currentTarget.blur()}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">{t('inventory.mrp')} (Unit)</label>
-                    <input
-                      required
-                      type="number"
-                      className="w-full bg-slate-50 border-none rounded-2xl p-4 text-slate-800 focus:ring-2 transition-all font-bold border-2 border-blue-100/50"
-                      placeholder="0"
-                      value={formData.mrp}
-                      onChange={(e) => setFormData({ ...formData, mrp: e.target.value })}
-                      onWheel={(e) => e.currentTarget.blur()}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">{t('common.status')}</label>
-                    <select
-                      className="w-full bg-slate-50 border-none rounded-2xl p-4 text-slate-800 focus:ring-2 transition-all font-bold"
-                      value={formData.paymentStatus}
-                      onChange={(e) => setFormData({ ...formData, paymentStatus: e.target.value })}
-                    >
-                      <option value="pending">{t('billing.pending')}</option>
-                      <option value="paid">{t('billing.paid')}</option>
-                    </select>
-                  </div>
-                </div>
-
-                <button type="submit" disabled={saveMutation.isPending} className="btn-primary w-full py-5 text-lg shadow-xl shadow-emerald-100 flex items-center justify-center gap-2 font-bold">
-                  {saveMutation.isPending ? <Loader2 className="animate-spin" /> : (editingId ? t('billing.update_purchase') : t('billing.record_purchase'))}
-                </button>
-              </form>
-            </div>
           </div>
         )}
       </div>
 
-      {/* Item Selection Modal */}
-      {isItemSelectModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between p-6 border-b border-slate-100">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsItemSelectModalOpen(false)}
-                  className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 transition-all"
-                >
-                  <ArrowLeft size={20} />
-                </button>
-                <h3 className="text-xl font-black text-slate-800 tracking-tight">
-                  {t('inventory.select_product')}
-                </h3>
+      {/* Add Purchase Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-300">
+            <div className="p-8 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-primary-50 text-primary-600 rounded-2xl flex items-center justify-center">
+                  <PlusCircle size={24} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-slate-800 tracking-tight">{isEditing ? 'Edit Purchase Bill' : 'Record Purchase Bill'}</h2>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{isEditing ? 'Modify existing purchase records' : 'Update stock levels and track expenses'}</p>
+                </div>
               </div>
+              <button onClick={() => setIsModalOpen(false)} className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-rose-50 hover:text-rose-600 transition-all">
+                <X size={24} />
+              </button>
             </div>
 
-            <div className="p-4 border-b border-slate-100">
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input
-                  type="text"
-                  placeholder={t('inventory.search_placeholder')}
-                  className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-12 pr-4 text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all"
-                  value={itemSearch}
-                  onChange={(e) => setItemSearch(e.target.value)}
-                  autoFocus
-                />
+            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-8 flex flex-col gap-8 custom-scrollbar">
+              {/* Supplier Info */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Supplier Name</label>
+                  <div className="relative">
+                    <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input
+                      type="text"
+                      required
+                      value={supplierName}
+                      onChange={(e) => setSupplierName(e.target.value)}
+                      placeholder="e.g. Ramesh Distributors"
+                      className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-4 focus:ring-primary-100 focus:border-primary-400 outline-none transition-all font-bold text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Supplier GSTIN (Optional)</label>
+                  <input
+                    type="text"
+                    value={supplierGSTIN}
+                    onChange={(e) => setSupplierGSTIN(e.target.value.toUpperCase())}
+                    placeholder="09AAAAA0000A1Z5"
+                    className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-4 focus:ring-primary-100 focus:border-primary-400 outline-none transition-all font-bold text-sm"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Bill / Invoice #</label>
+                  <div className="relative">
+                    <FileText className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input
+                      type="text"
+                      value={billNumber}
+                      onChange={(e) => setBillNumber(e.target.value)}
+                      placeholder="INV-2024-001"
+                      className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-4 focus:ring-primary-100 focus:border-primary-400 outline-none transition-all font-bold text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Purchase Date</label>
+                  <div className="relative">
+                    <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input
+                      type="date"
+                      required
+                      value={date}
+                      onChange={(e) => setDate(e.target.value)}
+                      className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-4 focus:ring-primary-100 focus:border-primary-400 outline-none transition-all font-bold text-sm"
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
-              <table className="w-full text-left">
-                <thead className="sticky top-0 z-10 bg-white border-b border-slate-100">
-                  <tr>
-                    <th className="px-6 py-3 text-[10px] font-black uppercase text-slate-400 tracking-widest">{t('common.name')}</th>
-                    <th className="px-6 py-3 text-[10px] font-black uppercase text-slate-400 tracking-widest">{t('inventory.stock')}</th>
-                    <th className="px-6 py-3 text-right pr-10 text-[10px] font-black uppercase text-slate-400 tracking-widest">{t('common.actions')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {products.map((p, index) => {
-                    const isLastProduct = index === products.length - 1;
-                    return (
-                      <tr
-                        key={p._id}
-                        ref={isLastProduct ? lastProductElementRef : null}
-                        className="hover:bg-slate-50 transition-colors"
-                      >
-                        <td className="px-6 py-4">
-                          <p className="font-bold text-slate-800">{p.name}</p>
-                          <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{p.unit} · {p.batchNumber || 'No Batch'}</p>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`text-sm font-black ${p.stock <= p.minStockAlert ? 'text-rose-500' : 'text-slate-600'}`}>
-                            {p.stock} <span className="text-[10px] text-slate-400 font-medium uppercase">{p.unit}</span>
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-right pr-6">
+              {/* Product Selection */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Add Items to Purchase</h3>
+                  <span className="text-[10px] font-black text-primary-600 bg-primary-50 px-3 py-1 rounded-full uppercase tracking-widest">{cart.length} Items Selected</span>
+                </div>
+                
+                <div className="relative">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                  <input
+                    type="text"
+                    placeholder="Search product to add..."
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-14 pr-4 py-4 bg-white border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-primary-100 focus:border-primary-400 outline-none transition-all font-bold text-sm"
+                  />
+                  
+                  {searchTerm && (
+                    <div className="absolute left-0 right-0 top-full mt-2 bg-white border border-slate-100 rounded-3xl shadow-2xl z-50 max-h-60 overflow-y-auto p-2">
+                      {searching ? (
+                         <div className="p-4 text-center text-slate-400 text-xs font-bold uppercase tracking-widest animate-pulse">Searching...</div>
+                      ) : (searchResults || []).length > 0 ? (
+                        (searchResults || []).map((p: Product, index: number) => (
                           <button
+                            key={p._id}
                             type="button"
+                            ref={index === searchResults.length - 1 ? lastProductRef : null}
                             onClick={() => {
-                              setFormData({
-                                ...formData,
-                                productId: p._id!,
-                                purchasePrice: p.purchasePrice.toString(),
-                                sellingPrice: p.pricePerUnit.toString(),
-                                mrp: (p.mrp || 0).toString()
-                              });
-                              setIsItemSelectModalOpen(false);
+                              addToCart(p);
+                              setSearchTerm("");
                             }}
-                            className="px-4 py-2 bg-primary-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-primary-700 transition-all shadow-lg shadow-primary-100"
+                            className="w-full flex items-center justify-between p-4 hover:bg-slate-50 rounded-2xl transition-colors text-left"
                           >
-                            {t('common.select')}
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400">
+                                <Package size={20} />
+                              </div>
+                              <div>
+                                <p className="text-sm font-black text-slate-800">{p.name}</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Current Stock: {p.stock} {p.unit}</p>
+                              </div>
+                            </div>
+                            <Plus size={20} className="text-primary-500" />
                           </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              {isFetchingNextProductsPage && (
-                <div className="p-4 flex justify-center">
-                  <Loader2 className="animate-spin text-primary-600" size={24} />
+                        ))
+                      ) : (
+                        <div className="p-4 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">No products found</div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              )}
-              {products.length === 0 && !productsLoading && (
-                <div className="text-center py-12">
-                  <Search className="mx-auto text-slate-200 mb-2" size={40} />
-                  <p className="text-slate-400 font-medium">{t('inventory.no_products')}</p>
+              </div>
+
+              {/* Cart Items */}
+              <div className="flex-1 min-h-[200px]">
+                {cart.length > 0 ? (
+                  <div className="border border-slate-100 rounded-3xl overflow-hidden">
+                    <table className="w-full text-left">
+                      <thead className="bg-slate-50 border-b border-slate-100">
+                        <tr>
+                          <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Item Name</th>
+                          <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Qty</th>
+                          <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Price (ea)</th>
+                          <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400">GST %</th>
+                          <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Total</th>
+                          <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {cart.map((item: any, index: number) => (
+                          <tr key={item.productId} className="hover:bg-slate-50/30">
+                            <td className="px-6 py-3">
+                              <span className="text-sm font-black text-slate-800">{item.name}</span>
+                            </td>
+                            <td className="px-6 py-3 w-32">
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  value={item.quantity}
+                                  onChange={(e) => updateCartItem(index, "quantity", Number(e.target.value))}
+                                  className="w-16 px-2 py-2 bg-slate-50 border border-slate-100 rounded-xl font-bold text-sm outline-none"
+                                />
+                                <span className="text-[10px] font-black text-slate-400 uppercase">{item.unit}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-3 w-40">
+                              <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">₹</span>
+                                <input
+                                  type="number"
+                                  value={item.purchasePrice}
+                                  onChange={(e) => updateCartItem(index, "purchasePrice", Number(e.target.value))}
+                                  className="w-full pl-6 pr-3 py-2 bg-slate-50 border border-slate-100 rounded-xl font-bold text-sm outline-none"
+                                />
+                              </div>
+                            </td>
+                            <td className="px-6 py-3 w-24">
+                                <select
+                                    value={item.taxRate}
+                                    onChange={(e) => updateCartItem(index, "taxRate", Number(e.target.value))}
+                                    className="w-full px-2 py-2 bg-slate-50 border border-slate-100 rounded-xl font-bold text-sm outline-none"
+                                >
+                                    {[0, 5, 12, 18, 28].map(r => <option key={r} value={r}>{r}%</option>)}
+                                </select>
+                            </td>
+                            <td className="px-6 py-3">
+                              <span className="text-sm font-black text-slate-800">₹{((item.quantity * item.purchasePrice) * (1 + item.taxRate/100)).toFixed(2)}</span>
+                            </td>
+                            <td className="px-6 py-3 text-right">
+                              <button onClick={() => removeFromCart(index)} className="p-2 text-slate-300 hover:text-rose-500 transition-all">
+                                <Trash2 size={18} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center border-2 border-dashed border-slate-100 rounded-3xl p-10 opacity-50">
+                    <ShoppingCart size={40} className="text-slate-200 mb-4" />
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest text-center">Your purchase cart is empty.<br/>Search products above to add them.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Summary & Submit */}
+              <div className="shrink-0 flex flex-col md:flex-row items-center justify-between gap-8 pt-8 border-t border-slate-100">
+                <div className="flex items-center gap-8">
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Subtotal</p>
+                    <p className="text-lg font-black text-slate-600 tracking-tight">₹{cart.reduce((acc, item) => acc + (item.quantity * item.purchasePrice), 0).toLocaleString()}</p>
+                  </div>
+                  <div className="w-px h-10 bg-slate-100 hidden md:block"></div>
+                  <div>
+                    <p className="text-[10px] font-black text-primary-400 uppercase tracking-[0.2em] mb-1">Total Tax (GST)</p>
+                    <p className="text-lg font-black text-primary-600 tracking-tight">₹{cart.reduce((acc, item) => acc + (item.quantity * item.purchasePrice * (item.taxRate / 100)), 0).toLocaleString()}</p>
+                  </div>
+                  <div className="w-px h-10 bg-slate-100 hidden md:block"></div>
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Grand Total</p>
+                    <p className="text-3xl font-black text-slate-900 tracking-tighter">₹{calculateTotal().toLocaleString()}</p>
+                  </div>
                 </div>
-              )}
-            </div>
+
+                <div className="flex items-center gap-4 w-full md:w-auto">
+                    <button
+                        type="button"
+                        onClick={() => setIsModalOpen(false)}
+                        className="px-8 py-4 text-slate-400 font-black uppercase tracking-widest text-xs hover:text-slate-600 transition-all"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        disabled={createMutation.isPending || updateMutation.isPending || cart.length === 0}
+                        className="flex-1 md:flex-none flex items-center justify-center gap-3 px-12 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-slate-200 hover:bg-slate-800 transition-all disabled:opacity-50"
+                    >
+                        {(createMutation.isPending || updateMutation.isPending) ? <Loader2 className="animate-spin" /> : <><ShoppingCart size={18} /> {isEditing ? 'Update Purchase' : 'Save Purchase Bill'}</>}
+                    </button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 };
 

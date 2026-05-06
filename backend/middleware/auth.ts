@@ -84,4 +84,23 @@ export const authorize = (...roles: string[]) => {
     };
 };
 
+export const checkPlan = (requiredPlan: 'basic' | 'business') => {
+    return (req: AuthRequest, res: Response, next: NextFunction) => {
+        if (!req.planType) {
+            return res.status(403).json({ message: 'Plan information missing. Ensure checkSubscription is called first.' });
+        }
+
+        const planPriority = { 'free': 0, 'basic': 1, 'business': 2 };
+        const userPriority = planPriority[req.planType as keyof typeof planPriority] ?? 0;
+        const requiredPriority = planPriority[requiredPlan] ?? 1;
+
+        if (userPriority < requiredPriority) {
+            return res.status(403).json({ 
+                message: `This feature is only available in ${requiredPlan.charAt(0).toUpperCase() + requiredPlan.slice(1)} and higher plans.` 
+            });
+        }
+        next();
+    };
+};
+
 export default protect;
