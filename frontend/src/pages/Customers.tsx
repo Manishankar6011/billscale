@@ -13,7 +13,10 @@ import {
   FileText,
   ArrowDownToLine,
   ArrowUpFromLine,
-  Loader2
+  Loader2,
+  Edit2,
+  Trash2,
+  Plus
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -67,10 +70,80 @@ const Customers = () => {
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [loadingLedger, setLoadingLedger] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<CustomerData | null>(null);
+  const [customerForm, setCustomerForm] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    address: "",
+    gstin: "",
+    state: "Bihar",
+    stateCode: "10"
+  });
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMode, setPaymentMode] = useState("cash");
   const [paymentNotes, setPaymentNotes] = useState("");
   const [submittingPayment, setSubmittingPayment] = useState(false);
+  const [submittingCustomer, setSubmittingCustomer] = useState(false);
+
+  const handleDeleteCustomer = async (e: React.MouseEvent, c: CustomerData) => {
+    e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to delete ${c.name}? This will remove their record from your database.`)) return;
+    
+    try {
+      await axios.delete(`/api/customers/${c._id}`, {
+        headers: { Authorization: `Bearer ${user?.token}` }
+      });
+      showToast("Customer deleted successfully", "success");
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      if (selected?._id === c._id) setSelected(null);
+    } catch (err: any) {
+      showToast(err.response?.data?.message || "Failed to delete customer", "error");
+    }
+  };
+
+  const handleEditCustomer = (e: React.MouseEvent, c: any) => {
+    e.stopPropagation();
+    setIsEditing(true);
+    setEditingCustomer(c);
+    setCustomerForm({
+      name: c.name,
+      phone: c.phone || "",
+      email: c.email || "",
+      address: c.address || "",
+      gstin: c.gstin || "",
+      state: c.state || "Bihar",
+      stateCode: c.stateCode || "10"
+    });
+    setShowCustomerModal(true);
+  };
+
+  const handleCustomerSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmittingCustomer(true);
+    try {
+      if (isEditing && editingCustomer) {
+        await axios.put(`/api/customers/${editingCustomer._id}`, customerForm, {
+          headers: { Authorization: `Bearer ${user?.token}` }
+        });
+        showToast("Customer updated successfully", "success");
+      } else {
+        await axios.post("/api/customers", customerForm, {
+          headers: { Authorization: `Bearer ${user?.token}` }
+        });
+        showToast("Customer created successfully", "success");
+      }
+      setShowCustomerModal(false);
+      setEditingCustomer(null);
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+    } catch (err: any) {
+      showToast(err.response?.data?.message || "Action failed", "error");
+    } finally {
+      setSubmittingCustomer(false);
+    }
+  };
 
   const handleSelectCustomer = async (c: CustomerData) => {
     setSelected(c);
@@ -363,6 +436,25 @@ const Customers = () => {
             View and manage your customer database
           </p>
         </div>
+        <button
+          onClick={() => {
+            setIsEditing(false);
+            setCustomerForm({
+              name: "",
+              phone: "",
+              email: "",
+              address: "",
+              gstin: "",
+              state: "Bihar",
+              stateCode: "10"
+            });
+            setShowCustomerModal(true);
+          }}
+          className="flex items-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-primary-700 transition-all shadow-lg shadow-primary-100"
+        >
+          <Plus size={20} />
+          Add Customer
+        </button>
       </div>
 
       {/* Summary Cards */}
@@ -430,13 +522,19 @@ const Customers = () => {
               <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-primary-700 rounded-2xl flex items-center justify-center text-white font-black text-lg shadow-lg shadow-primary-100">
                 {c.name.charAt(0).toUpperCase()}
               </div>
-              <div className="text-right">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  Invoices
-                </p>
-                <p className="text-xl font-black text-slate-800">
-                  {c.invoiceCount}
-                </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={(e) => handleEditCustomer(e, c)}
+                  className="p-2 bg-slate-50 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-xl transition-all"
+                >
+                  <Edit2 size={16} />
+                </button>
+                <button
+                  onClick={(e) => handleDeleteCustomer(e, c)}
+                  className="p-2 bg-slate-50 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                >
+                  <Trash2 size={16} />
+                </button>
               </div>
             </div>
             <h3 className="text-lg font-black text-slate-800 group-hover:text-primary-700 transition-colors tracking-tight">
@@ -501,6 +599,91 @@ const Customers = () => {
           <p className="text-slate-500">
             Record sales to automatically add customers here.
           </p>
+        </div>
+      )}
+
+      {/* Add/Edit Customer Modal */}
+      {showCustomerModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[120] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in duration-200">
+            <div className="bg-primary-600 p-6 text-white flex items-center justify-between">
+              <h3 className="text-xl font-black">{isEditing ? 'Edit Customer' : 'Add New Customer'}</h3>
+              <button onClick={() => setShowCustomerModal(false)} className="text-white/80 hover:text-white">
+                <X size={24} />
+              </button>
+            </div>
+            <form onSubmit={handleCustomerSubmit} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Customer Name*</label>
+                <input
+                  type="text"
+                  required
+                  value={customerForm.name}
+                  onChange={(e) => setCustomerForm({ ...customerForm, name: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-slate-800 font-bold focus:ring-2 focus:ring-primary-500 outline-none"
+                  placeholder="e.g. Rahul Kumar"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Phone</label>
+                  <input
+                    type="tel"
+                    value={customerForm.phone}
+                    onChange={(e) => setCustomerForm({ ...customerForm, phone: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-slate-800 font-bold focus:ring-2 focus:ring-primary-500 outline-none"
+                    placeholder="10 digit number"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">GSTIN</label>
+                  <input
+                    type="text"
+                    value={customerForm.gstin}
+                    onChange={(e) => setCustomerForm({ ...customerForm, gstin: e.target.value.toUpperCase() })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-slate-800 font-bold focus:ring-2 focus:ring-primary-500 outline-none"
+                    placeholder="GSTIN Number"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Email</label>
+                <input
+                  type="email"
+                  value={customerForm.email}
+                  onChange={(e) => setCustomerForm({ ...customerForm, email: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-slate-800 font-bold focus:ring-2 focus:ring-primary-500 outline-none"
+                  placeholder="customer@email.com"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Address</label>
+                <textarea
+                  value={customerForm.address}
+                  onChange={(e) => setCustomerForm({ ...customerForm, address: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-slate-800 font-medium focus:ring-2 focus:ring-primary-500 outline-none resize-none"
+                  placeholder="Full address"
+                  rows={2}
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowCustomerModal(false)}
+                  className="flex-1 py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingCustomer}
+                  className="flex-1 py-3 bg-primary-600 text-white font-bold rounded-2xl hover:bg-primary-700 transition-colors shadow-lg shadow-primary-200 disabled:opacity-70 flex justify-center items-center gap-2"
+                >
+                  {submittingCustomer ? <Loader2 size={18} className="animate-spin" /> : (isEditing ? 'Update' : 'Add')}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

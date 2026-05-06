@@ -329,3 +329,40 @@ export const addCustomerPayment = async (req: AuthRequest, res: Response) => {
         res.status(500).json({ message: err.message });
     }
 };
+
+// @desc    Delete customer
+// @route   DELETE /api/customers/:id
+// @access  Private
+export const deleteCustomer = async (req: AuthRequest, res: Response) => {
+    try {
+        const tenantId = req.tenantId;
+        const customerId = req.params.id;
+
+        const customer = await Customer.findOne({ _id: customerId, tenantId });
+        if (!customer) {
+            return res.status(404).json({ message: 'Customer not found' });
+        }
+
+        // Check if customer has sales or payments
+        const salesCount = await Sale.countDocuments({ 
+            tenantId, 
+            $or: [
+                { customerId },
+                { customerPhone: customer.phone }
+            ] 
+        });
+        
+        const paymentsCount = await CustomerPayment.countDocuments({ tenantId, customerId });
+
+        if (salesCount > 0 || paymentsCount > 0) {
+            return res.status(400).json({ 
+                message: 'Cannot delete customer with existing sales or payment records. Please delete associated records first.' 
+            });
+        }
+
+        await Customer.deleteOne({ _id: customerId, tenantId });
+        res.status(200).json({ message: 'Customer deleted successfully' });
+    } catch (err: any) {
+        res.status(500).json({ message: err.message });
+    }
+};

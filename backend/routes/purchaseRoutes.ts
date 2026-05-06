@@ -1,13 +1,16 @@
 import express from 'express';
-import { createPurchase, getPurchases, deletePurchase } from '../controllers/purchaseController';
-import { protect } from '../middleware/auth';
+import { getPurchases, processPurchase, updatePurchase, deletePurchase } from '../controllers/transactionController';
+import { protect, checkSubscription } from '../middleware/auth';
+import tenant from '../middleware/tenant';
 
 const router = express.Router();
 
 router.use(protect);
+router.use(tenant);
 
-router.post('/', createPurchase);
 router.get('/', getPurchases);
-router.delete('/:id', deletePurchase);
+router.post('/', checkSubscription, processPurchase);
+router.put('/:id', checkSubscription, updatePurchase);
+router.delete('/:id', checkSubscription, deletePurchase);
 
 export default router;

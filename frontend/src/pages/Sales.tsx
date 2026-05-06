@@ -226,6 +226,7 @@ const Sales = () => {
   const [itemSearch, setItemSearch] = useState("");
   const [debouncedItemSearch, setDebouncedItemSearch] = useState("");
   const [scannedProducts, setScannedProducts] = useState<Product[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<Record<string, Product>>({});
   const [itemsModalMode, setItemsModalMode] = useState<"all" | "scan" | null>(null);
 
   // Debounce search terms
@@ -556,6 +557,7 @@ const Sales = () => {
     setAmountReceived("");
     setRoundOff(false);
     setScannedProducts([]);
+    setSelectedProducts({});
   };
 
   const closeModal = () => {
@@ -823,6 +825,10 @@ const Sales = () => {
             ...prev,
             [pid]: product!.pricePerUnit.toString(),
           }));
+          setSelectedProducts((prev) => ({
+            ...prev,
+            [pid]: product!,
+          }));
           setItemSearch("");
           showToast(`${product.name} qty increased in list`, "success");
         } else {
@@ -899,7 +905,7 @@ const Sales = () => {
     const newItems: CartItem[] = [];
     Object.entries(itemQtyMap).forEach(([productId, qty]) => {
       if (Number(qty) > 0) {
-        const product = products.find((p) => p._id === productId);
+        const product = products.find((p) => p._id === productId) || selectedProducts[productId];
         if (product) {
           const price = Number(itemPriceMap[productId]) || product.pricePerUnit;
           newItems.push({
@@ -941,6 +947,7 @@ const Sales = () => {
     });
     setItemQtyMap({});
     setItemPriceMap({});
+    setSelectedProducts({});
     setItemSearch("");
     setItemsModalMode(null);
   };
@@ -2607,6 +2614,10 @@ const Sales = () => {
                                 setItemPriceMap((prev) => ({
                                   ...prev,
                                   [p._id!]: p.pricePerUnit.toString(),
+                                }));
+                                setSelectedProducts((prev) => ({
+                                  ...prev,
+                                  [p._id!]: p,
                                 }));
                               }}
                               className="flex items-center gap-2 px-6 py-2.5 bg-primary-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-primary-700 shadow-lg shadow-primary-100 transition-all active:scale-95"

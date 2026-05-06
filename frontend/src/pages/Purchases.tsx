@@ -13,7 +13,8 @@ import {
   X,
   Package,
   IndianRupee,
-  FileText
+  FileText,
+  Edit2
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "../context/ToastContext";
@@ -33,6 +34,8 @@ const Purchases = () => {
   const [billNumber, setBillNumber] = useState("");
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [cart, setCart] = useState<any[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
 
@@ -146,6 +149,22 @@ const Purchases = () => {
     },
   });
 
+  // Update Purchase Mutation
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => axios.put(`/api/purchases/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["purchases"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["products-search"] });
+      setIsModalOpen(false);
+      resetForm();
+      showToast("Purchase updated and stock adjusted!", "success");
+    },
+    onError: (error: any) => {
+      showToast(error.response?.data?.message || "Error updating purchase", "error");
+    },
+  });
+
   // Delete Purchase Mutation
   const deleteMutation = useMutation({
     mutationFn: (id: string) => axios.delete(`/api/purchases/${id}`),
@@ -162,6 +181,28 @@ const Purchases = () => {
     setBillNumber("");
     setCart([]);
     setDate(format(new Date(), "yyyy-MM-dd"));
+    setIsEditing(false);
+    setEditingId(null);
+  };
+
+  const handleEdit = (purchase: Purchase) => {
+    setSupplierName(purchase.supplierName);
+    setSupplierGSTIN(purchase.supplierGSTIN || "");
+    setBillNumber(purchase.billNumber || "");
+    setDate(format(new Date(purchase.date), "yyyy-MM-dd"));
+    setCart(purchase.items.map(item => ({
+      productId: typeof item.productId === 'string' ? item.productId : item.productId._id,
+      name: item.name,
+      quantity: item.quantity,
+      unit: item.unit,
+      purchasePrice: item.purchasePrice,
+      taxRate: item.taxRate || 0,
+      taxAmount: item.taxAmount || 0,
+      hsnCode: item.hsnCode || ""
+    })));
+    setIsEditing(true);
+    setEditingId(purchase._id!);
+    setIsModalOpen(true);
   };
 
   const addToCart = (product: Product) => {
@@ -214,7 +255,7 @@ const Purchases = () => {
     const totalAmount = calculateTotal();
     const totalTax = cart.reduce((acc, item) => acc + (item.quantity * item.purchasePrice * (item.taxRate / 100)), 0);
 
-    createMutation.mutate({
+    const payload = {
       supplierName,
       supplierGSTIN,
       billNumber,
@@ -224,7 +265,13 @@ const Purchases = () => {
       taxAmount: totalTax,
       paymentMode: "cash",
       paymentStatus: "paid"
-    });
+    };
+
+    if (isEditing && editingId) {
+      updateMutation.mutate({ id: editingId, data: payload });
+    } else {
+      createMutation.mutate(payload);
+    }
   };
 
   return (
@@ -296,16 +343,24 @@ const Purchases = () => {
                       <span className="text-sm font-black text-slate-900">₹{purchase.totalAmount.toLocaleString()}</span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <button
-                        onClick={() => {
-                          if (window.confirm("Are you sure? This will decrease the stock of these items.")) {
-                            deleteMutation.mutate(purchase._id!);
-                          }
-                        }}
-                        className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleEdit(purchase)}
+                          className="p-2 text-primary-400 hover:text-primary-600 hover:bg-primary-50 rounded-xl transition-all"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm("Are you sure? This will decrease the stock of these items.")) {
+                              deleteMutation.mutate(purchase._id!);
+                            }
+                          }}
+                          className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -337,8 +392,8 @@ const Purchases = () => {
                   <PlusCircle size={24} />
                 </div>
                 <div>
-                  <h2 className="text-xl font-black text-slate-800 tracking-tight">Record Purchase Bill</h2>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Update stock levels and track expenses</p>
+                  <h2 className="text-xl font-black text-slate-800 tracking-tight">{isEditing ? 'Edit Purchase Bill' : 'Record Purchase Bill'}</h2>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{isEditing ? 'Modify existing purchase records' : 'Update stock levels and track expenses'}</p>
                 </div>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-rose-50 hover:text-rose-600 transition-all">
@@ -555,10 +610,10 @@ const Purchases = () => {
                     </button>
                     <button
                         type="submit"
-                        disabled={createMutation.isPending || cart.length === 0}
+                        disabled={createMutation.isPending || updateMutation.isPending || cart.length === 0}
                         className="flex-1 md:flex-none flex items-center justify-center gap-3 px-12 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-slate-200 hover:bg-slate-800 transition-all disabled:opacity-50"
                     >
-                        {createMutation.isPending ? <Loader2 className="animate-spin" /> : <><ShoppingCart size={18} /> Save Purchase Bill</>}
+                        {(createMutation.isPending || updateMutation.isPending) ? <Loader2 className="animate-spin" /> : <><ShoppingCart size={18} /> {isEditing ? 'Update Purchase' : 'Save Purchase Bill'}</>}
                     </button>
                 </div>
               </div>

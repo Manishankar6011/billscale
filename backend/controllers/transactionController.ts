@@ -128,10 +128,11 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     customerStateCode,
   } = req.body;
 
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
+  let session: any;
   try {
+    session = await mongoose.startSession();
+    session.startTransaction();
+
     // 0. Check Subscription Limits for Free Plan
     const tenant = await Tenant.findById(req.tenantId).session(session);
     if (!tenant) throw new Error("Unauthorized or Business not found");
@@ -541,12 +542,26 @@ export const getPurchases = async (req: AuthRequest, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 50;
     const skip = (page - 1) * limit;
 
-    const search = req.query.search as string;
+    const { startDate, endDate, search } = req.query;
     const tenantId = new mongoose.Types.ObjectId(req.tenantId as string);
     let query: any = { tenantId };
 
     if (search) {
-      query.supplierName = { $regex: search, $options: "i" };
+      query.supplierName = { $regex: search as string, $options: "i" };
+    }
+
+    if (startDate || endDate) {
+      query.date = {};
+      if (startDate) {
+        const start = new Date(startDate as string);
+        start.setHours(0, 0, 0, 0);
+        query.date.$gte = start;
+      }
+      if (endDate) {
+        const end = new Date(endDate as string);
+        end.setHours(23, 59, 59, 999);
+        query.date.$lte = end;
+      }
     }
 
     const [purchases, totalCount] = await Promise.all([
