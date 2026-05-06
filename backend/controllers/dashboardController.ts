@@ -29,7 +29,10 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
       periodMatchQuery.date = { $gte: startOfDayUTC };
       const yesterdayStart = new Date(startOfDayUTC);
       yesterdayStart.setDate(yesterdayStart.getDate() - 1);
-      prevPeriodMatchQuery.date = { $gte: yesterdayStart, $lt: startOfDayUTC };
+      
+      const durationMs = now.getTime() - startOfDayUTC.getTime();
+      const yesterdayEndEquivalent = new Date(yesterdayStart.getTime() + durationMs);
+      prevPeriodMatchQuery.date = { $gte: yesterdayStart, $lt: yesterdayEndEquivalent };
     } else if (timeRange === "yesterday") {
       const yesterdayStart = new Date(startOfDayUTC);
       yesterdayStart.setDate(yesterdayStart.getDate() - 1);
@@ -45,9 +48,11 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
       const startOfWeekUTC = new Date(startOfWeekIST.getTime() - istOffset);
       periodMatchQuery.date = { $gte: startOfWeekUTC };
 
+      const durationMs = now.getTime() - startOfWeekUTC.getTime();
       const prevWeekStart = new Date(startOfWeekUTC);
       prevWeekStart.setUTCDate(prevWeekStart.getUTCDate() - 7);
-      prevPeriodMatchQuery.date = { $gte: prevWeekStart, $lt: startOfWeekUTC };
+      const prevWeekEndEquivalent = new Date(prevWeekStart.getTime() + durationMs);
+      prevPeriodMatchQuery.date = { $gte: prevWeekStart, $lt: prevWeekEndEquivalent };
     } else if (timeRange === "month") {
       // Current calendar month (1st to last day)
       const startOfMonthIST = new Date(todayIST);
@@ -55,9 +60,11 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
       const startOfMonthUTC = new Date(startOfMonthIST.getTime() - istOffset);
       periodMatchQuery.date = { $gte: startOfMonthUTC };
 
+      const durationMs = now.getTime() - startOfMonthUTC.getTime();
       const prevMonthStart = new Date(startOfMonthUTC);
       prevMonthStart.setUTCMonth(prevMonthStart.getUTCMonth() - 1);
-      prevPeriodMatchQuery.date = { $gte: prevMonthStart, $lt: startOfMonthUTC };
+      const prevMonthEndEquivalent = new Date(prevMonthStart.getTime() + durationMs);
+      prevPeriodMatchQuery.date = { $gte: prevMonthStart, $lt: prevMonthEndEquivalent };
     } else if (timeRange === "year") {
       // Current calendar year (Jan to Dec)
       const startOfYearIST = new Date(todayIST);
@@ -65,14 +72,19 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
       const startOfYearUTC = new Date(startOfYearIST.getTime() - istOffset);
       periodMatchQuery.date = { $gte: startOfYearUTC };
 
+      const durationMs = now.getTime() - startOfYearUTC.getTime();
       const prevYearStart = new Date(startOfYearUTC);
       prevYearStart.setUTCFullYear(prevYearStart.getUTCFullYear() - 1);
-      prevPeriodMatchQuery.date = { $gte: prevYearStart, $lt: startOfYearUTC };
+      const prevYearEndEquivalent = new Date(prevYearStart.getTime() + durationMs);
+      prevPeriodMatchQuery.date = { $gte: prevYearStart, $lt: prevYearEndEquivalent };
+    } else if (timeRange === "all") {
+      periodMatchQuery = { tenantId };
+      prevPeriodMatchQuery = { tenantId, _id: new mongoose.Types.ObjectId() }; // No matches for trend
     }
 
     const getDateFormat = (range: any) => {
       if (range === "today" || range === "yesterday") return "%Y-%m-%d %H:00";
-      if (range === "year") return "%Y-%m";
+      if (range === "year" || range === "all") return "%Y-%m";
       return "%Y-%m-%d";
     };
     const dateFormat = getDateFormat(timeRange);

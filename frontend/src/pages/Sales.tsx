@@ -205,6 +205,9 @@ const Sales = () => {
     } else if (range === "month") {
       const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
       start = format(startOfMonth, "yyyy-MM-dd");
+    } else if (range === "year") {
+      const startOfYear = new Date(today.getFullYear(), 0, 1);
+      start = format(startOfYear, "yyyy-MM-dd");
     } else if (range === "custom") {
       // Don't change dates, just set range label
       setTimeRange("custom");
@@ -1223,7 +1226,7 @@ const Sales = () => {
             />
             {showRangeMenu && (
               <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 z-30 p-2 animate-in slide-in-from-top-2 duration-200">
-                {["today", "yesterday", "week", "month", "all", "custom"].map((range) => (
+                {["today", "yesterday", "week", "month", "year", "all", "custom"].map((range) => (
                   <button
                     key={range}
                     onClick={() => handleRangeSelect(range)}
@@ -1371,7 +1374,7 @@ const Sales = () => {
                   </button>
                   {showProfitRangeMenu && (
                     <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 p-2 animate-in slide-in-from-top-2 duration-200 text-slate-800">
-                      {["today", "yesterday", "week", "month", "all", "custom"].map((range) => (
+                      {["today", "yesterday", "week", "month", "year", "all", "custom"].map((range) => (
                         <button
                           key={range}
                           onClick={() => {

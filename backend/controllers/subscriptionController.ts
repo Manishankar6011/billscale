@@ -4,6 +4,7 @@ const Razorpay = require('razorpay');
 import { AuthRequest } from '../middleware/auth';
 import Tenant from '../models/Tenant';
 import { sendSubscriptionEmail } from '../utils/emailService';
+import { PLANS, PlanType, BillingCycle } from '../utils/plans';
 
 // Initialize Razorpay lazily to avoid crash if keys are missing in .env
 const getRazorpayInstance = () => {
@@ -20,7 +21,20 @@ const getRazorpayInstance = () => {
 
 export const createOrder = async (req: AuthRequest, res: Response) => {
     try {
-        const { planType, amount, billingCycle } = req.body;
+        const { planType, billingCycle } = req.body as { planType: PlanType, billingCycle: BillingCycle };
+        
+        // Validate planType
+        if (!PLANS[planType]) {
+            return res.status(400).json({ message: 'Invalid plan type' });
+        }
+
+        // Calculate amount on backend
+        const cycle = billingCycle === 'monthly' ? 'monthly' : 'yearly';
+        const amount = PLANS[planType][cycle];
+
+        if (amount === 0 && planType === 'free') {
+            return res.status(400).json({ message: 'Free plan does not require payment' });
+        }
         
         const options = {
             amount: amount * 100, // Amount in paise
