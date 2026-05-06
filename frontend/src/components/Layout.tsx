@@ -213,7 +213,7 @@ const Layout = () => {
             }
           >
             <item.icon className="w-6 h-6" />
-            <span className="text-[10px] font-bold tracking-tight uppercase">
+            <span className="text-[10px] font-bold tracking-tight uppercase text-center leading-tight">
               {item.name}
             </span>
           </NavLink>
