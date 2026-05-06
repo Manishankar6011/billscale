@@ -124,10 +124,8 @@ const Pricing = () => {
 
         try {
             // Create order on backend
-            const amount = isYearly ? plan.amounts.yearly : plan.amounts.monthly;
             const { data: order } = await axios.post('/api/subscription/order', {
                 planType: plan.id,
-                amount: amount,
                 billingCycle: isYearly ? 'yearly' : 'monthly'
             }, { headers: { Authorization: `Bearer ${user?.token}` } });
 
