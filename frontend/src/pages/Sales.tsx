@@ -290,6 +290,8 @@ const Sales = () => {
         totalPaid: 0,
         totalUnpaid: 0,
         totalProfit: 0,
+        totalAdditionalCharges: 0,
+        totalRoundOff: 0,
         paidCount: 0,
         pendingCount: 0,
       }
@@ -461,7 +463,7 @@ const Sales = () => {
   // Cart State
   const [cart, setCart] = useState<CartItem[]>([]);
   const [additionalItems, setAdditionalItems] = useState<
-    { name: string; price: string }[]
+    { name: string; price: string; profitPercent: string }[]
   >([]);
 
   // Item-Add modal (removed itemsModalMode from here)
@@ -472,6 +474,7 @@ const Sales = () => {
   // Additional charge inputs (new)
   const [newChargeName, setNewChargeName] = useState("");
   const [newChargePrice, setNewChargePrice] = useState("");
+  const [newChargeProfitPercent, setNewChargeProfitPercent] = useState("0");
 
   // UI Logic State
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -561,6 +564,7 @@ const Sales = () => {
     setRoundOff(false);
     setScannedProducts([]);
     setSelectedProducts({});
+    setNewChargeProfitPercent("0");
   };
 
   const closeModal = () => {
@@ -752,10 +756,17 @@ const Sales = () => {
         ...additionalItems.map((i) => ({
           name: i.name,
           price: Number(i.price) || 0,
+          profitPercent: Number(i.profitPercent) || 0,
         })),
         // Include pending charge if name and price are both present
         ...(newChargeName && newChargePrice
-          ? [{ name: newChargeName, price: Number(newChargePrice) || 0 }]
+          ? [
+              {
+                name: newChargeName,
+                price: Number(newChargePrice) || 0,
+                profitPercent: Number(newChargeProfitPercent) || 0,
+              },
+            ]
           : []),
       ],
       paymentMode,
@@ -959,8 +970,17 @@ const Sales = () => {
   const filteredSales = sales;
 
   // Summary metrics from backend
-  const totalSales = salesSummary.totalAmount;
-  const totalPaid = salesSummary.totalPaid;
+  // Summary metrics from backend (Excluding additional charges for accurate item-based profit view)
+  const totalSales =
+    salesSummary.totalAmount -
+    (salesSummary.totalAdditionalCharges || 0) -
+    (salesSummary.totalRoundOff || 0);
+  const totalPaid = Math.max(
+    0,
+    salesSummary.totalPaid -
+      (salesSummary.totalAdditionalCharges || 0) -
+      (salesSummary.totalRoundOff || 0),
+  );
   const totalUnpaid = salesSummary.totalUnpaid;
   const totalNetProfit = salesSummary.totalProfit;
 
@@ -1112,6 +1132,7 @@ const Sales = () => {
       (sale.additionalItems || []).map((i) => ({
         name: i.name,
         price: i.price.toString(),
+        profitPercent: (i.profitPercent || 0).toString(),
       })),
     );
     setIsModalOpen(true);
@@ -1493,9 +1514,19 @@ const Sales = () => {
                   const additionalChargesTotal = (
                     sale.additionalItems || []
                   ).reduce((acc, item) => acc + (Number(item.price) || 0), 0);
+                  const additionalChargesProfit = (
+                    sale.additionalItems || []
+                  ).reduce(
+                    (acc, item) =>
+                      acc +
+                      ((Number(item.price) || 0) * (item.profitPercent || 0)) /
+                        100,
+                    0,
+                  );
                   const profit =
                     (sale.totalAmount || 0) -
-                    additionalChargesTotal -
+                    additionalChargesTotal +
+                    additionalChargesProfit -
                     (sale.roundOffAmount || 0) -
                     totalCost;
                   const profitPerc =
@@ -1555,18 +1586,23 @@ const Sales = () => {
                       </td>
                       <td className="px-6 py-4">
                         <p className="font-black text-primary-700">
-                          ₹{(sale.totalAmount || 0).toLocaleString()}
+                          ₹{((sale.totalAmount || 0) - additionalChargesTotal - (sale.roundOffAmount || 0)).toLocaleString()}
                         </p>
+                        {additionalChargesTotal > 0 && (
+                          <p className="text-[10px] text-amber-600 font-bold">
+                            + ₹{additionalChargesTotal.toLocaleString()} Charges
+                          </p>
+                        )}
                         <p className="text-[10px] text-slate-400 font-medium">
-                          Sale Price
+                          Item Total (Bill: ₹{sale.totalAmount?.toLocaleString()})
                         </p>
                       </td>
                       <td className="px-6 py-4">
                         <p className="font-bold text-emerald-600">
-                          ₹{(sale.amountPaid || 0).toLocaleString()}
+                          ₹{Math.max(0, (sale.amountPaid || 0) - additionalChargesTotal - (sale.roundOffAmount || 0)).toLocaleString()}
                         </p>
                         <p className="text-[10px] text-slate-400 font-medium">
-                          Paid
+                          Item Paid (Total: ₹{sale.amountPaid?.toLocaleString()})
                         </p>
                       </td>
                       <td className="px-6 py-4">
@@ -1997,9 +2033,14 @@ const Sales = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-4">
-                        <p className="font-black text-slate-800">
-                          ₹{Number(item.price).toLocaleString()}
-                        </p>
+                        <div>
+                          <p className="font-black text-slate-800 text-right">
+                            ₹{Number(item.price).toLocaleString()}
+                          </p>
+                          <p className="text-[10px] text-emerald-600 font-bold text-right">
+                            Profit: {item.profitPercent}%
+                          </p>
+                        </div>
                         <button
                           type="button"
                           onClick={() =>
@@ -2021,38 +2062,63 @@ const Sales = () => {
                 <p className="text-[10px] font-black uppercase tracking-widest text-amber-600">
                   {t("billing.additional_charges")}
                 </p>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="text"
-                    placeholder={t("billing.charge_name_placeholder")}
-                    className="flex-1 bg-white border border-amber-200 rounded-xl p-3 text-xs font-bold min-w-0"
-                    value={newChargeName}
-                    onChange={(e) => setNewChargeName(e.target.value)}
-                  />
-                  <div className="flex gap-2 sm:w-auto w-full">
+                <div className="flex flex-col sm:flex-row gap-3 items-end">
+                  <div className="flex-1 w-full space-y-1">
+                    <label className="text-[9px] font-black text-amber-700 ml-1 uppercase tracking-widest">Charge Name</label>
                     <input
-                      type="number"
-                      placeholder={t("common.total")}
-                      className="flex-1 sm:w-24 bg-white border border-amber-200 rounded-xl p-3 text-xs font-bold"
-                      value={newChargePrice}
-                      onChange={(e) => setNewChargePrice(e.target.value)}
-                      onWheel={(e) => e.currentTarget.blur()}
+                      type="text"
+                      placeholder={t("billing.charge_name_placeholder")}
+                      className="w-full bg-white border border-amber-200 rounded-xl p-3 text-xs font-bold min-w-0 shadow-sm focus:border-amber-500 focus:ring-0"
+                      value={newChargeName}
+                      onChange={(e) => setNewChargeName(e.target.value)}
                     />
+                  </div>
+                  <div className="flex gap-2 sm:w-auto w-full items-end">
+                    <div className="flex-1 sm:w-24 space-y-1">
+                      <label className="text-[9px] font-black text-amber-700 ml-1 uppercase tracking-widest">Amount</label>
+                      <input
+                        type="number"
+                        placeholder="₹"
+                        className="w-full bg-white border border-amber-200 rounded-xl p-3 text-xs font-bold shadow-sm focus:border-amber-500 focus:ring-0"
+                        value={newChargePrice}
+                        onChange={(e) => setNewChargePrice(e.target.value)}
+                        onWheel={(e) => e.currentTarget.blur()}
+                      />
+                    </div>
+                    <div className="flex-1 sm:w-28 space-y-1">
+                      <label className="text-[9px] font-black text-amber-700 ml-1 uppercase tracking-widest">Add to Profit</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          placeholder="%"
+                          className="w-full bg-white border border-amber-200 rounded-xl p-3 text-xs font-bold pr-7 shadow-sm focus:border-amber-500 focus:ring-0"
+                          value={newChargeProfitPercent}
+                          onChange={(e) => setNewChargeProfitPercent(e.target.value)}
+                          onWheel={(e) => e.currentTarget.blur()}
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-amber-400">%</span>
+                      </div>
+                    </div>
                     <button
                       type="button"
                       onClick={() => {
                         if (newChargeName && newChargePrice) {
                           setAdditionalItems((prev) => [
                             ...prev,
-                            { name: newChargeName, price: newChargePrice },
+                            {
+                              name: newChargeName,
+                              price: newChargePrice,
+                              profitPercent: newChargeProfitPercent || "0",
+                            },
                           ]);
                           setNewChargeName("");
                           setNewChargePrice("");
+                          setNewChargeProfitPercent("0");
                         }
                       }}
-                      className="p-3 bg-amber-500 text-white rounded-xl hover:bg-amber-600 shrink-0"
+                      className="p-3 bg-amber-500 text-white rounded-xl hover:bg-amber-600 shadow-md hover:shadow-lg transition-all mb-0.5"
                     >
-                      <Plus size={16} />
+                      <Plus size={18} />
                     </button>
                   </div>
                 </div>

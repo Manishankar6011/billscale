@@ -75,6 +75,10 @@ export const getSales = async (req: AuthRequest, res: Response) => {
             totalPaid: { $sum: "$amountPaid" },
             totalUnpaid: { $sum: "$balanceDue" },
             totalProfit: { $sum: "$totalProfit" },
+            totalAdditionalCharges: {
+              $sum: { $sum: "$additionalItems.price" },
+            },
+            totalRoundOff: { $sum: "$roundOffAmount" },
             paidCount: {
               $sum: { $cond: [{ $eq: ["$status", "paid"] }, 1, 0] },
             },
@@ -101,6 +105,8 @@ export const getSales = async (req: AuthRequest, res: Response) => {
         totalPaid: 0,
         totalUnpaid: 0,
         totalProfit: 0,
+        totalAdditionalCharges: 0,
+        totalRoundOff: 0,
       },
     });
   } catch (err: any) {
@@ -242,11 +248,13 @@ export const processSale = async (req: AuthRequest, res: Response) => {
       await product.save({ session });
     }
 
-    // Add additional items to totalAmount (Exclude from Profit)
+    // Add additional items to totalAmount & calculate Profit contribution
     if (additionalItems && Array.isArray(additionalItems)) {
       for (const item of additionalItems) {
         const chargePrice = Number(item.price) || 0;
+        const profitPercent = Number(item.profitPercent) || 0;
         totalAmount += chargePrice;
+        totalProfit += (chargePrice * profitPercent) / 100;
       }
     }
 
@@ -440,8 +448,9 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
     if (additionalItems && Array.isArray(additionalItems)) {
       for (const item of additionalItems) {
         const chargePrice = Number(item.price) || 0;
+        const profitPercent = Number(item.profitPercent) || 0;
         totalAmount += chargePrice;
-        totalProfit += chargePrice;
+        totalProfit += (chargePrice * profitPercent) / 100;
       }
     }
 

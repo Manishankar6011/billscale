@@ -132,8 +132,15 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                                 <td className="py-5 px-2 text-right font-black text-black text-base">₹{((item.quantity || 0) * (item.sellingPrice || 0) * (100 / (100 + (item.taxRate || 0)))).toFixed(2)}</td>
                             </tr>
                         ))}
+                        {(sale.additionalItems || []).length > 0 && (
+                            <tr className="bg-slate-50">
+                                <td colSpan={6} className="py-2 px-2 text-[10px] font-black uppercase tracking-widest border-y border-black/10">
+                                    Additional Charges & Services
+                                </td>
+                            </tr>
+                        )}
                         {(sale.additionalItems || []).map((item: any, i: number) => (
-                            <tr key={`add-${i}`} className="text-black bg-slate-50 italic">
+                            <tr key={`add-${i}`} className="text-black bg-slate-50/30 italic">
                                 <td className="py-5 px-2 font-bold text-black">{String((sale.items?.length || 0) + i + 1).padStart(2, '0')}</td>
                                 <td className="py-5 px-2">
                                     <p className="font-black text-black">{item.name}</p>

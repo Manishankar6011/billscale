@@ -130,7 +130,7 @@ export interface ISale extends Document {
   discount?: number;
   paymentMode: "cash" | "credit" | "upi" | "card" | "bank_transfer";
   status: "paid" | "pending" | "partial";
-  additionalItems?: { name: string, price: number }[];
+  additionalItems?: { name: string, price: number, profitPercent?: number }[];
   invoiceNumber: string;
   date: Date;
   showQRCode?: boolean;
