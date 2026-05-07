@@ -91,6 +91,8 @@ export interface PaginatedSalesResponse {
     totalPaid: number;
     totalUnpaid: number;
     totalProfit: number;
+    totalAdditionalCharges: number;
+    totalRoundOff: number;
     paidCount: number;
     pendingCount: number;
   };
@@ -158,7 +160,7 @@ export interface Sale {
   roundOffAmount: number;
   paymentMode: "cash" | "credit";
   status: "paid" | "pending" | "partial";
-  additionalItems?: { name: string; price: number }[];
+  additionalItems?: { name: string; price: number; profitPercent?: number }[];
   invoiceNumber: string;
   date: string;
   showQRCode?: boolean;

@@ -280,6 +280,39 @@ const GSTInvoice: React.FC<GSTInvoiceProps> = ({
                   </td>
                 </tr>
               ))}
+              {(sale.additionalItems || []).length > 0 && (
+                <tr className="bg-gray-50 italic">
+                  <td className="border-r border-black px-1 py-1 text-center font-bold"></td>
+                  <td colSpan={5} className="px-2 py-1 text-[11px] font-black uppercase tracking-widest border-b border-black/10">
+                    Additional Charges & Services
+                  </td>
+                </tr>
+              )}
+              {(sale.additionalItems || []).map((item: any, i: number) => (
+                <tr key={`add-${i}`} className="align-top italic bg-gray-50/50">
+                  <td className="border-r border-black px-1 py-1 text-center font-bold">
+                    {(sale.items?.length || 0) + i + 1}
+                  </td>
+                  <td className="border-r border-black px-2 py-1">
+                    <p className="font-bold uppercase leading-tight text-[13px]">
+                      {item.name}
+                    </p>
+                    <p className="text-[11px] text-gray-500 italic mt-0.5">
+                      Service/Charge
+                    </p>
+                  </td>
+                  <td className="border-r border-black px-1 py-1 text-center">—</td>
+                  <td className="border-r border-black px-1 py-1 text-center font-bold">1</td>
+                  <td className="border-r border-black px-1 py-1 text-right font-bold">
+                    {item.price.toLocaleString("en-IN", {
+                      minimumFractionDigits: 2,
+                    })}
+                  </td>
+                  <td className="px-1 py-1 text-right font-bold">
+                    {item.price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </td>
+                </tr>
+              ))}
               {/* Empty rows to maintain height */}
               {Array.from({
                 length: Math.max(0, 10 - (sale.items?.length || 0)),

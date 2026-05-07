@@ -130,7 +130,8 @@ const saleSchema: Schema = new mongoose.Schema({
     },
     additionalItems: [{
         name: { type: String, required: true },
-        price: { type: Number, required: true }
+        price: { type: Number, required: true },
+        profitPercent: { type: Number, default: 0 }
     }],
     invoiceNumber: {
         type: String,
