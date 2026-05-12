@@ -254,11 +254,12 @@ const GSTInvoice: React.FC<GSTInvoiceProps> = ({
                   </td>
                   <td className="border-r border-black px-2 py-1">
                     <p className="font-bold uppercase leading-tight text-[13px]">
-                      {item.productId?.name || "Product"}
+                      {item.productId?.name || item.name || "Product"}
                     </p>
-                    <p className="text-[12px] text-gray-500 italic mt-0.5">
-                      {item.description || ""}
-                    </p>
+                    <div className="text-[11px] text-gray-500 italic mt-0.5 flex gap-2">
+                      {item.batchNumber && <span>B: {item.batchNumber}</span>}
+                      {item.expiryDate && <span>E: {item.expiryDate}</span>}
+                    </div>
                   </td>
                   <td className="border-r border-black px-1 py-1 text-center">
                     {item.hsnCode || "N/A"}

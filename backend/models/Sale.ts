@@ -85,8 +85,20 @@ const saleSchema: Schema = new mongoose.Schema({
             type: String,
             trim: true,
             default: ''
+        },
+        batchNumber: {
+            type: String,
+            trim: true
+        },
+        expiryDate: {
+            type: Date
         }
     }],
+    doctorName: {
+        type: String,
+        trim: true,
+        default: ''
+    },
     totalAmount: {
         type: Number,
         required: true

@@ -57,6 +57,12 @@ export interface IProduct extends Document {
   imageUrl?: string;
   hsnCode?: string;
   gstRate?: number;
+  // Medical specific fields
+  genericName?: string;
+  manufacturer?: string;
+  drugSchedule?: string;
+  rackLocation?: string;
+  expiryDate?: Date;
   createdAt: Date;
 }
 
@@ -119,7 +125,10 @@ export interface ISale extends Document {
     taxRate?: number;
     taxAmount?: number;
     hsnCode?: string;
+    batchNumber?: string;
+    expiryDate?: Date;
   }[];
+  doctorName?: string;
   totalAmount: number;
   totalProfit: number;
   amountPaid: number;

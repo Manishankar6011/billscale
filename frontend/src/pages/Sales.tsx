@@ -95,6 +95,8 @@ type CartItem = {
   conversionFactor: number;
   hsnCode?: string | undefined;
   gstRate?: number | undefined;
+  batchNumber?: string | undefined;
+  expiryDate?: string | undefined;
 };
 
 const SummaryCard = ({
@@ -750,7 +752,9 @@ const Sales = () => {
         mrpAtTime: i.mrp,
         hsnCode: i.hsnCode,
         taxRate: i.gstRate || 0,
-        taxAmount: i.gstRate ? (i.quantity * i.sellingPrice * i.gstRate) / (100 + i.gstRate) : 0
+        taxAmount: i.gstRate ? (i.quantity * i.sellingPrice * i.gstRate) / (100 + i.gstRate) : 0,
+        batchNumber: i.batchNumber,
+        expiryDate: i.expiryDate
       })),
       additionalItems: [
         ...additionalItems.map((i) => ({
@@ -867,6 +871,8 @@ const Sales = () => {
                 mrp: product!.mrp || 0,
                 hsnCode: product!.hsnCode,
                 gstRate: product!.gstRate,
+                batchNumber: product!.batchNumber,
+                expiryDate: product!.expiryDate ? format(new Date(product!.expiryDate), "dd MMM yy") : undefined,
               },
               ...prev,
             ];
@@ -933,6 +939,8 @@ const Sales = () => {
             conversionFactor: 1,
             hsnCode: product.hsnCode,
             gstRate: product.gstRate,
+            batchNumber: product.batchNumber,
+            expiryDate: product.expiryDate ? format(new Date(product.expiryDate), "dd MMM yy") : undefined,
           });
         }
       }
@@ -1912,6 +1920,16 @@ const Sales = () => {
                             {item.gstRate !== undefined && item.gstRate > 0 && (
                               <span className="text-[9px] font-black uppercase tracking-widest text-primary-500">
                                 GST: {item.gstRate}%
+                              </span>
+                            )}
+                            {item.batchNumber && (
+                              <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600 bg-emerald-50 px-1 rounded">
+                                Batch: {item.batchNumber}
+                              </span>
+                            )}
+                            {item.expiryDate && (
+                              <span className="text-[9px] font-black uppercase tracking-widest text-rose-600 bg-rose-50 px-1 rounded">
+                                Exp: {item.expiryDate}
                               </span>
                             )}
                           </div>

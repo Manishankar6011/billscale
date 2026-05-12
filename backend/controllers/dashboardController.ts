@@ -112,6 +112,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
       periodStatsChartAgg,
       periodPurchasesChartAgg,
       periodSalariesChartAgg,
+      nearExpiryProducts,
     ] = await Promise.all([
       // Period Sales & Profit
       Sale.aggregate([
@@ -237,6 +238,14 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
         },
         { $sort: { _id: 1 } },
       ]),
+      // Near Expiry Products (Next 30 days)
+      Product.find({
+        tenantId,
+        expiryDate: {
+          $gte: new Date(),
+          $lte: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        }
+      })
     ]);
 
     // Helper to format date hacked objects matching MongoDB's $dateToString IST
@@ -416,12 +425,20 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
         })),
         additionalItems: s.additionalItems,
       })),
-      alerts: lowStockProducts.map((p) => ({
-        type: "stock",
-        title: "Low Stock Alert",
-        message: `${p.name} is low on stock (${p.stock} remaining)`,
-        severity: "high",
-      })),
+      alerts: [
+        ...lowStockProducts.map((p) => ({
+          type: "stock",
+          title: "Low Stock Alert",
+          message: `${p.name} is low on stock (${p.stock} remaining)`,
+          severity: "high",
+        })),
+        ...(nearExpiryProducts || []).map((p: any) => ({
+          type: "expiry",
+          title: "Near Expiry Alert",
+          message: `${p.name} is expiring soon on ${new Date(p.expiryDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`,
+          severity: "high",
+        })),
+      ],
     };
 
     if (req.user?.role === "staff") {
