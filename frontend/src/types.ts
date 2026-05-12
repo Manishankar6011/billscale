@@ -20,6 +20,7 @@ export interface Tenant {
   stateName?: string;
   stateCode?: string;
   invoiceFormat?: 'thermal' | 'modern' | 'gst';
+  businessType?: string;
 }
 
 export interface User {
@@ -63,6 +64,12 @@ export interface Product {
   imageUrl?: string | undefined;
   hsnCode?: string | undefined;
   gstRate?: number | undefined;
+  // Medical fields
+  genericName?: string;
+  manufacturer?: string;
+  drugSchedule?: string;
+  rackLocation?: string;
+  expiryDate?: string | undefined;
 }
 
 export interface PaginatedResponse<T> {
@@ -152,7 +159,10 @@ export interface Sale {
     taxRate?: number | undefined;
     taxAmount?: number | undefined;
     hsnCode?: string | undefined;
+    batchNumber?: string | undefined;
+    expiryDate?: string | undefined;
   }[];
+  doctorName?: string;
   totalAmount: number;
   totalProfit: number;
   amountPaid: number;

@@ -116,8 +116,17 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                     {(sale.items || []).map((item: any, i: number) => (
                         <tr key={i} className="border-b border-black border-dashed">
                             <td className="py-2 pr-1">
-                                <p className="font-black text-[12px] leading-tight mb-1">{i + 1}. {item.productId?.name || 'Item'}</p>
-                                <p className="text-[10px] font-bold ml-4">MRP: ₹{item.mrpAtTime || 0} | Unit: {item.unit}</p>
+                                <p className="font-black text-[12px] leading-tight mb-1">{i + 1}. {item.productId?.name || item.name || 'Item'}</p>
+                                {item.description && (
+                                    <p className="text-[10px] text-gray-500 italic ml-1 mb-1 leading-tight">
+                                        {item.description}
+                                    </p>
+                                )}
+                                <p className="text-[10px] font-bold ml-1 uppercase">
+                                    MRP: ₹{item.mrpAtTime || 0} 
+                                    {item.batchNumber && ` | B: ${item.batchNumber}`}
+                                    {item.expiryDate && ` | E: ${item.expiryDate}`}
+                                </p>
                             </td>
                             <td className="py-2 text-center font-black">{item.quantity}</td>
                             <td className="py-2 text-right">{(item.sellingPrice || 0).toFixed(2)}</td>

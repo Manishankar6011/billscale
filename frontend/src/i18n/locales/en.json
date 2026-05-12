@@ -223,6 +223,7 @@
         "filter_all": "All Inventory",
         "filter_low": "Low Stock Alerts",
         "filter_out": "Out of Stock",
+        "filter_expiry": "Near Expiry (Next 30 Days)",
         "sort_name": "Sort by: Name",
         "sort_price_asc": "Price: Low to High",
         "sort_price_desc": "Price: High to Low",
@@ -255,7 +256,13 @@
         "merged_success": "Stock successfully merged into existing batch!",
         "added_success": "New product batch added successfully!",
         "deleted_success": "Product deleted",
-        "scanned": "Barcode {{code}} scanned!"
+        "scanned": "Barcode {{code}} scanned!",
+        "generic_name": "Generic Name (Salt)",
+        "manufacturer": "Manufacturer",
+        "expiry_date": "Expiry Date",
+        "rack_location": "Rack Location",
+        "drug_schedule": "Drug Schedule",
+        "medical_details": "Medical / Pharmacy Details"
     },
     "billing": {
         "sale_title": "Sales Management",

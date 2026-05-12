@@ -33,6 +33,10 @@ export const getProducts = async (req: AuthRequest, res: Response) => {
             query.stock = { $gt: 0 };
         } else if (filterType === 'out') {
             query.stock = { $lte: 0 };
+        } else if (filterType === 'expiry') {
+            query.expiryDate = { 
+                $lte: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) 
+            };
         }
 
         // 3. Sort Logic

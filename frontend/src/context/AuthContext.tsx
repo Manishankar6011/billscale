@@ -43,6 +43,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             stateName: t.stateName || data.stateName,
             stateCode: t.stateCode || data.stateCode,
             invoiceFormat: t.invoiceFormat || data.invoiceFormat,
+            businessType: t.businessType || data.businessType,
             token: token || data.token
         };
     };

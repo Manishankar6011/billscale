@@ -63,6 +63,7 @@ const Register: React.FC = () => {
                                 required
                             >
                                 <option value="Retail">Retail / Kirana / Shop</option>
+                                <option value="Medical">Pharmacy / Medical</option>
                                 <option value="Wholesale">Wholesale / Distribution</option>
                                 <option value="Factory">Factory / Manufacturing</option>
                                 <option value="Construction">Construction / Materials</option>

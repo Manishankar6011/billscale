@@ -72,7 +72,7 @@ const Inventory = () => {
   // State Declarations
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
-  const [filterType, setFilterType] = useState<"all" | "low" | "out">("all");
+  const [filterType, setFilterType] = useState<"all" | "low" | "out" | "expiry">("all");
   const [sortBy, setSortBy] = useState<
     "name" | "price-asc" | "price-desc" | "stock-asc" | "stock-desc"
   >("name");
@@ -156,6 +156,12 @@ const Inventory = () => {
     batchNumber: string;
     hsnCode: string;
     gstRate: string;
+    // Medical fields
+    genericName: string;
+    manufacturer: string;
+    drugSchedule: string;
+    rackLocation: string;
+    expiryDate: string;
   }>({
     name: "",
     unit: "piece",
@@ -168,6 +174,11 @@ const Inventory = () => {
     batchNumber: "",
     hsnCode: "",
     gstRate: "0",
+    genericName: "",
+    manufacturer: "",
+    drugSchedule: "",
+    rackLocation: "",
+    expiryDate: "",
   });
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [showLeaveWarning, setShowLeaveWarning] = useState(false);
@@ -219,6 +230,11 @@ const Inventory = () => {
       batchNumber: "",
       hsnCode: "",
       gstRate: "0",
+      genericName: "",
+      manufacturer: "",
+      drugSchedule: "",
+      rackLocation: "",
+      expiryDate: "",
     });
     setAdjustmentType("add");
     setAdjustmentValue("");
@@ -267,6 +283,11 @@ const Inventory = () => {
           batchNumber: "",
           hsnCode: "",
           gstRate: "0",
+          genericName: "",
+          manufacturer: "",
+          drugSchedule: "",
+          rackLocation: "",
+          expiryDate: "",
         });
         setTimeout(() => nameInputRef.current?.focus(), 100);
       } else {
@@ -284,6 +305,11 @@ const Inventory = () => {
           batchNumber: "",
           hsnCode: "",
           gstRate: "0",
+          genericName: "",
+          manufacturer: "",
+          drugSchedule: "",
+          rackLocation: "",
+          expiryDate: "",
         });
       }
     },
@@ -326,6 +352,11 @@ const Inventory = () => {
       batchNumber: product.batchNumber || "",
       hsnCode: product.hsnCode || "",
       gstRate: (product.gstRate || 0).toString(),
+      genericName: product.genericName || "",
+      manufacturer: product.manufacturer || "",
+      drugSchedule: product.drugSchedule || "",
+      rackLocation: product.rackLocation || "",
+      expiryDate: product.expiryDate ? format(new Date(product.expiryDate), "yyyy-MM-dd") : "",
     });
     setIsModalOpen(true);
   };
@@ -351,6 +382,11 @@ const Inventory = () => {
       batchNumber: formData.batchNumber,
       hsnCode: formData.hsnCode,
       gstRate: Number(formData.gstRate),
+      genericName: formData.genericName,
+      manufacturer: formData.manufacturer,
+      drugSchedule: formData.drugSchedule,
+      rackLocation: formData.rackLocation,
+      expiryDate: formData.expiryDate || undefined,
     };
     saveMutation.mutate(data);
   };
@@ -856,6 +892,9 @@ const Inventory = () => {
               <option value="all">{t("inventory.filter_all")}</option>
               <option value="low">{t("inventory.filter_low")}</option>
               <option value="out">{t("inventory.filter_out")}</option>
+              {user?.businessType === 'Medical' && (
+                <option value="expiry">{t("inventory.filter_expiry")}</option>
+              )}
             </select>
             <Filter
               className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
@@ -961,6 +1000,14 @@ const Inventory = () => {
                         Batch: {product.batchNumber || "Default"}
                       </span>
                     </div>
+                  </div>
+                )}
+                {product.expiryDate && (
+                  <div className={`px-2 py-0.5 rounded-md flex items-center gap-1 ${new Date(product.expiryDate) < new Date() ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-600'}`}>
+                    <RefreshCw size={10} className={new Date(product.expiryDate) < new Date() ? 'animate-pulse' : ''} />
+                    <span className="text-[10px] font-black uppercase tracking-tighter">
+                      Exp: {format(new Date(product.expiryDate), "MMM yyyy")}
+                    </span>
                   </div>
                 )}
               </div>
@@ -1078,7 +1125,7 @@ const Inventory = () => {
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
-                  {t("common.name")}
+                  {user?.businessType === 'Medical' ? "Medicine Name (Brand Name)" : t("common.name")}
                 </label>
                 <input
                   required
@@ -1127,6 +1174,85 @@ const Inventory = () => {
                   </select>
                 </div>
               </div>
+
+              {user?.businessType === 'Medical' && (
+                <div className="p-6 bg-blue-50/50 rounded-[2rem] border border-blue-100 space-y-5 animate-in slide-in-from-top-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200">
+                      <ShoppingBag size={16} />
+                    </div>
+                    <h3 className="text-[10px] font-black text-blue-600 uppercase tracking-widest">
+                      {t("inventory.medical_details")}
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">
+                        {t("inventory.generic_name")}
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full bg-white border border-slate-200 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-blue-500 transition-all font-bold"
+                        placeholder="e.g. Paracetamol"
+                        value={formData.genericName}
+                        onChange={(e) => setFormData({ ...formData, genericName: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">
+                        {t("inventory.manufacturer")}
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full bg-white border border-slate-200 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-blue-500 transition-all font-bold"
+                        placeholder="e.g. Cipla"
+                        value={formData.manufacturer}
+                        onChange={(e) => setFormData({ ...formData, manufacturer: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">
+                        {t("inventory.expiry_date")}
+                      </label>
+                      <input
+                        type="date"
+                        className="w-full bg-white border border-slate-200 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-blue-500 transition-all font-bold"
+                        value={formData.expiryDate}
+                        onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">
+                        {t("inventory.rack_location")}
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full bg-white border border-slate-200 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-blue-500 transition-all font-bold"
+                        placeholder="e.g. Shelf A-1"
+                        value={formData.rackLocation}
+                        onChange={(e) => setFormData({ ...formData, rackLocation: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">
+                        {t("inventory.drug_schedule")}
+                      </label>
+                      <select
+                        className="w-full bg-white border border-slate-200 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-blue-500 transition-all font-bold"
+                        value={formData.drugSchedule}
+                        onChange={(e) => setFormData({ ...formData, drugSchedule: e.target.value })}
+                      >
+                        <option value="">None</option>
+                        <option value="Schedule H">Schedule H</option>
+                        <option value="Schedule H1">Schedule H1</option>
+                        <option value="Schedule G">Schedule G</option>
+                        <option value="Schedule X">Schedule X</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>

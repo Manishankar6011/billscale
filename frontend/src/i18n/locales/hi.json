@@ -220,6 +220,7 @@
         "filter_all": "सभी इन्वेंटरी",
         "filter_low": "लो स्टॉक अलर्ट",
         "filter_out": "स्टॉक खत्म",
+        "filter_expiry": "एक्सपायर होने वाले (30 दिन)",
         "sort_name": "क्रमबद्ध करें: नाम",
         "sort_price_asc": "कीमत: कम से अधिक",
         "sort_price_desc": "कीमत: अधिक से कम",
@@ -252,7 +253,13 @@
         "merged_success": "स्टॉक मौजूदा बैच में सफलतापूर्वक मर्ज किया गया!",
         "added_success": "नया उत्पाद बैच सफलतापूर्वक जोड़ा गया!",
         "deleted_success": "उत्पाद हटा दिया गया",
-        "scanned": "बारकोड {{code}} स्कैन किया गया!"
+        "scanned": "बारकोड {{code}} स्कैन किया गया!",
+        "generic_name": "साल्ट का नाम (Generic Name)",
+        "manufacturer": "कंपनी / निर्माता (Company)",
+        "expiry_date": "एक्सपायरी डेट",
+        "rack_location": "दुकान में जगह (Rack)",
+        "drug_schedule": "दवाई का टाइप (Drug Schedule)",
+        "medical_details": "मेडिकल स्टोर की जानकारी"
     },
     "billing": {
         "sale_title": "बिक्री प्रबंधन",

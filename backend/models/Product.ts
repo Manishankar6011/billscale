@@ -64,6 +64,30 @@ const productSchema: Schema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    // Medical specific fields
+    genericName: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+    manufacturer: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+    drugSchedule: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+    rackLocation: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+    expiryDate: {
+        type: Date
+    },
     createdAt: {
         type: Date,
         default: Date.now
