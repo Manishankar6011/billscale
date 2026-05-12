@@ -124,6 +124,11 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                                 <td className="py-5 px-2 font-bold text-black">{String(i + 1).padStart(2, '0')}</td>
                                 <td className="py-5 px-2">
                                     <p className="font-black text-black text-base">{item.productId?.name || item.name || 'Item Name'}</p>
+                                    {item.description && (
+                                        <p className="text-[11px] text-gray-500 italic leading-tight">
+                                            {item.description}
+                                        </p>
+                                    )}
                                     <p className="text-[10px] text-black font-bold uppercase tracking-widest">
                                         {item.unit || 'Units'} 
                                         {item.batchNumber && ` | Batch: ${item.batchNumber}`}

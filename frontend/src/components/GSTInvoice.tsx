@@ -256,10 +256,18 @@ const GSTInvoice: React.FC<GSTInvoiceProps> = ({
                     <p className="font-bold uppercase leading-tight text-[13px]">
                       {item.productId?.name || item.name || "Product"}
                     </p>
-                    <div className="text-[11px] text-gray-500 italic mt-0.5 flex gap-2">
-                      {item.batchNumber && <span>B: {item.batchNumber}</span>}
-                      {item.expiryDate && <span>E: {item.expiryDate}</span>}
-                    </div>
+                    {item.description && (
+                      <p className="text-[11px] text-gray-500 italic mt-0.5">
+                        {item.description}
+                      </p>
+                    )}
+                    {(item.batchNumber || item.expiryDate || item.mrpAtTime) && (
+                      <div className="text-[10px] font-bold text-gray-600 mt-0.5">
+                        {item.mrpAtTime > 0 && <span>MRP: ₹{item.mrpAtTime}</span>}
+                        {item.batchNumber && <span> | B: {item.batchNumber}</span>}
+                        {item.expiryDate && <span> | E: {item.expiryDate}</span>}
+                      </div>
+                    )}
                   </td>
                   <td className="border-r border-black px-1 py-1 text-center">
                     {item.hsnCode || "N/A"}

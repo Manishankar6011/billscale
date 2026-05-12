@@ -117,6 +117,11 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                         <tr key={i} className="border-b border-black border-dashed">
                             <td className="py-2 pr-1">
                                 <p className="font-black text-[12px] leading-tight mb-1">{i + 1}. {item.productId?.name || item.name || 'Item'}</p>
+                                {item.description && (
+                                    <p className="text-[10px] text-gray-500 italic ml-1 mb-1 leading-tight">
+                                        {item.description}
+                                    </p>
+                                )}
                                 <p className="text-[10px] font-bold ml-1 uppercase">
                                     MRP: ₹{item.mrpAtTime || 0} 
                                     {item.batchNumber && ` | B: ${item.batchNumber}`}
