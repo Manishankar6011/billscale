@@ -1,7 +1,7 @@
 import React from 'react'
 
 // Auto-redirect from old Render URL to new Vercel URL
-if (window.location.hostname.includes('onrender.com')) {
+if (window.location.hostname.includes('onrender.com') || window.location.hostname.includes('businessmate.onrender.com')) {
   window.location.replace('https://businessmate-plum.vercel.app' + window.location.pathname + window.location.search);
 }
 
