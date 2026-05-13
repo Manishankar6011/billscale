@@ -24,6 +24,7 @@ sudo docker run -d \
   --name $CONTAINER_NAME \
   -p $PORT:8002 \
   --env-file .env \
+  -e PORT=8002 \
   --restart unless-stopped \
   $IMAGE_NAME
 
