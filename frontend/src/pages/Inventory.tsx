@@ -9,6 +9,7 @@ import {
   useInfiniteQuery,
   useMutation,
   useQueryClient,
+  keepPreviousData,
 } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -93,6 +94,7 @@ const Inventory = () => {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isFetching,
   } = useInfiniteQuery<PaginatedResponse<Product>>({
     queryKey: ["inventory", debouncedSearchTerm, filterType, sortBy],
     queryFn: async ({ pageParam = 1 }) => {
@@ -119,6 +121,7 @@ const Inventory = () => {
     },
     initialPageParam: 1,
     enabled: !!user?.token,
+    placeholderData: keepPreviousData,
   });
 
   const products = useMemo(() => {
@@ -861,7 +864,11 @@ const Inventory = () => {
 
       <div className="flex flex-col md:flex-row gap-4">
         <div className="flex-1 flex items-center relative bg-white rounded-2xl border border-slate-100 shadow-sm focus-within:ring-2 focus-within:ring-primary-500 transition-all">
-          <Search className="absolute left-4 text-slate-400" size={20} />
+          {isFetching && !isFetchingNextPage ? (
+            <Loader2 className="absolute left-4 text-primary-500 animate-spin" size={20} />
+          ) : (
+            <Search className="absolute left-4 text-slate-400" size={20} />
+          )}
           <input
             type="text"
             placeholder={t("inventory.search_placeholder")}
