@@ -39,6 +39,7 @@ import analyticsRoutes from "./routes/analyticsRoutes";
 import catalogRoutes from "./routes/catalogRoutes";
 import purchaseRoutes from "./routes/purchaseRoutes";
 import gstRoutes from "./routes/gstRoutes";
+import aiRoutes from "./routes/aiRoutes";
 
 // Use API Routes
 app.use("/api/auth", authRoutes);
@@ -55,6 +56,7 @@ app.use("/api/analytics", analyticsRoutes);
 app.use("/api/purchases", purchaseRoutes);
 app.use("/api/reports", gstRoutes);
 app.use("/api/catalog", catalogRoutes);
+app.use("/api/ai", aiRoutes);
 
 // Keep-Alive & Health Check
 app.get("/api/health", (req: Request, res: Response) => {
