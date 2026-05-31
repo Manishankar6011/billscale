@@ -18,7 +18,8 @@ import {
   Lightbulb,
   MessageSquare,
   ShieldCheck,
-  BarChart3
+  BarChart3,
+  PackageSearch
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/utils";
@@ -58,6 +59,7 @@ const Layout = () => {
     { name: t("common.salary"), path: "/dashboard/salary", icon: Wallet, ownerOnly: true },
     { name: t("common.ledger"), path: "/dashboard/ledger", icon: FileText, ownerOnly: true },
     { name: "Reports", path: "/dashboard/reports", icon: BarChart3, ownerOnly: true },
+    { name: "Product Sales", path: "/dashboard/item-sales", icon: PackageSearch, ownerOnly: true },
     { 
       name: "GST Reports", 
       path: "/dashboard/gst-reports", 

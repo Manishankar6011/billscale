@@ -23,6 +23,7 @@ const Salary = lazy(() => import("./pages/Salary"));
 const Ledger = lazy(() => import("./pages/Ledger"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Reports = lazy(() => import("./pages/Reports.tsx"));
+const ItemSalesReport = lazy(() => import("./pages/ItemSalesReport"));
 const GSTReports = lazy(() => import("./pages/GSTReports.tsx"));
 const Customers = lazy(() => import("./pages/Customers"));
 const ReferAndEarn = lazy(() => import("./pages/ReferAndEarn"));
@@ -76,6 +77,7 @@ const App: React.FC = () => {
             <Route path="salary" element={<Salary />} />
             <Route path="ledger" element={<Ledger />} />
             <Route path="reports" element={<Reports />} />
+            <Route path="item-sales" element={<ItemSalesReport />} />
             <Route path="gst-reports" element={<GSTReports />} />
             <Route path="settings" element={<Settings />} />
             <Route path="customers" element={<Customers />} />

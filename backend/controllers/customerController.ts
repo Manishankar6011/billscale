@@ -366,3 +366,196 @@ export const deleteCustomer = async (req: AuthRequest, res: Response) => {
         res.status(500).json({ message: err.message });
     }
 };
+
+// @desc    Get customer report (sales with items & payments)
+// @route   GET /api/customers/:id/report
+// @access  Private
+export const getCustomerReport = async (req: AuthRequest, res: Response) => {
+    try {
+        const tenantId = req.tenantId;
+        const customerId = req.params.id;
+        const { startDate, endDate } = req.query;
+        
+        const customer = await Customer.findOne({ _id: customerId, tenantId });
+        if (!customer) {
+            return res.status(404).json({ message: 'Customer not found' });
+        }
+
+        const salesQuery: any = {
+            tenantId,
+            $or: [
+                { customerId: customer._id }
+            ]
+        };
+
+        if (customer.phone) {
+            salesQuery.$or.push({ customerPhone: customer.phone });
+        } else {
+            salesQuery.$or.push({ 
+                customerName: { $regex: new RegExp(`^${customer.name}$`, 'i') },
+                customerId: { $exists: false }
+            });
+        }
+
+        const paymentsQuery: any = { tenantId, customerId };
+
+        let openingBalance = 0;
+
+        if (startDate || endDate) {
+            const start = startDate ? new Date(startDate as string) : null;
+            if (start) start.setHours(0, 0, 0, 0);
+            
+            const end = endDate ? new Date(endDate as string) : null;
+            if (end) end.setHours(23, 59, 59, 999);
+
+            if (start) {
+                // Calculate opening balance from sales and payments before start date
+                const priorSalesQuery = { ...salesQuery, date: { $lt: start } };
+                const priorSales = await Sale.find(priorSalesQuery).lean();
+                
+                const priorPaymentsQuery = { ...paymentsQuery, paymentDate: { $lt: start } };
+                const priorPayments = await CustomerPayment.find(priorPaymentsQuery).lean();
+
+                const priorSalesTotal = priorSales.reduce((acc, s) => acc + s.totalAmount, 0);
+                const priorSalesPaid = priorSales.reduce((acc, s) => acc + (s.downPayment !== undefined ? s.downPayment : s.amountPaid), 0);
+                const priorPaymentsTotal = priorPayments.reduce((acc, p) => acc + p.amount, 0);
+
+                openingBalance = priorSalesTotal - priorSalesPaid - priorPaymentsTotal;
+
+                salesQuery.date = { $gte: start };
+                paymentsQuery.paymentDate = { $gte: start };
+            }
+
+            if (end) {
+                salesQuery.date = salesQuery.date || {};
+                salesQuery.date.$lte = end;
+                
+                paymentsQuery.paymentDate = paymentsQuery.paymentDate || {};
+                paymentsQuery.paymentDate.$lte = end;
+            }
+        }
+
+        // Fetch sales with items populated
+        const sales = await Sale.find(salesQuery)
+            .populate('items.productId', 'name')
+            .sort({ date: 1 })
+            .lean();
+
+        // Fetch payments
+        const payments = await CustomerPayment.find(paymentsQuery)
+            .sort({ paymentDate: 1 })
+            .lean();
+
+        // Combine and sort
+        const transactions = [
+            ...sales.map(s => {
+                const dp = s.downPayment !== undefined ? s.downPayment : s.amountPaid;
+                return {
+                    id: s._id,
+                    type: 'sale',
+                    date: s.date,
+                    amount: s.totalAmount,
+                    paid: dp,
+                    due: s.totalAmount - dp,
+                    invoiceNumber: s.invoiceNumber,
+                    items: (s.items || []).map((i: any) => ({
+                        name: i.productId?.name || i.name || 'Unknown Item',
+                        quantity: i.quantity,
+                        unit: i.unit,
+                        price: i.sellingPrice,
+                        total: i.quantity * i.sellingPrice
+                    }))
+                };
+            }),
+            ...payments.map(p => ({
+                id: p._id,
+                type: 'payment',
+                date: p.paymentDate,
+                amount: p.amount,
+                paymentMode: p.paymentMode,
+                notes: p.notes
+            }))
+        ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+        // Calculate running balance
+        let runningBalance = openingBalance;
+        const ledgerWithBalance = transactions.map(entry => {
+            if (entry.type === 'sale') {
+                runningBalance += (entry.amount - ((entry as any).paid || 0));
+            } else {
+                runningBalance -= entry.amount;
+            }
+            return { ...entry, runningBalance };
+        });
+
+        // Summary
+        const periodSalesTotal = sales.reduce((acc, s) => acc + s.totalAmount, 0);
+        const periodSalesPaid = sales.reduce((acc, s) => acc + (s.downPayment !== undefined ? s.downPayment : s.amountPaid), 0);
+        const periodPaymentsTotal = payments.reduce((acc, p) => acc + p.amount, 0);
+        
+        const summary = {
+            openingBalance,
+            totalSales: periodSalesTotal,
+            totalPaid: periodSalesPaid + periodPaymentsTotal,
+            closingBalance: runningBalance
+        };
+
+        res.status(200).json({ customer, summary, transactions: ledgerWithBalance });
+    } catch (err: any) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
+// @desc    Get items purchased by a customer
+// @route   GET /api/customers/:id/items
+// @access  Private
+export const getCustomerItems = async (req: AuthRequest, res: Response) => {
+    try {
+        const tenantId = new mongoose.Types.ObjectId(req.tenantId as string);
+        const customerId = new mongoose.Types.ObjectId(req.params.id);
+
+        const items = await Sale.aggregate([
+            {
+                $match: {
+                    tenantId,
+                    customerId
+                }
+            },
+            { $unwind: "$items" },
+            {
+                $group: {
+                    _id: "$items.productId",
+                    totalQuantity: { $sum: "$items.quantity" },
+                    totalAmount: { $sum: { $multiply: ["$items.quantity", "$items.sellingPrice"] } },
+                    firstPurchaseDate: { $min: "$date" },
+                    lastPurchaseDate: { $max: "$date" }
+                }
+            },
+            {
+                $lookup: {
+                    from: "products",
+                    localField: "_id",
+                    foreignField: "_id",
+                    as: "product"
+                }
+            },
+            { $unwind: { path: "$product", preserveNullAndEmptyArrays: true } },
+            {
+                $project: {
+                    _id: 1,
+                    name: { $ifNull: ["$product.name", "Unknown Product"] },
+                    unit: { $ifNull: ["$product.unit", "-"] },
+                    totalQuantity: 1,
+                    totalAmount: 1,
+                    firstPurchaseDate: 1,
+                    lastPurchaseDate: 1
+                }
+            },
+            { $sort: { totalQuantity: -1 } }
+        ]);
+
+        res.status(200).json(items);
+    } catch (err: any) {
+        res.status(500).json({ message: err.message });
+    }
+};
