@@ -17,13 +17,17 @@ const geminiTools: Tool[] = [{
   functionDeclarations: [
     {
       name: 'get_sales_summary',
-      description: 'Get total sales amount, count, and recent sales for the tenant.',
+      description: 'Get total sales amount, today sales amount, specific date sales amount, count, and recent sales for the tenant.',
       parameters: {
         type: SchemaType.OBJECT,
         properties: {
           limit: {
             type: SchemaType.STRING,
             description: 'Number of items to fetch (default: "5")',
+          },
+          date: {
+            type: SchemaType.STRING,
+            description: 'Optional date filter. Can be "today", "yesterday", "last_week", "last_month", or YYYY-MM-DD.',
           },
         },
       },
@@ -101,13 +105,17 @@ const groqTools: Groq.Chat.ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'get_sales_summary',
-      description: 'Get total sales amount, count, and recent sales for the tenant.',
+      description: 'Get total sales amount, today sales amount, specific date sales amount, count, and recent sales for the tenant.',
       parameters: {
         type: 'object',
         properties: {
           limit: {
             type: 'string',
             description: 'Number of items to fetch (default: "5")',
+          },
+          date: {
+            type: 'string',
+            description: 'Optional date filter. Can be "today", "yesterday", "last_week", "last_month", or YYYY-MM-DD.',
           },
         },
       },
@@ -197,21 +205,113 @@ async function executeTool(name: string, args: any, tenantId: string) {
     switch (name) {
       case 'get_sales_summary': {
         const limit = args.limit ? parseInt(args.limit, 10) : 5;
-        const sales = await Sale.find({ tenantId }).sort({ createdAt: -1 }).limit(limit).populate('customerId', 'name');
-        const totalSalesCount = await Sale.countDocuments({ tenantId });
+        const baseMatch = { tenantId: new mongoose.Types.ObjectId(tenantId) };
+        let findQuery: any = { tenantId };
+
+        let specificDateAmount = 0;
+        let specificDateSalesDocs: any[] = [];
+        if (args.date) {
+          let startOfTarget: Date | null = null;
+          let endOfTarget: Date | null = null;
+          const dateStr = args.date.toLowerCase();
+          
+          if (dateStr === 'today') {
+            startOfTarget = new Date();
+            endOfTarget = new Date();
+          } else if (dateStr === 'yesterday') {
+            startOfTarget = new Date();
+            startOfTarget.setDate(startOfTarget.getDate() - 1);
+            endOfTarget = new Date(startOfTarget);
+          } else if (dateStr === 'last_week' || dateStr === 'last week' || dateStr === 'last 7 days') {
+            startOfTarget = new Date();
+            startOfTarget.setDate(startOfTarget.getDate() - 7);
+            endOfTarget = new Date();
+          } else if (dateStr === 'last_month' || dateStr === 'last month' || dateStr === 'last 30 days') {
+            startOfTarget = new Date();
+            startOfTarget.setDate(startOfTarget.getDate() - 30);
+            endOfTarget = new Date();
+          } else {
+            const targetDate = new Date(args.date);
+            if (!isNaN(targetDate.getTime())) {
+               startOfTarget = new Date(targetDate);
+               endOfTarget = new Date(targetDate);
+            }
+          }
+
+          if (startOfTarget && endOfTarget) {
+            startOfTarget.setHours(0, 0, 0, 0);
+            endOfTarget.setHours(23, 59, 59, 999);
+            
+            findQuery.date = { $gte: startOfTarget, $lte: endOfTarget };
+            
+            const specificDateAggregation = await Sale.aggregate([
+              { $match: { ...baseMatch, date: { $gte: startOfTarget, $lte: endOfTarget } } },
+              { $group: { _id: null, total: { $sum: "$totalAmount" } } }
+            ]);
+            specificDateAmount = specificDateAggregation[0]?.total || 0;
+
+            specificDateSalesDocs = await Sale.find({
+              ...baseMatch,
+              date: { $gte: startOfTarget, $lte: endOfTarget }
+            }).sort({ createdAt: -1 }).limit(20).populate('customerId', 'name').populate('items.productId', 'name');
+          }
+        }
+
+        const sales = await Sale.find(findQuery).sort({ createdAt: -1 }).limit(limit).populate('customerId', 'name').populate('items.productId', 'name');
+        const totalSalesCount = await Sale.countDocuments(findQuery);
+        
         const salesAggregation = await Sale.aggregate([
-          { $match: { tenantId: new mongoose.Types.ObjectId(tenantId) } },
+          { $match: baseMatch },
           { $group: { _id: null, total: { $sum: "$totalAmount" } } }
         ]);
         const totalAmount = salesAggregation[0]?.total || 0;
+
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date();
+        endOfDay.setHours(23, 59, 59, 999);
+        const todaySalesAggregation = await Sale.aggregate([
+          { 
+            $match: { 
+              ...baseMatch,
+              date: { $gte: startOfDay, $lte: endOfDay }
+            } 
+          },
+          { $group: { _id: null, total: { $sum: "$totalAmount" } } }
+        ]);
+        const todayAmount = todaySalesAggregation[0]?.total || 0;
+
+        const todaySalesDocs = await Sale.find({
+          ...baseMatch,
+          date: { $gte: startOfDay, $lte: endOfDay }
+        }).sort({ createdAt: -1 }).limit(20).populate('customerId', 'name').populate('items.productId', 'name');
+
         return {
           total_sales_count: totalSalesCount,
           total_revenue: totalAmount,
+          today_revenue: todayAmount,
+          specific_date_revenue: args.date ? specificDateAmount : undefined,
+          specific_date_requested: args.date,
+          specific_date_sales_list: args.date ? specificDateSalesDocs.map(s => ({
+            date: s.date,
+            customer: s.customerName || 'Unknown',
+            amount: s.totalAmount,
+            status: s.status,
+            items: s.items?.map((item: any) => ({ product: item.productId?.name || 'Unknown', quantity: item.quantity })) || []
+          })) : undefined,
+          today_sales_list: todaySalesDocs.map(s => ({
+            date: s.date,
+            customer: s.customerName || 'Unknown',
+            amount: s.totalAmount,
+            status: s.status,
+            items: s.items?.map((item: any) => ({ product: item.productId?.name || 'Unknown', quantity: item.quantity })) || []
+          })),
           recent_sales: sales.map(s => ({
             date: s.date,
             customer: s.customerName || 'Unknown',
             amount: s.totalAmount,
             status: s.status,
+            items: s.items?.map((item: any) => ({ product: item.productId?.name || 'Unknown', quantity: item.quantity })) || []
           })),
         };
       }
@@ -335,7 +435,7 @@ export const handleAIChat = async (req: Request, res: Response) => {
     }
 
     const provider = process.env.AI_PROVIDER || 'gemini';
-    const systemPrompt = 'You are an AI assistant for BuildMate ERP. You help users understand their business data. Use the provided tools to fetch real-time data from the database. CRITICAL INSTRUCTION: You MUST always reply in the language the user asked the question in. If the user asks in Hindi or Hinglish, your entire response MUST be in Hindi or Hinglish (e.g. "Aapke paas 0 stock hai"). Do NOT reply in English if the user asked in Hindi. CRITICAL: When users ask for a list, only mention the total count and list 4-5 items. Then explicitly tell the user to view the complete list in the appropriate tab: "Inventory tab" for products/items, "Customers tab" for customers, and "Staff tab" for staff/employees.';
+    const systemPrompt = 'You are an AI assistant for BuildMate ERP. You help users understand their business data. Use the provided tools to fetch real-time data from the database. CRITICAL INSTRUCTION: You MUST always reply in the language the user asked the question in. If the user asks in Hindi or Hinglish, your entire response MUST be in Hindi or Hinglish (e.g. "Aapke paas 0 stock hai"). Do NOT reply in English if the user asked in Hindi. CRITICAL: When users ask for a list, only mention the total count and list 4-5 items. Then explicitly tell the user to view the complete list in the appropriate tab: "Inventory tab" for products/items, "Customers tab" for customers, and "Staff tab" for staff/employees. If the user asks about today\'s sales, or which customers bought items today, use the `get_sales_summary` tool and look at the `today_sales_list` or `recent_sales`. Do NOT use `get_customer_summary` for today\'s purchases. For yesterday, last week, or specific date sales, use `get_sales_summary` passing date (e.g. "last_week"), and read `specific_date_revenue` and `specific_date_sales_list` (which also includes products sold).';
 
     if (provider === 'groq') {
       if (!process.env.GROQ_API_KEY) {

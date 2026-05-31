@@ -16,12 +16,25 @@ import {
   Loader2,
   Edit2,
   Trash2,
-  Plus
+  Plus,
+  PackageSearch
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { format } from "date-fns";
 import Skeleton from "../components/Skeleton";
+import { generateCustomerReportPDF } from "../utils/CustomerReportPDF";
+import { generateCustomerItemsPDF } from "../utils/CustomerItemsPDF";
+
+interface CustomerItem {
+  _id: string;
+  name: string;
+  unit: string;
+  totalQuantity: number;
+  totalAmount: number;
+  firstPurchaseDate: string;
+  lastPurchaseDate: string;
+}
 
 interface LedgerEntry {
   id: string;
@@ -69,6 +82,9 @@ const Customers = () => {
   const queryClient = useQueryClient();
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [loadingLedger, setLoadingLedger] = useState(false);
+  const [customerItems, setCustomerItems] = useState<CustomerItem[]>([]);
+  const [loadingItems, setLoadingItems] = useState(false);
+  const [activeTab, setActiveTab] = useState<'ledger' | 'items'>('ledger');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -87,6 +103,11 @@ const Customers = () => {
   const [paymentNotes, setPaymentNotes] = useState("");
   const [submittingPayment, setSubmittingPayment] = useState(false);
   const [submittingCustomer, setSubmittingCustomer] = useState(false);
+
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportStartDate, setReportStartDate] = useState("");
+  const [reportEndDate, setReportEndDate] = useState("");
+  const [generatingReport, setGeneratingReport] = useState(false);
 
   const handleDeleteCustomer = async (e: React.MouseEvent, c: CustomerData) => {
     e.stopPropagation();
@@ -148,15 +169,60 @@ const Customers = () => {
   const handleSelectCustomer = async (c: CustomerData) => {
     setSelected(c);
     setLoadingLedger(true);
+    setLoadingItems(true);
+    setActiveTab('ledger');
     try {
-      const res = await axios.get(`/api/customers/${c._id}/ledger`, {
-        headers: { Authorization: `Bearer ${user?.token}` }
-      });
-      setLedger(res.data);
+      const [ledgerRes, itemsRes] = await Promise.all([
+        axios.get(`/api/customers/${c._id}/ledger`, { headers: { Authorization: `Bearer ${user?.token}` } }),
+        axios.get(`/api/customers/${c._id}/items`, { headers: { Authorization: `Bearer ${user?.token}` } })
+      ]);
+      setLedger(ledgerRes.data);
+      setCustomerItems(itemsRes.data);
     } catch (err: any) {
-      showToast(err.response?.data?.message || "Failed to load ledger", "error");
+      showToast(err.response?.data?.message || "Failed to load customer data", "error");
     } finally {
       setLoadingLedger(false);
+      setLoadingItems(false);
+    }
+  };
+
+  const handleDownloadReport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selected) return;
+    setGeneratingReport(true);
+    try {
+      const params = new URLSearchParams();
+      if (reportStartDate) params.append('startDate', reportStartDate);
+      if (reportEndDate) params.append('endDate', reportEndDate);
+      
+      const res = await axios.get(`/api/customers/${selected._id}/report?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${user?.token}` }
+      });
+      
+      generateCustomerReportPDF({
+        customer: res.data.customer,
+        summary: res.data.summary,
+        transactions: res.data.transactions,
+        dateRange: { start: reportStartDate, end: reportEndDate },
+        companyName: user?.companyName || "BUILDMATE ERP"
+      });
+      
+      showToast("Report generated successfully", "success");
+      setShowReportModal(false);
+    } catch (err: any) {
+      showToast(err.response?.data?.message || "Failed to generate report", "error");
+    } finally {
+      setGeneratingReport(false);
+    }
+  };
+
+  const handleDownloadItems = () => {
+    if (!selected || customerItems.length === 0) return;
+    try {
+      generateCustomerItemsPDF(selected, customerItems, user?.companyName || "BUILDMATE ERP");
+      showToast("Items list downloaded successfully", "success");
+    } catch (err) {
+      showToast("Failed to generate PDF", "error");
     }
   };
 
@@ -207,7 +273,7 @@ const Customers = () => {
       {/* Customer Detail side panel */}
       {selected && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg max-h-[90vh] rounded-3xl shadow-2xl flex flex-col animate-in zoom-in duration-300">
+          <div className="bg-white w-full max-w-2xl max-h-[90vh] rounded-3xl shadow-2xl flex flex-col animate-in zoom-in duration-300">
             <div className="flex items-center justify-between p-6 border-b border-slate-100">
               <div>
                 <h3 className="text-xl font-black text-slate-800">
@@ -280,61 +346,142 @@ const Customers = () => {
                 )}
               </div>
 
-              {/* Ledger Section */}
+              {/* Tabs for Ledger / Items */}
               <div className="mt-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-sm font-black uppercase tracking-widest text-slate-800 flex items-center gap-2">
-                    <FileText size={16} className="text-primary-500" />
-                    Ledger History
-                  </h4>
+                <div className="flex items-center gap-4 border-b border-slate-100 mb-4">
                   <button
-                    onClick={() => setShowPaymentModal(true)}
-                    className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-primary-700 transition-colors shadow-lg shadow-primary-200"
+                    onClick={() => setActiveTab('ledger')}
+                    className={`pb-3 text-sm font-black uppercase tracking-widest transition-colors relative ${activeTab === 'ledger' ? 'text-primary-600' : 'text-slate-400 hover:text-slate-600'}`}
                   >
-                    <IndianRupee size={14} />
-                    Receive Payment
+                    <div className="flex items-center gap-2">
+                      <FileText size={16} />
+                      Ledger History
+                    </div>
+                    {activeTab === 'ledger' && (
+                      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-600 rounded-t-full" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('items')}
+                    className={`pb-3 text-sm font-black uppercase tracking-widest transition-colors relative ${activeTab === 'items' ? 'text-primary-600' : 'text-slate-400 hover:text-slate-600'}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <PackageSearch size={16} />
+                      Items Purchased
+                    </div>
+                    {activeTab === 'items' && (
+                      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-600 rounded-t-full" />
+                    )}
                   </button>
                 </div>
-                
-                <div className="bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden">
-                  {loadingLedger ? (
-                    <div className="p-8 flex justify-center">
-                      <Loader2 size={24} className="text-primary-500 animate-spin" />
+
+                {activeTab === 'ledger' ? (
+                  <div>
+                    <div className="flex items-center justify-end mb-4 gap-2">
+                      <button
+                        onClick={() => setShowReportModal(true)}
+                        className="flex items-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors"
+                      >
+                        <ArrowDownToLine size={14} />
+                        Report
+                      </button>
+                      <button
+                        onClick={() => setShowPaymentModal(true)}
+                        className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-primary-700 transition-colors shadow-lg shadow-primary-200"
+                      >
+                        <IndianRupee size={14} />
+                        Receive Payment
+                      </button>
                     </div>
-                  ) : ledger.length === 0 ? (
-                    <div className="p-8 text-center text-slate-400 text-sm font-medium">
-                      No transactions found
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto">
-                      {ledger.map((entry, idx) => (
-                        <div key={idx} className="p-4 flex items-center justify-between hover:bg-white transition-colors">
-                          <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-xl ${entry.type === 'sale' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                              {entry.type === 'sale' ? <ArrowDownToLine size={16} /> : <ArrowUpFromLine size={16} />}
-                            </div>
-                            <div>
-                              <p className="text-sm font-bold text-slate-800">
-                                {entry.type === 'sale' ? 'Invoice ' + (entry.invoiceNumber || '') : 'Payment Received'}
-                              </p>
-                              <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mt-0.5">
-                                {format(new Date(entry.date), "dd MMM yyyy, p")}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className={`text-sm font-black ${entry.type === 'sale' ? 'text-rose-600' : 'text-emerald-600'}`}>
-                              {entry.type === 'sale' ? '-' : '+'}₹{entry.amount.toLocaleString()}
-                            </p>
-                            <p className="text-[10px] text-slate-400 font-medium mt-0.5">
-                              Bal: ₹{entry.runningBalance.toLocaleString()}
-                            </p>
-                          </div>
+                    
+                    <div className="bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden">
+                      {loadingLedger ? (
+                        <div className="p-8 flex justify-center">
+                          <Loader2 size={24} className="text-primary-500 animate-spin" />
                         </div>
-                      ))}
+                      ) : ledger.length === 0 ? (
+                        <div className="p-8 text-center text-slate-400 text-sm font-medium">
+                          No transactions found
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto">
+                          {ledger.map((entry, idx) => (
+                            <div key={idx} className="p-4 flex items-center justify-between hover:bg-white transition-colors">
+                              <div className="flex items-center gap-3">
+                                <div className={`p-2 rounded-xl ${entry.type === 'sale' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                                  {entry.type === 'sale' ? <ArrowDownToLine size={16} /> : <ArrowUpFromLine size={16} />}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-bold text-slate-800">
+                                    {entry.type === 'sale' ? 'Invoice ' + (entry.invoiceNumber || '') : 'Payment Received'}
+                                  </p>
+                                  <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mt-0.5">
+                                    {format(new Date(entry.date), "dd MMM yyyy, p")}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className={`text-sm font-black ${entry.type === 'sale' ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                  ₹{entry.amount.toLocaleString()}
+                                </p>
+                                <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                                  {entry.type === 'sale' ? 'Bill Amount' : 'Received'} • Bal: ₹{entry.runningBalance.toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex items-center justify-end mb-4 gap-2">
+                      <button
+                        onClick={handleDownloadItems}
+                        className="flex items-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors"
+                      >
+                        <ArrowDownToLine size={14} />
+                        Download List
+                      </button>
+                    </div>
+
+                    <div className="bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden">
+                      {loadingItems ? (
+                        <div className="p-8 flex justify-center">
+                          <Loader2 size={24} className="text-primary-500 animate-spin" />
+                        </div>
+                      ) : customerItems.length === 0 ? (
+                        <div className="p-8 text-center text-slate-400 text-sm font-medium">
+                          No items purchased yet
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto">
+                          {customerItems.map((item, idx) => (
+                            <div key={idx} className="p-4 flex items-center justify-between hover:bg-white transition-colors">
+                              <div>
+                                <p className="text-sm font-bold text-slate-800">
+                                  {item.name}
+                                </p>
+                                <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mt-0.5">
+                                  Last: {format(new Date(item.lastPurchaseDate), "dd MMM yy")}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-black text-slate-800">
+                                  {item.totalQuantity} {item.unit}
+                                </p>
+                                <p className="text-[10px] text-primary-600 font-black mt-0.5">
+                                  ₹{item.totalAmount.toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {selected.phone && (
@@ -422,6 +569,61 @@ const Customers = () => {
                   className="flex-1 py-3 bg-primary-600 text-white font-bold rounded-2xl hover:bg-primary-700 transition-colors shadow-lg shadow-primary-200 disabled:opacity-70 flex justify-center items-center gap-2"
                 >
                   {submittingPayment ? <Loader2 size={18} className="animate-spin" /> : 'Save Payment'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Report Modal */}
+      {showReportModal && selected && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in duration-200">
+            <div className="bg-slate-800 p-6 text-white text-center">
+              <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-md">
+                <FileText size={32} />
+              </div>
+              <h3 className="text-xl font-black">Download Report</h3>
+              <p className="text-slate-300 text-sm mt-1">for {selected.name}</p>
+            </div>
+            <form onSubmit={handleDownloadReport} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">
+                  Start Date (Optional)
+                </label>
+                <input
+                  type="date"
+                  value={reportStartDate}
+                  onChange={(e) => setReportStartDate(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-slate-800 font-bold focus:ring-2 focus:ring-primary-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">
+                  End Date (Optional)
+                </label>
+                <input
+                  type="date"
+                  value={reportEndDate}
+                  onChange={(e) => setReportEndDate(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-slate-800 font-bold focus:ring-2 focus:ring-primary-500 outline-none"
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowReportModal(false)}
+                  className="flex-1 py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={generatingReport}
+                  className="flex-1 py-3 bg-slate-800 text-white font-bold rounded-2xl hover:bg-slate-900 transition-colors shadow-lg disabled:opacity-70 flex justify-center items-center gap-2"
+                >
+                  {generatingReport ? <Loader2 size={18} className="animate-spin" /> : 'Download PDF'}
                 </button>
               </div>
             </form>
