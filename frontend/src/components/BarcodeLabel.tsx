@@ -3,10 +3,11 @@ import JsBarcode from 'jsbarcode';
 
 interface BarcodeLabelProps {
     product: any;
-    businessName: string;
+    mfgDate?: string;
+    expDate?: string;
 }
 
-const BarcodeLabel: React.FC<BarcodeLabelProps> = ({ product, businessName }) => {
+const BarcodeLabel: React.FC<BarcodeLabelProps> = ({ product, mfgDate, expDate }) => {
     const barcodeRef = useRef<SVGSVGElement>(null);
 
     useEffect(() => {
@@ -31,10 +32,11 @@ const BarcodeLabel: React.FC<BarcodeLabelProps> = ({ product, businessName }) =>
 
     return (
         <div id="barcode-sticker" className="hidden print:flex flex-col items-center justify-center bg-white text-black w-[50mm] h-[25mm] overflow-hidden p-1 border border-transparent">
-            {/* Business Header */}
-            <p className="text-[7px] font-black uppercase tracking-widest text-center truncate w-full mb-0.5">
-                {businessName}
-            </p>
+            {/* Dates Header */}
+            <div className="flex justify-center gap-2 text-[7px] font-black uppercase tracking-widest text-center w-full mb-0.5">
+                {mfgDate && <span>MFG: {mfgDate}</span>}
+                {expDate && <span>EXP: {expDate}</span>}
+            </div>
 
             {/* Product Meta */}
             <div className="flex flex-col items-center leading-tight mb-0.5">
@@ -42,7 +44,7 @@ const BarcodeLabel: React.FC<BarcodeLabelProps> = ({ product, businessName }) =>
                     {product.name}
                 </p>
                 <p className="text-[11px] font-black">
-                    MRP: ₹{product.mrp || product.pricePerUnit}
+                    MRP: ₹{product.mrp ? product.mrp : <span className="inline-block w-8"></span>}
                 </p>
             </div>
 

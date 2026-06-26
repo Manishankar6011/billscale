@@ -199,6 +199,8 @@ const Inventory = () => {
   const [barcodePrintCount, setBarcodePrintCount] = useState(40);
   const [selectedBarcodeProduct, setSelectedBarcodeProduct] =
     useState<Product | null>(null);
+  const [barcodeMfgDate, setBarcodeMfgDate] = useState("");
+  const [barcodeExpDate, setBarcodeExpDate] = useState("");
 
   const [stockValueDisplay, setStockValueDisplay] = useState<"purchase" | "sell">("purchase");
   const [isSmartModalOpen, setIsSmartModalOpen] = useState(false);
@@ -597,8 +599,12 @@ const Inventory = () => {
     setIsExportOpen(false);
   };
 
-  const generateBarcodePDF = (product: Product, count: number) => {
-    const doc = new jsPDF("p", "mm", "a4");
+  const generateBarcodePDF = (product: Product, count: number, printType: 'a4' | 'thermal' = 'a4') => {
+    const isThermal = printType === 'thermal';
+    const doc = isThermal 
+        ? new jsPDF({ orientation: "landscape", unit: "mm", format: [50, 25] })
+        : new jsPDF("p", "mm", "a4");
+    
     const canvas = document.createElement("canvas");
 
     // Generate barcode image once
@@ -612,15 +618,15 @@ const Inventory = () => {
     });
     const barcodeImg = canvas.toDataURL("image/png");
 
-    const marginX = 7;
-    const marginY = 10;
+    const marginX = isThermal ? 1 : 7;
+    const marginY = isThermal ? 0 : 10;
     const itemWidth = 48;
     const itemHeight = 25;
-    const gapX = 2;
-    const gapY = 2;
+    const gapX = isThermal ? 0 : 2;
+    const gapY = isThermal ? 0 : 2;
 
-    const cols = 4;
-    const rows = 11;
+    const cols = isThermal ? 1 : 4;
+    const rows = isThermal ? 1 : 11;
     const itemsPerPage = cols * rows;
 
     for (let i = 0; i < count; i++) {
@@ -635,19 +641,23 @@ const Inventory = () => {
       const x = marginX + col * (itemWidth + gapX);
       const y = marginY + row * (itemHeight + gapY);
 
-      // Sticker Border
-      doc.setDrawColor(240);
-      doc.setLineWidth(0.1);
-      doc.roundedRect(x, y, itemWidth, itemHeight, 1, 1, "S");
+      // Sticker Border (only for A4 to help cutting)
+      if (!isThermal) {
+        doc.setDrawColor(240);
+        doc.setLineWidth(0.1);
+        doc.roundedRect(x, y, itemWidth, itemHeight, 1, 1, "S");
+      }
 
       // Content
       doc.setTextColor(0);
 
-      // Business Name
+      // Dates (Mfg & Exp)
       doc.setFontSize(5);
       doc.setFont("helvetica", "bold");
-      const bName = (user?.companyName || "BuildMate ERP").toUpperCase();
-      doc.text(bName, x + itemWidth / 2, y + 4, { align: "center" });
+      const datesText = [];
+      if (barcodeMfgDate) datesText.push(`MFG: ${barcodeMfgDate}`);
+      if (barcodeExpDate) datesText.push(`EXP: ${barcodeExpDate}`);
+      doc.text(datesText.join("  |  "), x + itemWidth / 2, y + 4, { align: "center" });
 
       // Product Name
       doc.setFontSize(7);
@@ -659,7 +669,8 @@ const Inventory = () => {
 
       // Price
       doc.setFontSize(8);
-      doc.text(`MRP: Rs. ${product.mrp || product.pricePerUnit}`, x + itemWidth / 2, y + 12, {
+      const mrpText = product.mrp ? product.mrp : "        ";
+      doc.text(`MRP: Rs. ${mrpText}`, x + itemWidth / 2, y + 12, {
         align: "center",
       });
 
@@ -1635,7 +1646,8 @@ const Inventory = () => {
         <div className="hidden print:block">
           <BarcodeLabel
             product={printLabelData}
-            businessName={user?.companyName || "BuildMate ERP"}
+            mfgDate={barcodeMfgDate}
+            expDate={barcodeExpDate}
           />
           <style>{`
                         @media print {
@@ -1684,6 +1696,33 @@ const Inventory = () => {
                 </p>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                    Mfg Date
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 10/24"
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-6 text-xl font-black focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all"
+                    value={barcodeMfgDate}
+                    onChange={(e) => setBarcodeMfgDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                    Exp Date
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 10/25"
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-6 text-xl font-black focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all"
+                    value={barcodeExpDate}
+                    onChange={(e) => setBarcodeExpDate(e.target.value)}
+                  />
+                </div>
+              </div>
+
               <div className="flex gap-3 pt-4">
                 <button
                   onClick={() => setIsBarcodePrintModalOpen(false)}
@@ -1693,15 +1732,21 @@ const Inventory = () => {
                 </button>
                 <button
                   onClick={() =>
-                    generateBarcodePDF(
-                      selectedBarcodeProduct,
-                      barcodePrintCount,
-                    )
+                    generateBarcodePDF(selectedBarcodeProduct, barcodePrintCount, 'a4')
                   }
                   className="flex-1 py-4 bg-primary-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-primary-700 shadow-xl shadow-primary-200 transition-all flex items-center justify-center gap-2"
                 >
                   <Download size={16} />
-                  Generate PDF
+                  A4 PDF
+                </button>
+                <button
+                  onClick={() =>
+                    generateBarcodePDF(selectedBarcodeProduct, barcodePrintCount, 'thermal')
+                  }
+                  className="flex-1 py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-emerald-700 shadow-xl shadow-emerald-200 transition-all flex items-center justify-center gap-2"
+                >
+                  <Barcode size={16} />
+                  Thermal
                 </button>
               </div>
             </div>
@@ -1713,7 +1758,8 @@ const Inventory = () => {
       {printLabelData && (
         <BarcodeLabel
           product={printLabelData}
-          businessName={user?.companyName || "BuildMate ERP"}
+          mfgDate={barcodeMfgDate}
+          expDate={barcodeExpDate}
         />
       )}
 
