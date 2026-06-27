@@ -657,29 +657,29 @@ const Inventory = () => {
       // Content
       doc.setTextColor(0);
 
-      // Dates (Mfg & Exp)
-      doc.setFontSize(isThermal ? 6 : 5);
-      doc.setFont("helvetica", "bold");
-      const datesText = [];
-      if (barcodeMfgDate) datesText.push(`MFG: ${barcodeMfgDate}`);
-      if (barcodeExpDate) datesText.push(`EXP: ${barcodeExpDate}`);
-      doc.text(datesText.join("  |  "), x + itemWidth / 2, y + (isThermal ? 4 : 4), { align: "center" });
-
       // Product Name
       doc.setFontSize(isThermal ? 8 : 7);
+      doc.setFont("helvetica", "bold");
       const maxLen = isThermal ? 35 : 25; // Allow longer name in 1 col
       const pName =
         product.name.length > maxLen + 3
           ? product.name.substring(0, maxLen) + "..."
           : product.name;
-      doc.text(pName, x + itemWidth / 2, y + (isThermal ? 8 : 8), { align: "center" });
+      doc.text(pName, x + itemWidth / 2, y + (isThermal ? 4 : 4), { align: "center" });
 
       // Price
       doc.setFontSize(isThermal ? 9 : 8);
       const mrpText = product.mrp ? product.mrp : "        ";
-      doc.text(`MRP: Rs. ${mrpText}`, x + itemWidth / 2, y + (isThermal ? 12 : 12), {
+      doc.text(`MRP: Rs. ${mrpText}`, x + itemWidth / 2, y + (isThermal ? 8 : 8), {
         align: "center",
       });
+
+      // Dates (Mfg & Exp)
+      doc.setFontSize(isThermal ? 8 : 7); 
+      const datesText = [];
+      if (barcodeMfgDate) datesText.push(`MFG: ${barcodeMfgDate}`);
+      if (barcodeExpDate) datesText.push(`EXP: ${barcodeExpDate}`);
+      doc.text(datesText.join("  |  "), x + itemWidth / 2, y + (isThermal ? 12 : 12), { align: "center" });
 
       // Barcode
       doc.addImage(
