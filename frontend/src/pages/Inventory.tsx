@@ -616,7 +616,9 @@ const Inventory = () => {
     
     // Thermal receipt width is typically 80mm. 
     // Calculate total height needed for the continuous roll.
-    const thermalHeight = Math.max(50, marginY * 2 + rows * (itemHeight + gapY));
+    // IMPORTANT: To prevent jsPDF from swapping width and height in portrait mode, 
+    // the height MUST be strictly greater than the width (80).
+    const thermalHeight = Math.max(85, marginY * 2 + rows * (itemHeight + gapY));
 
     const doc = isThermal 
         ? new jsPDF({ orientation: "portrait", unit: "mm", format: [80, thermalHeight] })
