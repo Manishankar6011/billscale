@@ -601,8 +601,25 @@ const Inventory = () => {
 
   const generateBarcodePDF = (product: Product, count: number, printType: 'a4' | 'thermal' = 'a4') => {
     const isThermal = printType === 'thermal';
+    
+    const marginX = isThermal ? 10 : 7; // Center it on 80mm width
+    const marginY = isThermal ? 4 : 10;
+    const gapX = isThermal ? 0 : 2;
+    const gapY = isThermal ? 6 : 2;
+
+    const cols = isThermal ? 1 : 4;
+    const itemWidth = isThermal ? 60 : 48; // Wider label for 1 column
+    const itemHeight = isThermal ? 28 : 25; // Slightly taller
+
+    const rows = isThermal ? Math.ceil(count / cols) : 11;
+    const itemsPerPage = isThermal ? count : cols * rows; // All items on one page for thermal
+    
+    // Thermal receipt width is typically 80mm. 
+    // Calculate total height needed for the continuous roll.
+    const thermalHeight = Math.max(50, marginY * 2 + rows * (itemHeight + gapY));
+
     const doc = isThermal 
-        ? new jsPDF({ orientation: "landscape", unit: "mm", format: [50, 25] })
+        ? new jsPDF({ orientation: "portrait", unit: "mm", format: [80, thermalHeight] })
         : new jsPDF("p", "mm", "a4");
     
     const canvas = document.createElement("canvas");
@@ -610,31 +627,20 @@ const Inventory = () => {
     // Generate barcode image once
     JsBarcode(canvas, product.barcode || "", {
       format: "CODE128",
-      width: 2,
-      height: 40,
+      width: isThermal ? 2 : 2,
+      height: isThermal ? 45 : 40, // Taller barcode for 1 column
       displayValue: true,
-      fontSize: 14,
+      fontSize: isThermal ? 14 : 14,
       fontOptions: "bold",
     });
     const barcodeImg = canvas.toDataURL("image/png");
 
-    const marginX = isThermal ? 1 : 7;
-    const marginY = isThermal ? 0 : 10;
-    const itemWidth = 48;
-    const itemHeight = 25;
-    const gapX = isThermal ? 0 : 2;
-    const gapY = isThermal ? 0 : 2;
-
-    const cols = isThermal ? 1 : 4;
-    const rows = isThermal ? 1 : 11;
-    const itemsPerPage = cols * rows;
-
     for (let i = 0; i < count; i++) {
-      if (i > 0 && i % itemsPerPage === 0) {
+      if (!isThermal && i > 0 && i % itemsPerPage === 0) {
         doc.addPage();
       }
 
-      const pageIdx = i % itemsPerPage;
+      const pageIdx = isThermal ? i : (i % itemsPerPage);
       const col = pageIdx % cols;
       const row = Math.floor(pageIdx / cols);
 
@@ -652,25 +658,26 @@ const Inventory = () => {
       doc.setTextColor(0);
 
       // Dates (Mfg & Exp)
-      doc.setFontSize(5);
+      doc.setFontSize(isThermal ? 6 : 5);
       doc.setFont("helvetica", "bold");
       const datesText = [];
       if (barcodeMfgDate) datesText.push(`MFG: ${barcodeMfgDate}`);
       if (barcodeExpDate) datesText.push(`EXP: ${barcodeExpDate}`);
-      doc.text(datesText.join("  |  "), x + itemWidth / 2, y + 4, { align: "center" });
+      doc.text(datesText.join("  |  "), x + itemWidth / 2, y + (isThermal ? 4 : 4), { align: "center" });
 
       // Product Name
-      doc.setFontSize(7);
+      doc.setFontSize(isThermal ? 8 : 7);
+      const maxLen = isThermal ? 35 : 25; // Allow longer name in 1 col
       const pName =
-        product.name.length > 28
-          ? product.name.substring(0, 25) + "..."
+        product.name.length > maxLen + 3
+          ? product.name.substring(0, maxLen) + "..."
           : product.name;
-      doc.text(pName, x + itemWidth / 2, y + 8, { align: "center" });
+      doc.text(pName, x + itemWidth / 2, y + (isThermal ? 8 : 8), { align: "center" });
 
       // Price
-      doc.setFontSize(8);
+      doc.setFontSize(isThermal ? 9 : 8);
       const mrpText = product.mrp ? product.mrp : "        ";
-      doc.text(`MRP: Rs. ${mrpText}`, x + itemWidth / 2, y + 12, {
+      doc.text(`MRP: Rs. ${mrpText}`, x + itemWidth / 2, y + (isThermal ? 12 : 12), {
         align: "center",
       });
 
@@ -678,10 +685,10 @@ const Inventory = () => {
       doc.addImage(
         barcodeImg,
         "PNG",
-        x + 5,
-        y + 13,
-        itemWidth - 10,
-        itemHeight - 14,
+        x + (isThermal ? 5 : 5),
+        y + (isThermal ? 14 : 13),
+        itemWidth - (isThermal ? 10 : 10),
+        itemHeight - (isThermal ? 15 : 14),
       );
     }
 
