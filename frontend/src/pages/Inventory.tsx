@@ -626,19 +626,13 @@ const Inventory = () => {
 
     const itemsPerPage = isThermal ? cols : cols * 11;
     
-    const doc = isThermal 
-        ? new jsPDF({ orientation: "portrait", unit: "mm", format: [thermalSettings.rollWidth, Math.max(thermalSettings.rollWidth + 1, itemHeight)] }) 
-        // Note: jsPDF forces portrait to have height > width. If rollWidth > labelHeight, it might swap them. 
-        // We'll use landscape if rollWidth > labelHeight to prevent jsPDF from messing it up!
+    const finalDoc = isThermal 
+        ? new jsPDF({ 
+            orientation: thermalSettings.rollWidth > itemHeight ? "landscape" : "portrait", 
+            unit: "mm", 
+            format: [thermalSettings.rollWidth, itemHeight] 
+          })
         : new jsPDF("p", "mm", "a4");
-
-    // Re-initialize for thermal if it needs landscape to bypass jsPDF auto-swapping dimensions
-    if (isThermal && thermalSettings.rollWidth > itemHeight) {
-      doc.deletePage(1); // Not standard, better to just create a new one:
-    }
-    
-    const finalDoc = (isThermal && thermalSettings.rollWidth > itemHeight) ? 
-      new jsPDF({ orientation: "landscape", unit: "mm", format: [itemHeight, thermalSettings.rollWidth] }) : doc;
     
     const canvas = document.createElement("canvas");
 
