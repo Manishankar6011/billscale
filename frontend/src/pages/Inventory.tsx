@@ -201,6 +201,15 @@ const Inventory = () => {
     useState<Product | null>(null);
   const [barcodeMfgDate, setBarcodeMfgDate] = useState("");
   const [barcodeExpDate, setBarcodeExpDate] = useState("");
+  const [showThermalSettings, setShowThermalSettings] = useState(false);
+  const [thermalSettings, setThermalSettings] = useState({
+    rollWidth: 80,
+    labelsPerRow: 1,
+    labelWidth: 60,
+    labelHeight: 28,
+    gapX: 2,
+    gapY: 6,
+  });
 
   const [stockValueDisplay, setStockValueDisplay] = useState<"purchase" | "sell">("purchase");
   const [isSmartModalOpen, setIsSmartModalOpen] = useState(false);
@@ -602,103 +611,109 @@ const Inventory = () => {
   const generateBarcodePDF = (product: Product, count: number, printType: 'a4' | 'thermal' = 'a4') => {
     const isThermal = printType === 'thermal';
     
-    const marginX = isThermal ? 10 : 7; // Center it on 80mm width
-    const marginY = isThermal ? 4 : 10;
-    const gapX = isThermal ? 0 : 2;
-    const gapY = isThermal ? 6 : 2;
-
-    const cols = isThermal ? 1 : 4;
-    const itemWidth = isThermal ? 60 : 48; // Wider label for 1 column
-    const itemHeight = isThermal ? 28 : 25; // Slightly taller
-
-    const rows = isThermal ? Math.ceil(count / cols) : 11;
-    const itemsPerPage = isThermal ? count : cols * rows; // All items on one page for thermal
+    // Calculate margins based on settings to center labels on the roll
+    const calculatedMarginX = Math.max(0, (thermalSettings.rollWidth - (thermalSettings.labelsPerRow * thermalSettings.labelWidth) - (thermalSettings.labelsPerRow - 1) * thermalSettings.gapX) / 2);
     
-    // Thermal receipt width is typically 80mm. 
-    // Calculate total height needed for the continuous roll.
-    // IMPORTANT: To prevent jsPDF from swapping width and height in portrait mode, 
-    // the height MUST be strictly greater than the width (80).
-    const thermalHeight = Math.max(85, marginY * 2 + rows * (itemHeight + gapY));
+    const marginX = isThermal ? calculatedMarginX : 7;
+    // For thermal, top margin is minimal if each page is exactly one sticker high
+    const marginY = isThermal ? 2 : 10;
+    const gapX = isThermal ? thermalSettings.gapX : 2;
+    const gapY = isThermal ? 0 : 2; // Not used for thermal Y calculation anymore
 
+    const cols = isThermal ? thermalSettings.labelsPerRow : 4;
+    const itemWidth = isThermal ? thermalSettings.labelWidth : 48;
+    const itemHeight = isThermal ? thermalSettings.labelHeight : 25;
+
+    const itemsPerPage = isThermal ? cols : cols * 11;
+    
     const doc = isThermal 
-        ? new jsPDF({ orientation: "portrait", unit: "mm", format: [80, thermalHeight] })
+        ? new jsPDF({ orientation: "portrait", unit: "mm", format: [thermalSettings.rollWidth, Math.max(thermalSettings.rollWidth + 1, itemHeight)] }) 
+        // Note: jsPDF forces portrait to have height > width. If rollWidth > labelHeight, it might swap them. 
+        // We'll use landscape if rollWidth > labelHeight to prevent jsPDF from messing it up!
         : new jsPDF("p", "mm", "a4");
+
+    // Re-initialize for thermal if it needs landscape to bypass jsPDF auto-swapping dimensions
+    if (isThermal && thermalSettings.rollWidth > itemHeight) {
+      doc.deletePage(1); // Not standard, better to just create a new one:
+    }
+    
+    const finalDoc = (isThermal && thermalSettings.rollWidth > itemHeight) ? 
+      new jsPDF({ orientation: "landscape", unit: "mm", format: [itemHeight, thermalSettings.rollWidth] }) : doc;
     
     const canvas = document.createElement("canvas");
 
-    // Generate barcode image once
+    // Generate barcode at higher resolution to prevent blurriness and ensure fast scanning
     JsBarcode(canvas, product.barcode || "", {
       format: "CODE128",
-      width: isThermal ? 2 : 2,
-      height: isThermal ? 45 : 40, // Taller barcode for 1 column
+      width: isThermal ? (itemWidth > 40 ? 3 : 2) : 4,
+      height: isThermal ? Math.max(40, itemHeight * 2) : 120,
       displayValue: true,
-      fontSize: isThermal ? 14 : 14,
+      fontSize: isThermal ? 30 : 40,
+      margin: 15,
       fontOptions: "bold",
     });
     const barcodeImg = canvas.toDataURL("image/png");
 
     for (let i = 0; i < count; i++) {
-      if (!isThermal && i > 0 && i % itemsPerPage === 0) {
-        doc.addPage();
+      if (i > 0 && i % itemsPerPage === 0) {
+        finalDoc.addPage();
       }
 
-      const pageIdx = isThermal ? i : (i % itemsPerPage);
+      const pageIdx = i % itemsPerPage;
       const col = pageIdx % cols;
-      const row = Math.floor(pageIdx / cols);
+      const row = isThermal ? 0 : Math.floor(pageIdx / cols);
 
       const x = marginX + col * (itemWidth + gapX);
       const y = marginY + row * (itemHeight + gapY);
 
-      // Sticker Border (only for A4 to help cutting)
       if (!isThermal) {
-        doc.setDrawColor(240);
-        doc.setLineWidth(0.1);
-        doc.roundedRect(x, y, itemWidth, itemHeight, 1, 1, "S");
+        finalDoc.setDrawColor(240);
+        finalDoc.setLineWidth(0.1);
+        finalDoc.roundedRect(x, y, itemWidth, itemHeight, 1, 1, "S");
       }
 
-      // Content
-      doc.setTextColor(0);
+      finalDoc.setTextColor(0);
 
-      // Product Name
-      doc.setFontSize(isThermal ? 8 : 7);
-      doc.setFont("helvetica", "bold");
-      const maxLen = isThermal ? 35 : 25; // Allow longer name in 1 col
+      finalDoc.setFontSize(isThermal ? 7 : 7);
+      finalDoc.setFont("helvetica", "bold");
+      const maxLen = isThermal ? Math.floor(itemWidth / 1.5) : 25;
       const pName =
         product.name.length > maxLen + 3
           ? product.name.substring(0, maxLen) + "..."
           : product.name;
-      doc.text(pName, x + itemWidth / 2, y + (isThermal ? 4 : 4), { align: "center" });
+      finalDoc.text(pName, x + itemWidth / 2, y + (isThermal ? 3 : 4), { align: "center" });
 
-      // Price
-      doc.setFontSize(isThermal ? 9 : 8);
+      finalDoc.setFontSize(isThermal ? 8 : 8);
       const mrpText = product.mrp ? product.mrp : "        ";
-      doc.text(`MRP: Rs. ${mrpText}`, x + itemWidth / 2, y + (isThermal ? 8 : 8), {
+      finalDoc.text(`MRP: Rs. ${mrpText}`, x + itemWidth / 2, y + (isThermal ? 7 : 8), {
         align: "center",
       });
 
-      // Dates (Mfg & Exp)
-      doc.setFontSize(isThermal ? 8 : 7); 
+      finalDoc.setFontSize(isThermal ? 6 : 7); 
       const datesText = [];
       if (barcodeMfgDate) datesText.push(`MFG: ${barcodeMfgDate}`);
       if (barcodeExpDate) datesText.push(`EXP: ${barcodeExpDate}`);
-      doc.text(datesText.join("  |  "), x + itemWidth / 2, y + (isThermal ? 12 : 12), { align: "center" });
+      if (datesText.length > 0) {
+        finalDoc.text(datesText.join(" | "), x + itemWidth / 2, y + (isThermal ? 10 : 12), { align: "center" });
+      }
 
-      // Barcode
-      doc.addImage(
+      const barcodeWidth = itemWidth - (isThermal ? 4 : 10);
+      const barcodeHeight = itemHeight - (isThermal ? (datesText.length > 0 ? 12 : 9) : 14);
+      finalDoc.addImage(
         barcodeImg,
         "PNG",
-        x + (isThermal ? 5 : 5),
-        y + (isThermal ? 14 : 13),
-        itemWidth - (isThermal ? 10 : 10),
-        itemHeight - (isThermal ? 15 : 14),
+        x + (isThermal ? 2 : 5),
+        y + (isThermal ? (datesText.length > 0 ? 11 : 8) : 13),
+        barcodeWidth > 0 ? barcodeWidth : 10,
+        barcodeHeight > 0 ? barcodeHeight : 10,
       );
     }
 
     // Open in new tab for printing or download directly
-    const blob = doc.output("blob");
+    const blob = finalDoc.output("blob");
     const url = URL.createObjectURL(blob);
     window.open(url, "_blank");
-    doc.save(`${product.name}_Barcodes.pdf`);
+    finalDoc.save(`${product.name}_Barcodes.pdf`);
     showToast(`${count} Barcodes generated successfully!`, "success");
     setIsBarcodePrintModalOpen(false);
   };
@@ -1730,6 +1745,48 @@ const Inventory = () => {
                     onChange={(e) => setBarcodeExpDate(e.target.value)}
                   />
                 </div>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowThermalSettings(!showThermalSettings)}
+                  className="flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-emerald-600 transition-colors"
+                >
+                  <ChevronDown className={`transition-transform ${showThermalSettings ? "rotate-180" : ""}`} size={16} />
+                  Advanced Thermal Roll Settings
+                </button>
+                
+                {showThermalSettings && (
+                  <div className="mt-4 p-4 bg-slate-50 border border-slate-100 rounded-2xl space-y-4 animate-in slide-in-from-top-2">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Roll Width (mm)</label>
+                        <input type="number" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-sm font-bold focus:ring-2 focus:ring-emerald-500 outline-none" value={thermalSettings.rollWidth} onChange={(e) => setThermalSettings({...thermalSettings, rollWidth: Number(e.target.value)})} />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Stickers per Row</label>
+                        <input type="number" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-sm font-bold focus:ring-2 focus:ring-emerald-500 outline-none" value={thermalSettings.labelsPerRow} onChange={(e) => setThermalSettings({...thermalSettings, labelsPerRow: Number(e.target.value)})} />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Sticker Width (mm)</label>
+                        <input type="number" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-sm font-bold focus:ring-2 focus:ring-emerald-500 outline-none" value={thermalSettings.labelWidth} onChange={(e) => setThermalSettings({...thermalSettings, labelWidth: Number(e.target.value)})} />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Sticker Height (mm)</label>
+                        <input type="number" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-sm font-bold focus:ring-2 focus:ring-emerald-500 outline-none" value={thermalSettings.labelHeight} onChange={(e) => setThermalSettings({...thermalSettings, labelHeight: Number(e.target.value)})} />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Horiz. Gap (mm)</label>
+                        <input type="number" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-sm font-bold focus:ring-2 focus:ring-emerald-500 outline-none" value={thermalSettings.gapX} onChange={(e) => setThermalSettings({...thermalSettings, gapX: Number(e.target.value)})} />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Vert. Gap (mm)</label>
+                        <input type="number" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-sm font-bold focus:ring-2 focus:ring-emerald-500 outline-none" value={thermalSettings.gapY} onChange={(e) => setThermalSettings({...thermalSettings, gapY: Number(e.target.value)})} />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3 pt-4">
