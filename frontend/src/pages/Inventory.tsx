@@ -205,10 +205,12 @@ const Inventory = () => {
   const [thermalSettings, setThermalSettings] = useState({
     rollWidth: 80,
     labelsPerRow: 1,
-    labelWidth: 60,
-    labelHeight: 28,
+    labelWidth: 50,
+    labelHeight: 25,
     gapX: 2,
-    gapY: 6,
+    gapY: 2,
+    rotate90: true, // Default to true since many thermal label printers expect portrait feed
+    continuousRoll: false,
   });
 
   const [stockValueDisplay, setStockValueDisplay] = useState<"purchase" | "sell">("purchase");
@@ -615,24 +617,48 @@ const Inventory = () => {
     const calculatedMarginX = Math.max(0, (thermalSettings.rollWidth - (thermalSettings.labelsPerRow * thermalSettings.labelWidth) - (thermalSettings.labelsPerRow - 1) * thermalSettings.gapX) / 2);
     
     const marginX = isThermal ? calculatedMarginX : 7;
-    // For thermal, top margin is minimal if each page is exactly one sticker high
-    const marginY = isThermal ? 2 : 10;
+    // For thermal, top margin should be 0 because itemHeight already covers the full page height
+    const marginY = isThermal ? 0 : 10;
+    const isContinuous = isThermal && thermalSettings.continuousRoll;
     const gapX = isThermal ? thermalSettings.gapX : 2;
-    const gapY = isThermal ? 0 : 2; // Not used for thermal Y calculation anymore
+    const gapY = isThermal && !isContinuous ? 0 : (isThermal ? thermalSettings.gapY : 2); // Use gapY for continuous rolls
 
     const cols = isThermal ? thermalSettings.labelsPerRow : 4;
     const itemWidth = isThermal ? thermalSettings.labelWidth : 48;
     const itemHeight = isThermal ? thermalSettings.labelHeight : 25;
 
-    const itemsPerPage = isThermal ? cols : cols * 11;
+    const itemsPerPage = isThermal ? (isContinuous ? count : cols) : cols * 11;
+    // Disable rotation for continuous rolls since they are printed on a dynamic vertical strip
+    const rotate = isThermal && thermalSettings.rotate90 && !isContinuous;
+    
+    // Calculate total height needed for continuous roll
+    const totalRows = Math.ceil(count / cols);
+    const totalHeight = isContinuous 
+        ? (totalRows * itemHeight) + ((totalRows - 1) * gapY) + (marginY * 2)
+        : itemHeight;
+    
+    const formatWidth = rotate ? itemHeight : thermalSettings.rollWidth;
+    const formatHeight = rotate ? thermalSettings.rollWidth : totalHeight;
+    const orientation = formatWidth > formatHeight ? "landscape" : "portrait";
     
     const finalDoc = isThermal 
         ? new jsPDF({ 
-            orientation: thermalSettings.rollWidth > itemHeight ? "landscape" : "portrait", 
+            orientation: orientation as "portrait" | "landscape", 
             unit: "mm", 
-            format: [thermalSettings.rollWidth, itemHeight] 
+            format: [formatWidth, formatHeight] 
           })
         : new jsPDF("p", "mm", "a4");
+        
+    const applyRotation = (docInstance: any) => {
+      if (rotate) {
+        docInstance.advancedAPI((d: any) => {
+          // Maps (X,Y) -> (-Y+itemHeight, X). Clockwise 90-deg rotation.
+          d.setCurrentTransformationMatrix(new d.Matrix(0, 1, -1, 0, itemHeight, 0));
+        });
+      }
+    };
+    
+    applyRotation(finalDoc);
     
     const canvas = document.createElement("canvas");
 
@@ -640,22 +666,21 @@ const Inventory = () => {
     JsBarcode(canvas, product.barcode || "", {
       format: "CODE128",
       width: isThermal ? (itemWidth > 40 ? 3 : 2) : 4,
-      height: isThermal ? Math.max(40, itemHeight * 2) : 120,
-      displayValue: true,
-      fontSize: isThermal ? 30 : 40,
-      margin: 15,
-      fontOptions: "bold",
+      height: isThermal ? 80 : 120, // Just the bars
+      displayValue: false, // Turn off canvas text, we will draw it natively in jsPDF for crispness
+      margin: 0,
     });
     const barcodeImg = canvas.toDataURL("image/png");
 
     for (let i = 0; i < count; i++) {
       if (i > 0 && i % itemsPerPage === 0) {
         finalDoc.addPage();
+        applyRotation(finalDoc);
       }
 
       const pageIdx = i % itemsPerPage;
       const col = pageIdx % cols;
-      const row = isThermal ? 0 : Math.floor(pageIdx / cols);
+      const row = isThermal ? (isContinuous ? Math.floor(pageIdx / cols) : 0) : Math.floor(pageIdx / cols);
 
       const x = marginX + col * (itemWidth + gapX);
       const y = marginY + row * (itemHeight + gapY);
@@ -668,39 +693,54 @@ const Inventory = () => {
 
       finalDoc.setTextColor(0);
 
-      finalDoc.setFontSize(isThermal ? 7 : 7);
+      // Product Name with Word Wrap
+      finalDoc.setFontSize(isThermal ? 8 : 9);
       finalDoc.setFont("helvetica", "bold");
-      const maxLen = isThermal ? Math.floor(itemWidth / 1.5) : 25;
-      const pName =
-        product.name.length > maxLen + 3
-          ? product.name.substring(0, maxLen) + "..."
-          : product.name;
-      finalDoc.text(pName, x + itemWidth / 2, y + (isThermal ? 3 : 4), { align: "center" });
+      const splitTitle = finalDoc.splitTextToSize(product.name, itemWidth - 4);
+      // Limit to 2 lines max
+      const titleLines = splitTitle.length > 2 ? [splitTitle[0], splitTitle[1].substring(0, splitTitle[1].length - 3) + "..."] : splitTitle;
+      
+      finalDoc.text(titleLines, x + itemWidth / 2, y + (isThermal ? 4 : 5), { align: "center" });
 
-      finalDoc.setFontSize(isThermal ? 8 : 8);
-      const mrpText = product.mrp ? product.mrp : "        ";
-      finalDoc.text(`MRP: Rs. ${mrpText}`, x + itemWidth / 2, y + (isThermal ? 7 : 8), {
-        align: "center",
-      });
+      const titleHeightOffset = (titleLines.length - 1) * (isThermal ? 3.5 : 4);
+      let currentY = y + (isThermal ? 5 : 6) + titleHeightOffset;
 
-      finalDoc.setFontSize(isThermal ? 6 : 7); 
+      // Optional MRP
+      const hasMrp = product.mrp && product.mrp.toString().trim() !== "";
+      if (hasMrp) {
+        finalDoc.setFontSize(isThermal ? 7 : 8);
+        finalDoc.text(`MRP: Rs. ${product.mrp}`, x + itemWidth / 2, currentY + (isThermal ? 2 : 3), { align: "center" });
+        currentY += (isThermal ? 3 : 4);
+      }
+
+      // Optional Dates
       const datesText = [];
       if (barcodeMfgDate) datesText.push(`MFG: ${barcodeMfgDate}`);
       if (barcodeExpDate) datesText.push(`EXP: ${barcodeExpDate}`);
       if (datesText.length > 0) {
-        finalDoc.text(datesText.join(" | "), x + itemWidth / 2, y + (isThermal ? 10 : 12), { align: "center" });
+        finalDoc.setFontSize(isThermal ? 6 : 7); 
+        finalDoc.text(datesText.join(" | "), x + itemWidth / 2, currentY + (isThermal ? 2 : 2), { align: "center" });
+        currentY += (isThermal ? 3 : 3);
       }
 
-      const barcodeWidth = itemWidth - (isThermal ? 4 : 10);
-      const barcodeHeight = itemHeight - (isThermal ? (datesText.length > 0 ? 12 : 9) : 14);
+      // Draw Barcode Image (Bars only)
+      const barcodeWidth = itemWidth - (isThermal ? 6 : 10);
+      const bottomPadding = isThermal ? 5 : 6;
+      const remainingHeightForBarcode = itemHeight - (currentY - y) - bottomPadding; // Leave space for text below
+      const barcodeHeight = Math.max(5, remainingHeightForBarcode);
+      
       finalDoc.addImage(
         barcodeImg,
         "PNG",
-        x + (isThermal ? 2 : 5),
-        y + (isThermal ? (datesText.length > 0 ? 11 : 8) : 13),
-        barcodeWidth > 0 ? barcodeWidth : 10,
-        barcodeHeight > 0 ? barcodeHeight : 10,
+        x + (itemWidth - barcodeWidth) / 2,
+        currentY,
+        barcodeWidth,
+        barcodeHeight,
       );
+
+      // Draw Barcode Number Natively (Perfect crispness)
+      finalDoc.setFontSize(isThermal ? 8 : 9);
+      finalDoc.text(product.barcode || "", x + itemWidth / 2, currentY + barcodeHeight + (isThermal ? 3 : 4), { align: "center" });
     }
 
     // Open in new tab for printing or download directly
@@ -1775,9 +1815,25 @@ const Inventory = () => {
                         <input type="number" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-sm font-bold focus:ring-2 focus:ring-emerald-500 outline-none" value={thermalSettings.gapX} onChange={(e) => setThermalSettings({...thermalSettings, gapX: Number(e.target.value)})} />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Vert. Gap (mm)</label>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Vertical Gap (mm)</label>
                         <input type="number" className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-sm font-bold focus:ring-2 focus:ring-emerald-500 outline-none" value={thermalSettings.gapY} onChange={(e) => setThermalSettings({...thermalSettings, gapY: Number(e.target.value)})} />
                       </div>
+                    </div>
+                    <div className="flex flex-col gap-2 mt-2">
+                      <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                        <input type="checkbox" className="w-4 h-4 text-emerald-600 rounded" 
+                        checked={thermalSettings.rotate90} 
+                        onChange={(e) => setThermalSettings({...thermalSettings, rotate90: e.target.checked})} 
+                        />
+                        Rotate 90°
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                        <input type="checkbox" className="w-4 h-4 text-emerald-600 rounded" 
+                        checked={thermalSettings.continuousRoll} 
+                        onChange={(e) => setThermalSettings({...thermalSettings, continuousRoll: e.target.checked})} 
+                        />
+                        Continuous Roll (Single Page)
+                      </label>
                     </div>
                   </div>
                 )}
