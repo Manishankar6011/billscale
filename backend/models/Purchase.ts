@@ -102,5 +102,6 @@ const purchaseSchema: Schema = new mongoose.Schema({
 
 // Performance index
 purchaseSchema.index({ tenantId: 1, date: -1 });
+purchaseSchema.index({ tenantId: 1, paymentStatus: 1 });
 
 export default mongoose.model<IPurchase>('Purchase', purchaseSchema);

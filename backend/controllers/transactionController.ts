@@ -202,16 +202,25 @@ export const processSale = async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // Fetch all products in one go to prevent N+1 queries
+    const productIds = items.map((i: any) => i.productId);
+    const products = await Product.find({
+      _id: { $in: productIds },
+      tenantId: req.tenantId,
+    }).session(session);
+
+    const productMap = new Map();
+    products.forEach((p) => productMap.set(p._id.toString(), p));
+
+    const bulkOperations = [];
+
     for (const item of items) {
       if (Number(item.quantity) <= 0)
         throw new Error(`Invalid quantity for item`);
       if (Number(item.sellingPrice) < 0)
         throw new Error(`Invalid selling price for item`);
 
-      const product = await Product.findOne({
-        _id: item.productId,
-        tenantId: req.tenantId,
-      }).session(session);
+      const product = productMap.get(item.productId.toString());
       if (!product) throw new Error(`Product ${item.productId} not found`);
 
       const conversionFactor = Number(item.conversionFactor) || 1;
@@ -243,9 +252,19 @@ export const processSale = async (req: AuthRequest, res: Response) => {
         hsnCode: item.hsnCode || product.hsnCode || "",
       });
 
-      // Update Product Stock
+      // Update in-memory stock for any duplicate item validation
       product.stock -= baseQtyToDeduct;
-      await product.save({ session });
+
+      bulkOperations.push({
+        updateOne: {
+          filter: { _id: product._id },
+          update: { $inc: { stock: -baseQtyToDeduct } },
+        },
+      });
+    }
+
+    if (bulkOperations.length > 0) {
+      await Product.bulkWrite(bulkOperations, { session });
     }
 
     // Add additional items to totalAmount & calculate Profit contribution
@@ -351,16 +370,35 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
     }).session(session);
     if (!oldSale) throw new Error("Sale not found");
 
+    // Fetch all relevant products (from old sale and new items)
+    const oldProductIds = oldSale.items.map((i: any) => i.productId.toString());
+    const newProductIds = items.map((i: any) => i.productId.toString());
+    const allProductIds = [...new Set([...oldProductIds, ...newProductIds])];
+
+    const products = await Product.find({
+      _id: { $in: allProductIds },
+      tenantId: req.tenantId,
+    }).session(session);
+
+    const productMap = new Map();
+    products.forEach((p) => productMap.set(p._id.toString(), p));
+
+    const bulkOperations = [];
+
     // 1. Revert Old Stock
     for (const item of oldSale.items) {
-      const product = await Product.findOne({
-        _id: item.productId,
-        tenantId: req.tenantId,
-      }).session(session);
+      const product = productMap.get(item.productId.toString());
       if (product) {
         const factor = item.conversionFactor || 1;
-        product.stock += item.quantity / factor;
-        await product.save({ session });
+        const qtyToAdd = item.quantity / factor;
+        product.stock += qtyToAdd;
+
+        bulkOperations.push({
+          updateOne: {
+            filter: { _id: product._id },
+            update: { $inc: { stock: qtyToAdd } },
+          },
+        });
       }
     }
 
@@ -406,10 +444,7 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
       if (Number(item.quantity) <= 0)
         throw new Error(`Invalid quantity for item`);
 
-      const product = await Product.findOne({
-        _id: item.productId,
-        tenantId: req.tenantId,
-      }).session(session);
+      const product = productMap.get(item.productId.toString());
       if (!product) throw new Error(`Product ${item.productId} not found`);
 
       const conversionFactor = Number(item.conversionFactor) || 1;
@@ -442,7 +477,16 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
       });
 
       product.stock -= baseQtyToDeduct;
-      await product.save({ session });
+      bulkOperations.push({
+        updateOne: {
+          filter: { _id: product._id },
+          update: { $inc: { stock: -baseQtyToDeduct } },
+        },
+      });
+    }
+
+    if (bulkOperations.length > 0) {
+      await Product.bulkWrite(bulkOperations, { session });
     }
 
     if (additionalItems && Array.isArray(additionalItems)) {
@@ -514,16 +558,33 @@ export const deleteSale = async (req: AuthRequest, res: Response) => {
     if (!sale) throw new Error("Sale not found");
 
     // Revert Stock
+    const productIds = sale.items.map((i: any) => i.productId.toString());
+    const products = await Product.find({
+      _id: { $in: productIds },
+      tenantId: req.tenantId,
+    }).session(session);
+
+    const productMap = new Map();
+    products.forEach((p) => productMap.set(p._id.toString(), p));
+
+    const bulkOperations = [];
+
     for (const item of sale.items) {
-      const product = await Product.findOne({
-        _id: item.productId,
-        tenantId: req.tenantId,
-      }).session(session);
+      const product = productMap.get(item.productId.toString());
       if (product) {
         const factor = item.conversionFactor || 1;
-        product.stock += item.quantity / factor;
-        await product.save({ session });
+        const qtyToAdd = item.quantity / factor;
+        bulkOperations.push({
+          updateOne: {
+            filter: { _id: product._id },
+            update: { $inc: { stock: qtyToAdd } },
+          },
+        });
       }
+    }
+
+    if (bulkOperations.length > 0) {
+      await Product.bulkWrite(bulkOperations, { session });
     }
 
     await Sale.deleteOne({
@@ -622,6 +683,18 @@ export const processPurchase = async (req: AuthRequest, res: Response) => {
     }
 
     const processedItems = [];
+    
+    // Pre-fetch all original products
+    const productIds = items.map((i: any) => i.productId.toString());
+    const originalProducts = await Product.find({
+      _id: { $in: productIds },
+      tenantId: req.tenantId,
+    }).session(session);
+
+    const originalProductMap = new Map();
+    originalProducts.forEach((p) => originalProductMap.set(p._id.toString(), p));
+
+    const bulkOperations = [];
 
     for (const item of items) {
       const { productId, quantity, purchasePrice, sellingPrice, mrp, name, unit, taxRate, taxAmount: itemTaxAmount, hsnCode } = item;
@@ -631,14 +704,12 @@ export const processPurchase = async (req: AuthRequest, res: Response) => {
       if (Number(purchasePrice) < 0)
         throw new Error(`Purchase price for ${name || 'item'} cannot be negative`);
 
-      // 1. Find the selected product
-      const originalProduct = await Product.findOne({
-        _id: productId,
-        tenantId: req.tenantId,
-      }).session(session);
+      // 1. Find the selected product from memory
+      const originalProduct = originalProductMap.get(productId.toString());
       if (!originalProduct) throw new Error(`Product not found: ${productId}`);
 
       let targetProduct = originalProduct;
+      let isNewBatch = false;
 
       // 2. If price/mrp/sellingPrice differs, find or create a new batch
       const numPurchasePrice = Number(purchasePrice);
@@ -683,13 +754,27 @@ export const processPurchase = async (req: AuthRequest, res: Response) => {
             gstRate: taxRate !== undefined ? taxRate : originalProduct.gstRate
           });
           await targetProduct.save({ session });
+          isNewBatch = true;
         }
       }
 
-      // Update Target Product Stock
+      // Update Target Product Stock in memory
       targetProduct.stock += Number(quantity);
       targetProduct.purchasePrice = numPurchasePrice;
-      await targetProduct.save({ session });
+      
+      if (isNewBatch) {
+        await targetProduct.save({ session });
+      } else {
+        bulkOperations.push({
+          updateOne: {
+            filter: { _id: targetProduct._id },
+            update: {
+              $inc: { stock: Number(quantity) },
+              $set: { purchasePrice: numPurchasePrice }
+            }
+          }
+        });
+      }
 
       processedItems.push({
         productId: targetProduct._id,
@@ -701,6 +786,10 @@ export const processPurchase = async (req: AuthRequest, res: Response) => {
         taxAmount: itemTaxAmount || 0,
         hsnCode: hsnCode || targetProduct.hsnCode || ""
       });
+    }
+
+    if (bulkOperations.length > 0) {
+      await Product.bulkWrite(bulkOperations, { session });
     }
 
     // 3. Create Purchase Record
@@ -759,15 +848,32 @@ export const updatePurchase = async (req: AuthRequest, res: Response) => {
     }).session(session);
     if (!oldPurchase) throw new Error("Purchase not found");
 
-    // 1. Revert Old Stock from all items
+    // 1. Fetch all products from old and new items
+    const oldProductIds = oldPurchase.items.map((i: any) => i.productId.toString());
+    const newProductIds = items.map((i: any) => i.productId.toString());
+    const allProductIds = [...new Set([...oldProductIds, ...newProductIds])];
+
+    const products = await Product.find({
+      _id: { $in: allProductIds },
+      tenantId: req.tenantId,
+    }).session(session);
+
+    const productMap = new Map();
+    products.forEach((p) => productMap.set(p._id.toString(), p));
+
+    const bulkOperations = [];
+
+    // 2. Revert Old Stock from all items
     for (const oldItem of oldPurchase.items) {
-      const oldProduct = await Product.findOne({
-        _id: oldItem.productId,
-        tenantId: req.tenantId,
-      }).session(session);
+      const oldProduct = productMap.get(oldItem.productId.toString());
       if (oldProduct) {
         oldProduct.stock -= Number(oldItem.quantity);
-        await oldProduct.save({ session });
+        bulkOperations.push({
+          updateOne: {
+            filter: { _id: oldProduct._id },
+            update: { $inc: { stock: -Number(oldItem.quantity) } },
+          },
+        });
       }
     }
 
@@ -777,17 +883,15 @@ export const updatePurchase = async (req: AuthRequest, res: Response) => {
 
     const processedItems = [];
 
-    // 2. Process New Items
+    // 3. Process New Items
     for (const item of items) {
       const { productId, quantity, purchasePrice, sellingPrice, mrp, name, unit, taxRate, taxAmount: itemTaxAmount, hsnCode } = item;
 
-      const selectedProduct = await Product.findOne({
-        _id: productId,
-        tenantId: req.tenantId,
-      }).session(session);
+      const selectedProduct = productMap.get(productId.toString());
       if (!selectedProduct) throw new Error(`Selected product not found: ${productId}`);
 
       let targetProduct = selectedProduct;
+      let isNewBatch = false;
 
       const numPurchasePrice = Number(purchasePrice);
       const numSellingPrice = sellingPrice !== undefined ? Number(sellingPrice) : selectedProduct.pricePerUnit;
@@ -830,12 +934,27 @@ export const updatePurchase = async (req: AuthRequest, res: Response) => {
             gstRate: taxRate !== undefined ? taxRate : selectedProduct.gstRate
           });
           await targetProduct.save({ session });
+          isNewBatch = true;
         }
       }
 
-      // 3. Apply New Stock
+      // Apply New Stock in memory
       targetProduct.stock += Number(quantity);
-      await targetProduct.save({ session });
+      targetProduct.purchasePrice = numPurchasePrice;
+
+      if (isNewBatch) {
+        await targetProduct.save({ session });
+      } else {
+        bulkOperations.push({
+          updateOne: {
+            filter: { _id: targetProduct._id },
+            update: {
+              $inc: { stock: Number(quantity) },
+              $set: { purchasePrice: numPurchasePrice }
+            },
+          },
+        });
+      }
 
       processedItems.push({
         productId: targetProduct._id,
@@ -847,6 +966,10 @@ export const updatePurchase = async (req: AuthRequest, res: Response) => {
         taxAmount: itemTaxAmount || 0,
         hsnCode: hsnCode || targetProduct.hsnCode || ""
       });
+    }
+
+    if (bulkOperations.length > 0) {
+      await Product.bulkWrite(bulkOperations, { session });
     }
 
     // 4. Update Purchase Record
@@ -889,15 +1012,31 @@ export const deletePurchase = async (req: AuthRequest, res: Response) => {
     if (!purchase) throw new Error("Purchase not found");
 
     // Revert Stock for all items
+    const productIds = purchase.items.map((i: any) => i.productId.toString());
+    const products = await Product.find({
+      _id: { $in: productIds },
+      tenantId: req.tenantId,
+    }).session(session);
+
+    const productMap = new Map();
+    products.forEach((p) => productMap.set(p._id.toString(), p));
+
+    const bulkOperations = [];
+
     for (const item of purchase.items) {
-      const product = await Product.findOne({
-        _id: item.productId,
-        tenantId: req.tenantId,
-      }).session(session);
+      const product = productMap.get(item.productId.toString());
       if (product) {
-        product.stock -= Number(item.quantity);
-        await product.save({ session });
+        bulkOperations.push({
+          updateOne: {
+            filter: { _id: product._id },
+            update: { $inc: { stock: -Number(item.quantity) } },
+          },
+        });
       }
+    }
+
+    if (bulkOperations.length > 0) {
+      await Product.bulkWrite(bulkOperations, { session });
     }
 
     await Purchase.deleteOne({

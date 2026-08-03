@@ -165,5 +165,7 @@ const saleSchema: Schema = new mongoose.Schema({
 // Indices for performance and uniqueness
 saleSchema.index({ tenantId: 1, invoiceNumber: 1 }, { unique: true });
 saleSchema.index({ tenantId: 1, date: -1 });
+saleSchema.index({ tenantId: 1, status: 1 });
+saleSchema.index({ tenantId: 1, createdAt: -1 });
 
 export default mongoose.model<ISale>('Sale', saleSchema);
