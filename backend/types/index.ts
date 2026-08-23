@@ -27,6 +27,9 @@ export interface ITenant extends Document {
   stateName?: string;
   stateCode?: string;
   invoiceFormat?: 'thermal' | 'modern' | 'gst';
+  customDomain?: string;
+  customDomainStatus?: 'pending' | 'active' | 'failed';
+  customDomainVerifiedAt?: Date;
   createdAt: Date;
 }
 
