@@ -155,6 +155,7 @@ const Inventory = () => {
     pricePerUnit: string;
     purchasePrice: string;
     mrp: string;
+    discountPercent: string;
     barcode: string;
     batchNumber: string;
     hsnCode: string;
@@ -173,6 +174,7 @@ const Inventory = () => {
     pricePerUnit: "",
     purchasePrice: "",
     mrp: "",
+    discountPercent: "",
     barcode: "",
     batchNumber: "",
     hsnCode: "",
@@ -242,6 +244,7 @@ const Inventory = () => {
       pricePerUnit: "",
       purchasePrice: "",
       mrp: "",
+      discountPercent: "",
       barcode: "",
       batchNumber: "",
       hsnCode: "",
@@ -254,6 +257,58 @@ const Inventory = () => {
     });
     setAdjustmentType("add");
     setAdjustmentValue("");
+  };
+
+  // ── 3-way price sync helpers ──────────────────────────────────────────────
+  // All handlers use functional setFormData(prev => ...) to avoid stale closure.
+
+  // MRP changes → if discount > 0 recalculate sale; else if sale exists recalculate discount
+  const handleMrpChange = (val: string) => {
+    const mrp = parseFloat(val);
+    setFormData((prev) => {
+      const disc = parseFloat(prev.discountPercent);
+      const sale = parseFloat(prev.pricePerUnit);
+      if (!isNaN(mrp) && mrp > 0) {
+        if (!isNaN(disc) && disc > 0) {
+          // Discount is genuinely set (>0) → recalculate sale price
+          const newSale = parseFloat((mrp * (1 - disc / 100)).toFixed(2));
+          return { ...prev, mrp: val, pricePerUnit: newSale.toString() };
+        } else if (!isNaN(sale) && sale > 0) {
+          // Sale price is set → recalculate discount
+          const newDisc = parseFloat(((1 - sale / mrp) * 100).toFixed(2));
+          return { ...prev, mrp: val, discountPercent: newDisc > 0 ? newDisc.toString() : "" };
+        }
+      }
+      return { ...prev, mrp: val };
+    });
+  };
+
+  // Sale Price changes → if MRP exists recalculate discount
+  const handleSalePriceChange = (val: string) => {
+    const sale = parseFloat(val);
+    setFormData((prev) => {
+      const mrp = parseFloat(prev.mrp);
+      if (!isNaN(sale) && !isNaN(mrp) && mrp > 0) {
+        const newDisc = parseFloat(((1 - sale / mrp) * 100).toFixed(2));
+        // Only store discount if it's meaningfully > 0
+        return { ...prev, pricePerUnit: val, discountPercent: newDisc > 0 ? newDisc.toString() : "" };
+      }
+      return { ...prev, pricePerUnit: val };
+    });
+  };
+
+  // Discount changes → if MRP exists recalculate sale price
+  const handleDiscountChange = (val: string) => {
+    const disc = parseFloat(val);
+    setFormData((prev) => {
+      const mrp = parseFloat(prev.mrp);
+      if (!isNaN(disc) && disc > 0 && !isNaN(mrp) && mrp > 0) {
+        const newSale = parseFloat((mrp * (1 - disc / 100)).toFixed(2));
+        return { ...prev, discountPercent: val, pricePerUnit: newSale.toString() };
+      }
+      // disc = 0 or mrp not set: just store the typed value, don't force sale price
+      return { ...prev, discountPercent: val };
+    });
   };
 
   const generateBarcode = () => {
@@ -295,6 +350,7 @@ const Inventory = () => {
           pricePerUnit: "",
           purchasePrice: "",
           mrp: "",
+          discountPercent: "",
           barcode: "",
           batchNumber: "",
           hsnCode: "",
@@ -317,6 +373,7 @@ const Inventory = () => {
           pricePerUnit: "",
           purchasePrice: "",
           mrp: "",
+          discountPercent: "",
           barcode: "",
           batchNumber: "",
           hsnCode: "",
@@ -356,6 +413,12 @@ const Inventory = () => {
 
   const handleEdit = (product: Product) => {
     setEditingId(product._id || null);
+    // Auto-compute discount from MRP vs sale price
+    const mrp = product.mrp || 0;
+    const sale = product.pricePerUnit || 0;
+    const autoDiscount = mrp > 0 && sale > 0 && mrp >= sale
+      ? parseFloat(((1 - sale / mrp) * 100).toFixed(2))
+      : 0;
     setFormData({
       name: product.name,
       unit: product.unit,
@@ -364,6 +427,7 @@ const Inventory = () => {
       pricePerUnit: product.pricePerUnit.toString(),
       purchasePrice: product.purchasePrice.toString(),
       mrp: product.mrp.toString(),
+      discountPercent: autoDiscount > 0 ? autoDiscount.toString() : "",
       barcode: product.barcode || "",
       batchNumber: product.batchNumber || "",
       hsnCode: product.hsnCode || "",
@@ -1496,16 +1560,12 @@ const Inventory = () => {
                       className="w-full bg-white border border-primary-500 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-black shadow-md shadow-primary-100"
                       placeholder="Price to Customer per unit"
                       value={formData.pricePerUnit}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          pricePerUnit: e.target.value,
-                        })
-                      }
+                      onChange={(e) => handleSalePriceChange(e.target.value)}
                       onWheel={(e) => e.currentTarget.blur()}
                     />
                   </div>
-                  <div className="col-span-2">
+                  {/* MRP + Discount — 3-way sync */}
+                  <div>
                     <label className="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">
                       {t("common.mrp")}
                     </label>
@@ -1515,11 +1575,33 @@ const Inventory = () => {
                       className="w-full bg-white border border-slate-200 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold"
                       placeholder="Printed Price"
                       value={formData.mrp}
-                      onChange={(e) =>
-                        setFormData({ ...formData, mrp: e.target.value })
-                      }
+                      onChange={(e) => handleMrpChange(e.target.value)}
                       onWheel={(e) => e.currentTarget.blur()}
                     />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-black uppercase tracking-widest text-rose-400 mb-2 ml-1 flex items-center gap-1">
+                      <span>Discount %</span>
+                      {formData.discountPercent && (
+                        <span className="ml-1 px-1.5 py-0.5 bg-rose-100 text-rose-600 rounded-full text-[8px] font-black animate-pulse">
+                          Auto
+                        </span>
+                      )}
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step="any"
+                        className="w-full bg-rose-50 border-2 border-rose-200 rounded-2xl p-4 pr-10 text-rose-700 focus:ring-2 focus:ring-rose-400 focus:border-rose-400 transition-all font-black placeholder:text-rose-200"
+                        placeholder="0.00"
+                        value={formData.discountPercent}
+                        onChange={(e) => handleDiscountChange(e.target.value)}
+                        onWheel={(e) => e.currentTarget.blur()}
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-rose-400 font-black text-sm pointer-events-none">%</span>
+                    </div>
                   </div>
                 </div>
 

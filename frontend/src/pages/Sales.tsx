@@ -870,7 +870,13 @@ const Sales = () => {
                 conversionFactor: 1,
                 sellingPrice: product!.pricePerUnit,
                 originalSellingPrice: product!.pricePerUnit,
-                discountPercent: 0,
+                discountPercent: (() => {
+                  const mrp = product!.mrp || 0;
+                  const sale = product!.pricePerUnit || 0;
+                  return mrp > 0 && sale > 0 && mrp >= sale
+                    ? parseFloat(((1 - sale / mrp) * 100).toFixed(2))
+                    : 0;
+                })(),
                 purchasePrice: product!.purchasePrice,
                 mrp: product!.mrp || 0,
                 hsnCode: product!.hsnCode,
@@ -938,7 +944,13 @@ const Sales = () => {
             quantity: Number(qty),
             sellingPrice: price,
             originalSellingPrice: product.pricePerUnit,
-            discountPercent: 0,
+            discountPercent: (() => {
+              const mrp = product.mrp || 0;
+              const sale = product.pricePerUnit || 0;
+              return mrp > 0 && sale > 0 && mrp >= sale
+                ? parseFloat(((1 - sale / mrp) * 100).toFixed(2))
+                : 0;
+            })(),
             purchasePrice: product.purchasePrice,
             mrp: product.mrp,
             unit: product.unit,
@@ -1134,7 +1146,13 @@ const Sales = () => {
           quantity: i.quantity,
           sellingPrice: i.sellingPrice,
           originalSellingPrice: i.sellingPrice,
-          discountPercent: 0,
+          discountPercent: (() => {
+            const mrp = i.mrpAtTime || 0;
+            const sale = i.sellingPrice || 0;
+            return mrp > 0 && sale > 0 && mrp >= sale
+              ? parseFloat(((1 - sale / mrp) * 100).toFixed(2))
+              : 0;
+          })(),
           purchasePrice: i.purchasePriceAtTime,
           mrp: i.mrpAtTime,
           unit: i.unit,
