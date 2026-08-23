@@ -89,6 +89,8 @@ type CartItem = {
   name: string;
   quantity: number;
   sellingPrice: number;
+  originalSellingPrice: number; // base price before discount
+  discountPercent: number;       // 0–100 discount applied on this item
   purchasePrice: number;
   mrp: number;
   unit: string;
@@ -867,6 +869,8 @@ const Sales = () => {
                 unit: product!.unit,
                 conversionFactor: 1,
                 sellingPrice: product!.pricePerUnit,
+                originalSellingPrice: product!.pricePerUnit,
+                discountPercent: 0,
                 purchasePrice: product!.purchasePrice,
                 mrp: product!.mrp || 0,
                 hsnCode: product!.hsnCode,
@@ -933,6 +937,8 @@ const Sales = () => {
             name: product.name,
             quantity: Number(qty),
             sellingPrice: price,
+            originalSellingPrice: product.pricePerUnit,
+            discountPercent: 0,
             purchasePrice: product.purchasePrice,
             mrp: product.mrp,
             unit: product.unit,
@@ -1127,6 +1133,8 @@ const Sales = () => {
           name: pName || "Product",
           quantity: i.quantity,
           sellingPrice: i.sellingPrice,
+          originalSellingPrice: i.sellingPrice,
+          discountPercent: 0,
           purchasePrice: i.purchasePriceAtTime,
           mrp: i.mrpAtTime,
           unit: i.unit,
@@ -1911,7 +1919,18 @@ const Sales = () => {
                           <p className="font-bold text-slate-800 tracking-tight">
                             {item.name}
                           </p>
-                          <div className="flex items-center gap-2 mt-0.5">
+                          {/* Price info badges: Cost Price + MRP */}
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            {item.purchasePrice > 0 && (
+                              <span className="text-[9px] font-black uppercase tracking-widest text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded">
+                                Cost: ₹{item.purchasePrice.toLocaleString()}
+                              </span>
+                            )}
+                            {item.mrp > 0 && (
+                              <span className="text-[9px] font-black uppercase tracking-widest text-purple-500 bg-purple-50 px-1.5 py-0.5 rounded">
+                                MRP: ₹{item.mrp.toLocaleString()}
+                              </span>
+                            )}
                             {item.hsnCode && (
                               <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
                                 HSN: {item.hsnCode}
@@ -1933,7 +1952,7 @@ const Sales = () => {
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-2 mt-1">
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
                             <button
                               type="button"
                               onClick={() =>
@@ -1985,7 +2004,33 @@ const Sales = () => {
                             >
                               +
                             </button>
-                            <div className="flex items-center py-1 gap-2 px-4  bg-white border-2 border-slate-100 rounded-2xl hover:border-primary-500 transition-all group/price shadow-sm">
+                            {/* Discount % input */}
+                            <div className="flex items-center py-1 gap-1 px-2 bg-rose-50 border-2 border-rose-100 rounded-2xl hover:border-rose-400 transition-all group/disc shadow-sm">
+                              <span className="text-[10px] text-rose-400 font-black uppercase tracking-widest whitespace-nowrap">Disc%</span>
+                              <input
+                                type="number"
+                                min={0}
+                                max={100}
+                                step="any"
+                                value={item.discountPercent}
+                                onChange={(e) => {
+                                  const disc = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                                  const base = item.originalSellingPrice;
+                                  const newPrice = parseFloat((base * (1 - disc / 100)).toFixed(2));
+                                  setCart((prev) =>
+                                    prev.map((it, i) =>
+                                      i === idx
+                                        ? { ...it, discountPercent: disc, sellingPrice: newPrice }
+                                        : it,
+                                    ),
+                                  );
+                                }}
+                                onWheel={(e) => e.currentTarget.blur()}
+                                className="w-10 bg-transparent py-2 px-1 p-0 rounded-md border-none focus:ring-0 text-sm font-black text-rose-600"
+                              />
+                            </div>
+                            {/* Selling price input */}
+                            <div className="flex items-center py-1 gap-2 px-4 bg-white border-2 border-slate-100 rounded-2xl hover:border-primary-500 transition-all group/price shadow-sm">
                               <Edit
                                 size={14}
                                 className="text-slate-300 group-hover/price:text-primary-500 transition-colors"
@@ -1999,16 +2044,19 @@ const Sales = () => {
                                   value={item.sellingPrice}
                                   onChange={(e) => {
                                     const val = Number(e.target.value);
+                                    // When price edited manually, reset discount to 0
+                                    const base = item.originalSellingPrice || val;
+                                    const disc = base > 0 ? parseFloat(((1 - val / base) * 100).toFixed(1)) : 0;
                                     setCart((prev) =>
                                       prev.map((it, i) =>
                                         i === idx
-                                          ? { ...it, sellingPrice: val }
+                                          ? { ...it, sellingPrice: val, discountPercent: Math.max(0, disc) }
                                           : it,
                                       ),
                                     );
                                   }}
                                   onWheel={(e) => e.currentTarget.blur()}
-                                  className="w-20 bg-transparent py-2 px-2  p-0 rounded-md border-slate-100 focus:ring-0 text-sm font-black hover:border-primary-500"
+                                  className="w-20 bg-transparent py-2 px-2 p-0 rounded-md border-slate-100 focus:ring-0 text-sm font-black hover:border-primary-500"
                                 />
                               </div>
                             </div>
@@ -2963,6 +3011,8 @@ const Sales = () => {
                         name: p.name,
                         quantity: 1,
                         sellingPrice: p.pricePerUnit,
+                        originalSellingPrice: p.pricePerUnit,
+                        discountPercent: 0,
                         purchasePrice: p.purchasePrice,
                         mrp: p.mrp,
                         unit: p.unit,
