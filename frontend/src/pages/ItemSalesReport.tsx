@@ -79,17 +79,16 @@ const ItemSalesReport = () => {
       return row;
     });
 
-    const tableFoot = [
-      [
-        `Total Products: ${totalProducts}`,
-        totalQuantity.toString(),
-        "",
-        totalRevenue.toFixed(2),
-      ]
+    const footRow = [
+      `Total Products: ${totalProducts}`,
+      totalQuantity.toString(),
+      "",
+      totalRevenue.toFixed(2),
     ];
     if (user?.role === 'owner' || user?.role === 'super-admin') {
-      tableFoot[0].push(totalProfit.toFixed(2));
+      footRow.push(totalProfit.toFixed(2));
     }
+    const tableFoot = [footRow];
 
     autoTable(doc, {
       startY: 35,
