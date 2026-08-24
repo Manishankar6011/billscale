@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -19,7 +20,9 @@ import {
   MessageSquare,
   ShieldCheck,
   BarChart3,
-  PackageSearch
+  PackageSearch,
+  Keyboard,
+  X
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/utils";
@@ -38,6 +41,49 @@ const Layout = () => {
     ? Math.ceil((new Date(user.subscriptionExpiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) 
     : 0;
   const isAboutToExpire = daysLeft >= 0 && daysLeft <= 7;
+
+  const [showShortcuts, setShowShortcuts] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Alt (or Option on Mac) shortcuts
+      if (e.altKey) {
+        switch (e.code) {
+          case 'KeyS':
+            e.preventDefault();
+            navigate("/dashboard/sales", { state: { openModal: true } });
+            break;
+          case 'KeyP':
+            e.preventDefault();
+            navigate("/dashboard/purchases", { state: { openModal: true } });
+            break;
+          case 'KeyI':
+            e.preventDefault();
+            navigate("/dashboard/inventory");
+            break;
+          case 'KeyC':
+            e.preventDefault();
+            navigate("/dashboard/customers");
+            break;
+          case 'KeyD':
+            e.preventDefault();
+            navigate("/dashboard");
+            break;
+          case 'KeyR':
+            e.preventDefault();
+            navigate("/dashboard/reports");
+            break;
+          case 'KeyK':
+            e.preventDefault();
+            setShowShortcuts(prev => !prev);
+            break;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [navigate]);
 
   const navItems = [
     { name: t("common.dashboard"), path: "/dashboard", icon: LayoutDashboard },
@@ -130,6 +176,13 @@ const Layout = () => {
         <div className="mt-8 pt-6 border-t border-slate-100">
           <p className="px-4 mb-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Help & Support</p>
           <div className="space-y-1">
+            <button 
+              onClick={() => setShowShortcuts(true)}
+              className="flex w-full items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+            >
+              <Keyboard className="w-4 h-4" />
+              Keyboard Shortcuts
+            </button>
             <NavLink to="/dashboard/contact" className={({ isActive }) => cn("flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all", isActive ? "bg-primary-50 text-primary-600" : "text-slate-500 hover:bg-slate-50")}>
               <MessageSquare className="w-4 h-4" />
               Contact Us
@@ -276,6 +329,56 @@ const Layout = () => {
           <AIAssistant />
         </div>
       </main>
+
+      {/* Keyboard Shortcuts Modal */}
+      {showShortcuts && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-6 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <Keyboard className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800">Keyboard Shortcuts</h3>
+                  <p className="text-xs text-slate-500">Navigate faster using your keyboard</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowShortcuts(false)}
+                className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="space-y-3">
+                {[
+                  { key: 'Alt + S', desc: 'Create Sales Invoice' },
+                  { key: 'Alt + P', desc: 'Create Purchase Invoice' },
+                  { key: 'Alt + I', desc: 'Go to Inventory' },
+                  { key: 'Alt + C', desc: 'Go to Customers' },
+                  { key: 'Alt + D', desc: 'Go to Dashboard' },
+                  { key: 'Alt + R', desc: 'Go to Reports' },
+                  { key: 'Alt + K', desc: 'Show this Menu' },
+                ].map((shortcut) => (
+                  <div key={shortcut.key} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
+                    <span className="text-sm font-medium text-slate-600">{shortcut.desc}</span>
+                    <kbd className="px-2.5 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 font-mono shadow-sm">
+                      {shortcut.key}
+                    </kbd>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="p-4 bg-slate-50 text-center border-t border-slate-100">
+              <p className="text-[10px] font-medium text-slate-500">
+                Mac users can use <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded shadow-sm mx-0.5">Option</kbd> instead of Alt
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
