@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { Package, Calendar, Search, IndianRupee, Loader2 } from 'lucide-react';
+import { Package, Calendar, Search, IndianRupee, Loader2, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface ItemSale {
   _id: string;
@@ -45,6 +47,62 @@ const ItemSalesReport = () => {
 
   const totalQuantity = salesData.reduce((sum, item) => sum + item.totalQuantity, 0);
   const totalRevenue = salesData.reduce((sum, item) => sum + item.totalRevenue, 0);
+  const totalProfit = salesData.reduce((sum, item) => sum + (item.totalProfit || 0), 0);
+  const totalProducts = salesData.length;
+
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    
+    doc.setFontSize(20);
+    doc.setTextColor(30, 41, 59);
+    doc.text(user?.companyName || "BuildMate ERP", 14, 20);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Product Sales Report | ${startDate} to ${endDate}`, 14, 28);
+    
+    const tableColumn = ["Product Name", "Quantity Sold", "Unit", "Revenue"];
+    if (user?.role === 'owner' || user?.role === 'super-admin') {
+      tableColumn.push("Profit");
+    }
+
+    const tableRows = salesData.map(item => {
+      const row = [
+        item.name,
+        item.totalQuantity.toString(),
+        item.unit,
+        item.totalRevenue.toFixed(2),
+      ];
+      if (user?.role === 'owner' || user?.role === 'super-admin') {
+        row.push((item.totalProfit || 0).toFixed(2));
+      }
+      return row;
+    });
+
+    const tableFoot = [
+      [
+        `Total Products: ${totalProducts}`,
+        totalQuantity.toString(),
+        "",
+        totalRevenue.toFixed(2),
+      ]
+    ];
+    if (user?.role === 'owner' || user?.role === 'super-admin') {
+      tableFoot[0].push(totalProfit.toFixed(2));
+    }
+
+    autoTable(doc, {
+      startY: 35,
+      head: [tableColumn],
+      body: tableRows,
+      foot: tableFoot,
+      theme: "striped",
+      headStyles: { fillColor: [59, 130, 246] },
+      footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold' }
+    });
+
+    doc.save(`Product_Sales_Report_${startDate}_to_${endDate}.pdf`);
+  };
 
   return (
     <div className="space-y-6">
@@ -92,6 +150,15 @@ const ItemSalesReport = () => {
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
             Fetch Report
           </button>
+          {salesData.length > 0 && (
+            <button
+              onClick={exportToPDF}
+              className="w-full md:w-auto px-6 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-50 transition-all shadow-sm active:scale-95"
+            >
+              <Download className="w-5 h-5 text-blue-600" />
+              Download PDF
+            </button>
+          )}
         </div>
         {error && <p className="text-rose-500 text-sm mt-3">{error}</p>}
       </div>
@@ -127,12 +194,32 @@ const ItemSalesReport = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
-                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Product Name</th>
-                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Quantity Sold</th>
+                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Product Name
+                  {salesData.length > 0 && (
+                    <div className="text-[10px] text-slate-400 normal-case mt-0.5">Total Products: {totalProducts}</div>
+                  )}
+                </th>
+                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">
+                  Quantity Sold
+                  {salesData.length > 0 && (
+                    <div className="text-[10px] text-primary-600 normal-case mt-0.5">Total: {totalQuantity}</div>
+                  )}
+                </th>
                 <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Unit</th>
-                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Revenue</th>
+                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">
+                  Revenue
+                  {salesData.length > 0 && (
+                    <div className="text-[10px] text-emerald-600 normal-case mt-0.5">Total: ₹{totalRevenue.toLocaleString()}</div>
+                  )}
+                </th>
                 {(user?.role === 'owner' || user?.role === 'super-admin') && (
-                  <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Profit</th>
+                  <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">
+                    Profit
+                    {salesData.length > 0 && (
+                      <div className="text-[10px] text-blue-600 normal-case mt-0.5">Total: ₹{totalProfit.toLocaleString()}</div>
+                    )}
+                  </th>
                 )}
               </tr>
             </thead>
