@@ -25,7 +25,7 @@ export const sendSubscriptionEmail = async (email: string, companyName: string, 
                 </div>
 
                 <p>Start managing your business more efficiently today!</p>
-                <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard" 
+                <a href="${process.env.FRONTEND_URL || 'https://billscale.in'}/dashboard" 
                    style="display: inline-block; background-color: #4f46e5; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">
                    Go to Dashboard
                 </a>

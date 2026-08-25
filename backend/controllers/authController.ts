@@ -244,7 +244,12 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
 
         // Create reset URL (Point to Frontend)
         const host = req.get('host') || 'localhost:5000';
-        const frontendUrl = process.env.FRONTEND_URL || `${req.protocol}://${host.replace(':5000', ':5173')}`;
+        let frontendUrl = process.env.FRONTEND_URL;
+        if (!frontendUrl) {
+            frontendUrl = host.includes('localhost') || host.includes('127.0.0.1')
+                ? `${req.protocol}://${host.replace(':5000', ':5173')}`
+                : 'https://billscale.in';
+        }
         const resetUrl = `${frontendUrl}/reset-password/${resetToken}`;
 
         const message = `You are receiving this email because you (or someone else) has requested the reset of a password. Please make a put request to: \n\n ${resetUrl}`;

@@ -5,4 +5,4 @@ Allow: /login
 Disallow: /dashboard/*
 Disallow: /api/*
 
-Sitemap: https://buildmateerp.in/sitemap.xml
+Sitemap: https://billscale.in/sitemap.xml

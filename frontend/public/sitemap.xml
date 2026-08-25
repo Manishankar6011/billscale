@@ -2,21 +2,21 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
-    <loc>https://buildmateerp.in/</loc>
+    <loc>https://billscale.in/</loc>
     <lastmod>2026-04-11</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
-    <xhtml:link rel="alternate" hreflang="en" href="https://buildmateerp.in/?lng=en"/>
-    <xhtml:link rel="alternate" hreflang="hi" href="https://buildmateerp.in/?lng=hi"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://billscale.in/?lng=en"/>
+    <xhtml:link rel="alternate" hreflang="hi" href="https://billscale.in/?lng=hi"/>
   </url>
   <url>
-    <loc>https://buildmateerp.in/login</loc>
+    <loc>https://billscale.in/login</loc>
     <lastmod>2026-04-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://buildmateerp.in/register</loc>
+    <loc>https://billscale.in/register</loc>
     <lastmod>2026-04-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
