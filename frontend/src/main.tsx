@@ -23,6 +23,11 @@ axios.defaults.baseURL = import.meta.env.VITE_API_BASE_URL || '';
 // Automatic update registration for the PWA
 registerSW({ immediate: true })
 
+// Redirect Vercel domain to custom domain
+if (window.location.hostname === 'businessmate-plum.vercel.app') {
+  window.location.replace('https://billscale.in' + window.location.pathname + window.location.search);
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <HelmetProvider>
