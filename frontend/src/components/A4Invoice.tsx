@@ -140,7 +140,8 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                                     if (item.productId && typeof item.productId === 'object') {
                                         const p = item.productId as any;
                                         if (p.hasSubUnit && item.unit === p.subUnitName) {
-                                            mrp = (p.subUnitMrp && p.subUnitMrp > 0 && p.subUnitMrp < (p.mrp || 0)) ? p.subUnitMrp : ((p.mrp || 0) / (p.subUnitValue || 1));
+                                            const boxMrp = p.mrp || item.mrpAtTime || 0;
+                                            mrp = (p.subUnitMrp && p.subUnitMrp > 0 && p.subUnitMrp < boxMrp) ? p.subUnitMrp : (boxMrp / (p.subUnitValue || 1));
                                         }
                                     }
                                     return mrp;

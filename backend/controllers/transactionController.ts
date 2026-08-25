@@ -60,7 +60,7 @@ export const getSales = async (req: AuthRequest, res: Response) => {
 
     const [sales, totalCount, totals] = await Promise.all([
       Sale.find(query)
-        .populate("items.productId", "name unit hasSubUnit subUnitName subUnitValue subUnitMrp subUnitPurchasePrice subUnitSalePrice")
+        .populate("items.productId", "name unit mrp purchasePrice hasSubUnit subUnitName subUnitValue subUnitMrp subUnitPurchasePrice subUnitSalePrice")
         .populate("createdBy", "name")
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -329,7 +329,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     tenant.nextInvoiceNumber = currentInvoiceNum + 1;
     await tenant.save({ session });
 
-    await sale.populate("items.productId", "name unit hasSubUnit subUnitName subUnitValue subUnitMrp subUnitPurchasePrice subUnitSalePrice");
+    await sale.populate("items.productId", "name unit mrp purchasePrice hasSubUnit subUnitName subUnitValue subUnitMrp subUnitPurchasePrice subUnitSalePrice");
     await session.commitTransaction();
     res.status(201).json(sale);
   } catch (err: any) {
@@ -533,7 +533,7 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
 
     await oldSale.save({ session });
 
-    await oldSale.populate("items.productId", "name unit hasSubUnit subUnitName subUnitValue subUnitMrp subUnitPurchasePrice subUnitSalePrice");
+    await oldSale.populate("items.productId", "name unit mrp purchasePrice hasSubUnit subUnitName subUnitValue subUnitMrp subUnitPurchasePrice subUnitSalePrice");
     await session.commitTransaction();
     res.json(oldSale);
   } catch (err: any) {
@@ -636,7 +636,7 @@ export const getPurchases = async (req: AuthRequest, res: Response) => {
 
     const [purchases, totalCount] = await Promise.all([
       Purchase.find(query)
-        .populate("items.productId", "name unit hasSubUnit subUnitName subUnitValue subUnitMrp subUnitPurchasePrice subUnitSalePrice")
+        .populate("items.productId", "name unit mrp purchasePrice hasSubUnit subUnitName subUnitValue subUnitMrp subUnitPurchasePrice subUnitSalePrice")
         .sort({ date: -1 })
         .skip(skip)
         .limit(limit),
@@ -1060,7 +1060,7 @@ export const deletePurchase = async (req: AuthRequest, res: Response) => {
 export const getPublicSale = async (req: Request, res: Response) => {
   try {
     const sale = await Sale.findById(req.params.id)
-      .populate("items.productId", "name unit hasSubUnit subUnitName subUnitValue subUnitMrp subUnitPurchasePrice subUnitSalePrice")
+      .populate("items.productId", "name unit mrp purchasePrice hasSubUnit subUnitName subUnitValue subUnitMrp subUnitPurchasePrice subUnitSalePrice")
       .populate(
         "tenantId",
         "companyName phone address email logoUrl signature upiId billingEmail billingAddress name",
