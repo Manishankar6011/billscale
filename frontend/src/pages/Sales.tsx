@@ -968,7 +968,7 @@ const Sales = () => {
                 ? parseFloat(((1 - price / baseMrp) * 100).toFixed(2))
                 : 0;
             })(),
-            purchasePrice: isSub ? (product.subUnitPurchasePrice || calculatedCost) : product.purchasePrice,
+            purchasePrice: baseCost,
             mrp: baseMrp,
             unit: isSub ? (product.subUnitName || 'SubUnit') : product.unit,
             conversionFactor: isSub ? (product.subUnitValue || 1) : 1,
@@ -1171,8 +1171,30 @@ const Sales = () => {
               ? parseFloat(((1 - sale / mrp) * 100).toFixed(2))
               : 0;
           })(),
-          purchasePrice: i.purchasePriceAtTime,
-          mrp: i.mrpAtTime,
+          purchasePrice: (() => {
+            let cost = i.purchasePriceAtTime || 0;
+            if (i.productId && typeof i.productId === 'object') {
+              const p = i.productId as any;
+              if (p.hasSubUnit && i.unit === p.subUnitName) {
+                cost = (p.subUnitPurchasePrice && p.subUnitPurchasePrice > 0 && p.subUnitPurchasePrice < (p.purchasePrice || 0)) ? p.subUnitPurchasePrice : ((p.purchasePrice || 0) / (p.subUnitValue || 1));
+              } else if (i.unit === p.unit) {
+                cost = p.purchasePrice || 0;
+              }
+            }
+            return cost;
+          })(),
+          mrp: (() => {
+            let mrp = i.mrpAtTime || 0;
+            if (i.productId && typeof i.productId === 'object') {
+              const p = i.productId as any;
+              if (p.hasSubUnit && i.unit === p.subUnitName) {
+                mrp = (p.subUnitMrp && p.subUnitMrp > 0 && p.subUnitMrp < (p.mrp || 0)) ? p.subUnitMrp : ((p.mrp || 0) / (p.subUnitValue || 1));
+              } else if (i.unit === p.unit) {
+                mrp = p.mrp || 0;
+              }
+            }
+            return mrp;
+          })(),
           unit: i.unit,
           conversionFactor: i.conversionFactor,
           gstRate: i.taxRate,
@@ -1554,10 +1576,28 @@ const Sales = () => {
                   const isLastElement = index === sales.length - 1;
 
                   const totalMrp = (sale.items || []).reduce((acc, item) => {
-                    return acc + item.mrpAtTime * item.quantity;
+                    let mrp = item.mrpAtTime || 0;
+                    if (item.productId && typeof item.productId === 'object') {
+                      const p = item.productId as any;
+                      if (p.hasSubUnit && item.unit === p.subUnitName) {
+                        mrp = (p.subUnitMrp && p.subUnitMrp > 0 && p.subUnitMrp < (p.mrp || 0)) ? p.subUnitMrp : ((p.mrp || 0) / (p.subUnitValue || 1));
+                      } else if (item.unit === p.unit) {
+                        mrp = p.mrp || 0;
+                      }
+                    }
+                    return acc + mrp * item.quantity;
                   }, 0);
                   const totalCost = (sale.items || []).reduce((acc, item) => {
-                    return acc + item.purchasePriceAtTime * item.quantity;
+                    let cost = item.purchasePriceAtTime || 0;
+                    if (item.productId && typeof item.productId === 'object') {
+                      const p = item.productId as any;
+                      if (p.hasSubUnit && item.unit === p.subUnitName) {
+                        cost = (p.subUnitPurchasePrice && p.subUnitPurchasePrice > 0 && p.subUnitPurchasePrice < (p.purchasePrice || 0)) ? p.subUnitPurchasePrice : ((p.purchasePrice || 0) / (p.subUnitValue || 1));
+                      } else if (item.unit === p.unit) {
+                        cost = p.purchasePrice || 0;
+                      }
+                    }
+                    return acc + cost * item.quantity;
                   }, 0);
                   const additionalChargesTotal = (
                     sale.additionalItems || []

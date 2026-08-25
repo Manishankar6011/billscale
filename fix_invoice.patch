@@ -1,0 +1,20 @@
+--- frontend/src/components/A4Invoice.tsx
++++ frontend/src/components/A4Invoice.tsx
+@@ -135,7 +135,16 @@
+                                         {item.expiryDate && ` | Exp: ${item.expiryDate}`}
+                                     </p>
+                                 </td>
+-                                <td className="py-5 px-2 text-right font-bold text-black">₹{(item.mrpAtTime || 0).toFixed(0)}</td>
++                                <td className="py-5 px-2 text-right font-bold text-black">₹{(() => {
++                                    let mrp = item.mrpAtTime || 0;
++                                    if (item.productId && typeof item.productId === 'object') {
++                                        const p = item.productId as any;
++                                        if (p.hasSubUnit && item.unit === p.subUnitName) {
++                                            mrp = (p.subUnitMrp && p.subUnitMrp > 0 && p.subUnitMrp < (p.mrp || 0)) ? p.subUnitMrp : ((p.mrp || 0) / (p.subUnitValue || 1));
++                                        }
++                                    }
++                                    return mrp;
++                                })().toFixed(0)}</td>
+                                 <td className="py-5 px-2 text-center font-black text-black text-base">{item.quantity} <span className="text-[10px] font-medium text-slate-500 ml-0.5">{item.unit}</span></td>
+                                 <td className="py-5 px-2 text-right font-bold text-black">₹{(item.sellingPrice || 0).toFixed(0)}</td>
+                                 <td className="py-5 px-2 text-right font-black text-black text-base">₹{((item.quantity || 0) * (item.sellingPrice || 0) * (100 / (100 + (item.taxRate || 0)))).toFixed(2)}</td>

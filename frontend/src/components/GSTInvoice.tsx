@@ -263,7 +263,16 @@ const GSTInvoice: React.FC<GSTInvoiceProps> = ({
                     )}
                     {(item.batchNumber || item.expiryDate || item.mrpAtTime) && (
                       <div className="text-[10px] font-bold text-gray-600 mt-0.5">
-                        {item.mrpAtTime > 0 && <span>MRP: ₹{item.mrpAtTime}</span>}
+                        {(() => {
+                            let mrp = item.mrpAtTime || 0;
+                            if (item.productId && typeof item.productId === 'object') {
+                                const p = item.productId as any;
+                                if (p.hasSubUnit && item.unit === p.subUnitName) {
+                                    mrp = (p.subUnitMrp && p.subUnitMrp > 0 && p.subUnitMrp < (p.mrp || 0)) ? p.subUnitMrp : ((p.mrp || 0) / (p.subUnitValue || 1));
+                                }
+                            }
+                            return mrp > 0 ? <span>MRP: ₹{mrp}</span> : null;
+                        })()}
                         {item.batchNumber && <span> | B: {item.batchNumber}</span>}
                         {item.expiryDate && <span> | E: {item.expiryDate}</span>}
                       </div>
