@@ -60,7 +60,7 @@ export const getSales = async (req: AuthRequest, res: Response) => {
 
     const [sales, totalCount, totals] = await Promise.all([
       Sale.find(query)
-        .populate("items.productId", "name unit")
+        .populate("items.productId", "name unit mrp purchasePrice hasSubUnit subUnitName subUnitValue subUnitMrp subUnitPurchasePrice subUnitSalePrice")
         .populate("createdBy", "name")
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -245,8 +245,8 @@ export const processSale = async (req: AuthRequest, res: Response) => {
         unit: item.unit || product.unit,
         conversionFactor: conversionFactor,
         sellingPrice: Number(item.sellingPrice),
-        purchasePriceAtTime: product.purchasePrice,
-        mrpAtTime: product.mrp || 0,
+        purchasePriceAtTime: item.purchasePriceAtTime !== undefined ? item.purchasePriceAtTime : product.purchasePrice,
+        mrpAtTime: item.mrpAtTime !== undefined ? item.mrpAtTime : (product.mrp || 0),
         taxRate: itemTaxRate,
         taxAmount: itemTaxAmount,
         hsnCode: item.hsnCode || product.hsnCode || "",
@@ -329,7 +329,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     tenant.nextInvoiceNumber = currentInvoiceNum + 1;
     await tenant.save({ session });
 
-    await sale.populate("items.productId", "name unit");
+    await sale.populate("items.productId", "name unit mrp purchasePrice hasSubUnit subUnitName subUnitValue subUnitMrp subUnitPurchasePrice subUnitSalePrice");
     await session.commitTransaction();
     res.status(201).json(sale);
   } catch (err: any) {
@@ -469,8 +469,8 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
         unit: item.unit || product.unit,
         conversionFactor: conversionFactor,
         sellingPrice: Number(item.sellingPrice),
-        purchasePriceAtTime: item.purchasePriceAtTime || product.purchasePrice,
-        mrpAtTime: item.mrpAtTime || product.mrp || 0,
+        purchasePriceAtTime: item.purchasePriceAtTime !== undefined ? item.purchasePriceAtTime : product.purchasePrice,
+        mrpAtTime: item.mrpAtTime !== undefined ? item.mrpAtTime : (product.mrp || 0),
         taxRate: itemTaxRate,
         taxAmount: itemTaxAmount,
         hsnCode: item.hsnCode || product.hsnCode || "",
@@ -533,7 +533,7 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
 
     await oldSale.save({ session });
 
-    await oldSale.populate("items.productId", "name unit");
+    await oldSale.populate("items.productId", "name unit mrp purchasePrice hasSubUnit subUnitName subUnitValue subUnitMrp subUnitPurchasePrice subUnitSalePrice");
     await session.commitTransaction();
     res.json(oldSale);
   } catch (err: any) {
@@ -636,7 +636,7 @@ export const getPurchases = async (req: AuthRequest, res: Response) => {
 
     const [purchases, totalCount] = await Promise.all([
       Purchase.find(query)
-        .populate("items.productId", "name unit")
+        .populate("items.productId", "name unit mrp purchasePrice hasSubUnit subUnitName subUnitValue subUnitMrp subUnitPurchasePrice subUnitSalePrice")
         .sort({ date: -1 })
         .skip(skip)
         .limit(limit),
@@ -697,7 +697,7 @@ export const processPurchase = async (req: AuthRequest, res: Response) => {
     const bulkOperations = [];
 
     for (const item of items) {
-      const { productId, quantity, purchasePrice, sellingPrice, mrp, name, unit, taxRate, taxAmount: itemTaxAmount, hsnCode } = item;
+      const { productId, quantity, purchasePrice, sellingPrice, mrp, name, unit, conversionFactor = 1, taxRate, taxAmount: itemTaxAmount, hsnCode } = item;
 
       if (Number(quantity) <= 0)
         throw new Error(`Quantity for ${name || 'item'} must be greater than 0`);
@@ -715,6 +715,7 @@ export const processPurchase = async (req: AuthRequest, res: Response) => {
       const numPurchasePrice = Number(purchasePrice);
       const numSellingPrice = sellingPrice !== undefined ? Number(sellingPrice) : originalProduct.pricePerUnit;
       const numMRP = mrp !== undefined ? Number(mrp) : originalProduct.mrp;
+      const numConversionFactor = Number(conversionFactor) || 1;
 
       if (
         numPurchasePrice !== originalProduct.purchasePrice ||
@@ -759,7 +760,7 @@ export const processPurchase = async (req: AuthRequest, res: Response) => {
       }
 
       // Update Target Product Stock in memory
-      targetProduct.stock += Number(quantity);
+      targetProduct.stock += Number(quantity) / numConversionFactor;
       targetProduct.purchasePrice = numPurchasePrice;
       
       if (isNewBatch) {
@@ -769,7 +770,7 @@ export const processPurchase = async (req: AuthRequest, res: Response) => {
           updateOne: {
             filter: { _id: targetProduct._id },
             update: {
-              $inc: { stock: Number(quantity) },
+              $inc: { stock: Number(quantity) / numConversionFactor },
               $set: { purchasePrice: numPurchasePrice }
             }
           }
@@ -781,6 +782,7 @@ export const processPurchase = async (req: AuthRequest, res: Response) => {
         name: name || targetProduct.name,
         quantity: Number(quantity),
         unit: unit || targetProduct.unit,
+        conversionFactor: numConversionFactor,
         purchasePrice: numPurchasePrice,
         taxRate: taxRate || 0,
         taxAmount: itemTaxAmount || 0,
@@ -1058,7 +1060,7 @@ export const deletePurchase = async (req: AuthRequest, res: Response) => {
 export const getPublicSale = async (req: Request, res: Response) => {
   try {
     const sale = await Sale.findById(req.params.id)
-      .populate("items.productId", "name unit")
+      .populate("items.productId", "name unit mrp purchasePrice hasSubUnit subUnitName subUnitValue subUnitMrp subUnitPurchasePrice subUnitSalePrice")
       .populate(
         "tenantId",
         "companyName phone address email logoUrl signature upiId billingEmail billingAddress name",

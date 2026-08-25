@@ -63,6 +63,17 @@ export interface IProduct extends Document {
   drugSchedule?: string;
   rackLocation?: string;
   expiryDate?: Date;
+  
+  // Subunit fields
+  hasSubUnit?: boolean;
+  subUnitName?: string;
+  subUnitValue?: number;
+  subUnitMrp?: number;
+  subUnitSalePrice?: number;
+  subUnitPurchasePrice?: number;
+  subUnitBarcode?: string;
+  subUnitDiscount?: number;
+
   createdAt: Date;
 }
 
@@ -90,6 +101,7 @@ export interface IPurchase extends Document {
     name: string;
     quantity: number;
     unit: string;
+    conversionFactor?: number;
     purchasePrice: number;
     taxRate?: number;
     taxAmount?: number;

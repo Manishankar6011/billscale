@@ -1176,10 +1176,9 @@ const Sales = () => {
             if (i.productId && typeof i.productId === 'object') {
               const p = i.productId as any;
               if (p.hasSubUnit && i.unit === p.subUnitName) {
-                const boxCost = p.purchasePrice || i.purchasePriceAtTime || 0;
-                cost = (p.subUnitPurchasePrice && p.subUnitPurchasePrice > 0 && p.subUnitPurchasePrice < boxCost) ? p.subUnitPurchasePrice : (boxCost / (p.subUnitValue || 1));
+                cost = (p.subUnitPurchasePrice && p.subUnitPurchasePrice > 0 && p.subUnitPurchasePrice < (p.purchasePrice || 0)) ? p.subUnitPurchasePrice : ((p.purchasePrice || 0) / (p.subUnitValue || 1));
               } else if (i.unit === p.unit) {
-                cost = p.purchasePrice || i.purchasePriceAtTime || 0;
+                cost = p.purchasePrice || 0;
               }
             }
             return cost;
@@ -1189,10 +1188,9 @@ const Sales = () => {
             if (i.productId && typeof i.productId === 'object') {
               const p = i.productId as any;
               if (p.hasSubUnit && i.unit === p.subUnitName) {
-                const boxMrp = p.mrp || i.mrpAtTime || 0;
-                mrp = (p.subUnitMrp && p.subUnitMrp > 0 && p.subUnitMrp < boxMrp) ? p.subUnitMrp : (boxMrp / (p.subUnitValue || 1));
+                mrp = (p.subUnitMrp && p.subUnitMrp > 0 && p.subUnitMrp < (p.mrp || 0)) ? p.subUnitMrp : ((p.mrp || 0) / (p.subUnitValue || 1));
               } else if (i.unit === p.unit) {
-                mrp = p.mrp || i.mrpAtTime || 0;
+                mrp = p.mrp || 0;
               }
             }
             return mrp;
@@ -1582,10 +1580,9 @@ const Sales = () => {
                     if (item.productId && typeof item.productId === 'object') {
                       const p = item.productId as any;
                       if (p.hasSubUnit && item.unit === p.subUnitName) {
-                        const boxMrp = p.mrp || item.mrpAtTime || 0;
-                        mrp = (p.subUnitMrp && p.subUnitMrp > 0 && p.subUnitMrp < boxMrp) ? p.subUnitMrp : (boxMrp / (p.subUnitValue || 1));
+                        mrp = (p.subUnitMrp && p.subUnitMrp > 0 && p.subUnitMrp < (p.mrp || 0)) ? p.subUnitMrp : ((p.mrp || 0) / (p.subUnitValue || 1));
                       } else if (item.unit === p.unit) {
-                        mrp = p.mrp || item.mrpAtTime || 0;
+                        mrp = p.mrp || 0;
                       }
                     }
                     return acc + mrp * item.quantity;
@@ -1595,10 +1592,9 @@ const Sales = () => {
                     if (item.productId && typeof item.productId === 'object') {
                       const p = item.productId as any;
                       if (p.hasSubUnit && item.unit === p.subUnitName) {
-                        const boxCost = p.purchasePrice || item.purchasePriceAtTime || 0;
-                        cost = (p.subUnitPurchasePrice && p.subUnitPurchasePrice > 0 && p.subUnitPurchasePrice < boxCost) ? p.subUnitPurchasePrice : (boxCost / (p.subUnitValue || 1));
+                        cost = (p.subUnitPurchasePrice && p.subUnitPurchasePrice > 0 && p.subUnitPurchasePrice < (p.purchasePrice || 0)) ? p.subUnitPurchasePrice : ((p.purchasePrice || 0) / (p.subUnitValue || 1));
                       } else if (item.unit === p.unit) {
-                        cost = p.purchasePrice || item.purchasePriceAtTime || 0;
+                        cost = p.purchasePrice || 0;
                       }
                     }
                     return acc + cost * item.quantity;

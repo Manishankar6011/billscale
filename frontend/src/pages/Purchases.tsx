@@ -195,10 +195,13 @@ const Purchases = () => {
       name: item.name,
       quantity: item.quantity,
       unit: item.unit,
+      conversionFactor: item.conversionFactor || 1,
       purchasePrice: item.purchasePrice,
       taxRate: item.taxRate || 0,
       taxAmount: item.taxAmount || 0,
-      hsnCode: item.hsnCode || ""
+      hsnCode: item.hsnCode || "",
+      isSubUnit: Boolean(item.conversionFactor && item.conversionFactor > 1),
+      product: typeof item.productId === 'string' ? null : item.productId
     })));
     setIsEditing(true);
     setEditingId(purchase._id!);
@@ -214,10 +217,13 @@ const Purchases = () => {
       name: product.name,
       quantity: 1,
       unit: product.unit,
+      conversionFactor: 1,
       purchasePrice: product.purchasePrice || 0,
       taxRate: product.gstRate || 0,
       taxAmount: 0,
-      hsnCode: product.hsnCode || ""
+      hsnCode: product.hsnCode || "",
+      isSubUnit: false,
+      product: product
     }]);
   };
 
@@ -494,7 +500,21 @@ const Purchases = () => {
                               </div>
                               <div>
                                 <p className="text-sm font-black text-slate-800">{p.name}</p>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Current Stock: {p.stock} {p.unit}</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                  Current Stock: {p.hasSubUnit && p.subUnitValue ? (
+                                    <>
+                                      {Math.floor(Number(p.stock))} {p.unit}
+                                      {Math.round((Number(p.stock) - Math.floor(Number(p.stock))) * p.subUnitValue) > 0 && (
+                                        <>, {Math.round((Number(p.stock) - Math.floor(Number(p.stock))) * p.subUnitValue)} {p.subUnitName}</>
+                                      )}
+                                      <span className="ml-1 text-indigo-400 opacity-80">
+                                        (1 {p.unit} = {p.subUnitValue} {p.subUnitName})
+                                      </span>
+                                    </>
+                                  ) : (
+                                    `${p.stock} ${p.unit}`
+                                  )}
+                                </p>
                               </div>
                             </div>
                             <Plus size={20} className="text-primary-500" />
@@ -537,7 +557,37 @@ const Purchases = () => {
                                   onChange={(e) => updateCartItem(index, "quantity", Number(e.target.value))}
                                   className="w-16 px-2 py-2 bg-slate-50 border border-slate-100 rounded-xl font-bold text-sm outline-none"
                                 />
-                                <span className="text-[10px] font-black text-slate-400 uppercase">{item.unit}</span>
+                                {item.product?.hasSubUnit ? (
+                                  <select
+                                    value={item.isSubUnit ? 'subunit' : 'unit'}
+                                    onChange={(e) => {
+                                      const isSub = e.target.value === 'subunit';
+                                      const p = item.product;
+                                      const uName = isSub ? (p.subUnitName || 'SubUnit') : p.unit;
+                                      const cFactor = isSub ? (p.subUnitValue || 1) : 1;
+                                      const pPrice = isSub ? (p.subUnitPurchasePrice || p.purchasePrice) : p.purchasePrice;
+                                      
+                                      const newCart = [...cart];
+                                      newCart[index] = {
+                                        ...newCart[index],
+                                        isSubUnit: isSub,
+                                        unit: uName,
+                                        conversionFactor: cFactor,
+                                        purchasePrice: pPrice
+                                      };
+                                      // recalculate tax
+                                      const totalBeforeTax = newCart[index].quantity * newCart[index].purchasePrice;
+                                      newCart[index].taxAmount = (totalBeforeTax * (newCart[index].taxRate / 100));
+                                      setCart(newCart);
+                                    }}
+                                    className="text-[10px] font-black text-indigo-600 uppercase bg-indigo-50 border-none rounded outline-none p-1 w-16"
+                                  >
+                                    <option value="unit">{item.product.unit}</option>
+                                    <option value="subunit">{item.product.subUnitName || 'SubUnit'}</option>
+                                  </select>
+                                ) : (
+                                  <span className="text-[10px] font-black text-slate-400 uppercase">{item.unit}</span>
+                                )}
                               </div>
                             </td>
                             <td className="px-6 py-3 w-40">

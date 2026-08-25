@@ -23,7 +23,8 @@ export const getProducts = async (req: AuthRequest, res: Response) => {
         if (search) {
             query.$or = [
                 { name: { $regex: search, $options: 'i' } },
-                { barcode: { $regex: search, $options: 'i' } }
+                { barcode: { $regex: search, $options: 'i' } },
+                { subUnitBarcode: { $regex: search, $options: 'i' } }
             ];
         }
 
@@ -88,7 +89,13 @@ export const getProductByBarcode = async (req: AuthRequest, res: Response) => {
         const { barcode } = req.params;
         const tenantId = new mongoose.Types.ObjectId(req.tenantId as string);
         
-        const product = await Product.findOne({ tenantId, barcode: barcode.trim() });
+        const product = await Product.findOne({
+            tenantId,
+            $or: [
+                { barcode: barcode.trim() },
+                { subUnitBarcode: barcode.trim() }
+            ]
+        });
         
         if (!product) {
             return res.status(404).json({ message: 'Product not found' });
