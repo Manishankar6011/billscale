@@ -15,10 +15,14 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import {
   Plus,
+  Save,
+  Tag,
   Search,
   Box,
+  Layers,
   Edit2,
   Trash2,
+  AlertTriangle,
   Barcode,
   Scan,
   Loader2,
@@ -166,6 +170,14 @@ const Inventory = () => {
     drugSchedule: string;
     rackLocation: string;
     expiryDate: string;
+    hasSubUnit: boolean;
+    subUnitName: string;
+    subUnitValue: string;
+    subUnitMrp: string;
+    subUnitSalePrice: string;
+    subUnitPurchasePrice: string;
+    subUnitBarcode: string;
+    subUnitDiscount: string;
   }>({
     name: "",
     unit: "piece",
@@ -184,6 +196,14 @@ const Inventory = () => {
     drugSchedule: "",
     rackLocation: "",
     expiryDate: "",
+    hasSubUnit: false,
+    subUnitName: "",
+    subUnitValue: "",
+    subUnitMrp: "",
+    subUnitSalePrice: "",
+    subUnitPurchasePrice: "",
+    subUnitBarcode: "",
+    subUnitDiscount: "",
   });
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [showLeaveWarning, setShowLeaveWarning] = useState(false);
@@ -254,6 +274,14 @@ const Inventory = () => {
       drugSchedule: "",
       rackLocation: "",
       expiryDate: "",
+      hasSubUnit: false,
+      subUnitName: "",
+      subUnitValue: "",
+      subUnitMrp: "",
+      subUnitSalePrice: "",
+      subUnitPurchasePrice: "",
+      subUnitBarcode: "",
+      subUnitDiscount: "",
     });
     setAdjustmentType("add");
     setAdjustmentValue("");
@@ -360,6 +388,14 @@ const Inventory = () => {
           drugSchedule: "",
           rackLocation: "",
           expiryDate: "",
+          hasSubUnit: false,
+          subUnitName: "",
+          subUnitValue: "",
+          subUnitMrp: "",
+          subUnitSalePrice: "",
+          subUnitPurchasePrice: "",
+          subUnitBarcode: "",
+          subUnitDiscount: "",
         });
         setTimeout(() => nameInputRef.current?.focus(), 100);
       } else {
@@ -383,6 +419,14 @@ const Inventory = () => {
           drugSchedule: "",
           rackLocation: "",
           expiryDate: "",
+          hasSubUnit: false,
+          subUnitName: "",
+          subUnitValue: "",
+          subUnitMrp: "",
+          subUnitSalePrice: "",
+          subUnitPurchasePrice: "",
+          subUnitBarcode: "",
+          subUnitDiscount: "",
         });
       }
     },
@@ -437,6 +481,14 @@ const Inventory = () => {
       drugSchedule: product.drugSchedule || "",
       rackLocation: product.rackLocation || "",
       expiryDate: product.expiryDate ? format(new Date(product.expiryDate), "yyyy-MM-dd") : "",
+      hasSubUnit: product.hasSubUnit || false,
+      subUnitName: product.subUnitName || "",
+      subUnitValue: product.subUnitValue ? product.subUnitValue.toString() : "",
+      subUnitMrp: product.subUnitMrp ? product.subUnitMrp.toString() : "",
+      subUnitSalePrice: product.subUnitSalePrice ? product.subUnitSalePrice.toString() : "",
+      subUnitPurchasePrice: product.subUnitPurchasePrice ? product.subUnitPurchasePrice.toString() : "",
+      subUnitBarcode: product.subUnitBarcode || "",
+      subUnitDiscount: product.subUnitDiscount ? product.subUnitDiscount.toString() : "",
     });
     setIsModalOpen(true);
   };
@@ -467,6 +519,14 @@ const Inventory = () => {
       drugSchedule: formData.drugSchedule,
       rackLocation: formData.rackLocation,
       expiryDate: formData.expiryDate || undefined,
+      hasSubUnit: formData.hasSubUnit,
+      subUnitName: formData.subUnitName,
+      subUnitValue: Number(formData.subUnitValue),
+      subUnitMrp: Number(formData.subUnitMrp),
+      subUnitSalePrice: Number(formData.subUnitSalePrice),
+      subUnitPurchasePrice: Number(formData.subUnitPurchasePrice),
+      subUnitBarcode: formData.subUnitBarcode,
+      subUnitDiscount: Number(formData.subUnitDiscount),
     };
     saveMutation.mutate(data);
   };
@@ -1160,10 +1220,22 @@ const Inventory = () => {
                   <p
                     className={`text-2xl font-black ${isLowStock ? "text-rose-600" : "text-slate-800"}`}
                   >
-                    {Number(product.stock).toFixed(2)}{" "}
-                    <span className="text-sm font-medium text-slate-400">
-                      {product.unit}
-                    </span>
+                    {product.hasSubUnit && product.subUnitValue ? (
+                      <>
+                        {Math.floor(Number(product.stock))}{" "}
+                        <span className="text-sm font-medium text-slate-400">{product.unit}</span>
+                        <span className="mx-1 text-slate-300">,</span>
+                        {Math.round((Number(product.stock) - Math.floor(Number(product.stock))) * product.subUnitValue)}{" "}
+                        <span className="text-sm font-medium text-slate-400">{product.subUnitName}</span>
+                      </>
+                    ) : (
+                      <>
+                        {Number(product.stock).toFixed(2)}{" "}
+                        <span className="text-sm font-medium text-slate-400">
+                          {product.unit}
+                        </span>
+                      </>
+                    )}
                   </p>
                   <div className="mt-1 flex items-center gap-1.5 grayscale opacity-70 group-hover:grayscale-0 group-hover:opacity-100 transition-all">
                     <div className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-md text-[9px] font-black uppercase tracking-tighter">
@@ -1725,6 +1797,210 @@ const Inventory = () => {
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* Subunit Configuration Section */}
+              <div className="p-5 bg-indigo-50/50 rounded-[28px] border-2 border-indigo-100 mt-6 relative overflow-hidden group">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-indigo-200/40 to-transparent rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-150 duration-700"></div>
+                <div className="flex items-center justify-between mb-4 relative z-10">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600">
+                      <Layers size={20} />
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-black text-indigo-400 uppercase tracking-widest">
+                        Advanced
+                      </p>
+                      <h4 className="font-bold text-indigo-900 text-sm">
+                        Enable Subunits (Fractional Sale)
+                      </h4>
+                    </div>
+                  </div>
+                  <div
+                    onClick={() =>
+                      setFormData({
+                        ...formData,
+                        hasSubUnit: !formData.hasSubUnit,
+                      })
+                    }
+                    className={`w-14 h-8 rounded-full transition-all cursor-pointer relative ${formData.hasSubUnit ? "bg-indigo-500" : "bg-slate-300"}`}
+                  >
+                    <div
+                      className={`absolute top-1.5 bottom-1.5 w-5 h-5 bg-white rounded-full shadow-sm transition-all ${formData.hasSubUnit ? "right-1.5" : "left-1.5"}`}
+                    ></div>
+                  </div>
+                </div>
+
+                {formData.hasSubUnit && (
+                  <div className="space-y-4 relative z-10 animate-in slide-in-from-top-4 duration-300">
+                    <div className="grid grid-cols-2 gap-4 bg-white p-4 rounded-2xl border border-indigo-50">
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                          Subunit Name (e.g. piece)
+                        </label>
+                        <input
+                          type="text"
+                          className="w-full bg-slate-50 border border-slate-100 rounded-xl py-2 px-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                          value={formData.subUnitName}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              subUnitName: e.target.value,
+                            })
+                          }
+                          placeholder="piece"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                          Qty in 1 {formData.unit || "unit"}
+                        </label>
+                        <input
+                          type="number"
+                          className="w-full bg-slate-50 border border-slate-100 rounded-xl py-2 px-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                          value={formData.subUnitValue}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setFormData((prev) => {
+                              const mrp = Number(prev.mrp) || 0;
+                              const sprice = Number(prev.pricePerUnit) || 0;
+                              const cost = Number(prev.purchasePrice) || 0;
+                              const numVal = Number(val) || 1;
+
+                              return {
+                                ...prev,
+                                subUnitValue: val,
+                                subUnitMrp: mrp > 0 ? (mrp / numVal).toFixed(2) : "",
+                                subUnitSalePrice: sprice > 0 ? (sprice / numVal).toFixed(2) : "",
+                                subUnitPurchasePrice: cost > 0 ? (cost / numVal).toFixed(2) : "",
+                              };
+                            });
+                          }}
+                          placeholder="10"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                          Cost
+                        </label>
+                        <input
+                          type="number"
+                          className="w-full bg-white border-2 border-indigo-100 rounded-xl py-2 px-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                          value={formData.subUnitPurchasePrice}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              subUnitPurchasePrice: e.target.value,
+                            })
+                          }
+                          placeholder="Cost"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                          MRP
+                        </label>
+                        <input
+                          type="number"
+                          className="w-full bg-white border-2 border-indigo-100 rounded-xl py-2 px-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                          value={formData.subUnitMrp}
+                          onChange={(e) => {
+                            const newMrp = e.target.value;
+                            setFormData((prev) => {
+                              const mrpNum = Number(newMrp);
+                              const saleNum = Number(prev.subUnitSalePrice);
+                              let disc = prev.subUnitDiscount;
+                              if (mrpNum > 0 && saleNum > 0 && mrpNum >= saleNum) {
+                                disc = ((1 - saleNum / mrpNum) * 100).toFixed(2);
+                              }
+                              return {
+                                ...prev,
+                                subUnitMrp: newMrp,
+                                subUnitDiscount: disc,
+                              };
+                            });
+                          }}
+                          placeholder="MRP"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                          Sale Price
+                        </label>
+                        <input
+                          type="number"
+                          className="w-full bg-white border-2 border-indigo-100 rounded-xl py-2 px-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                          value={formData.subUnitSalePrice}
+                          onChange={(e) => {
+                            const newSale = e.target.value;
+                            setFormData((prev) => {
+                              const saleNum = Number(newSale);
+                              const mrpNum = Number(prev.subUnitMrp);
+                              let disc = prev.subUnitDiscount;
+                              if (mrpNum > 0 && saleNum > 0 && mrpNum >= saleNum) {
+                                disc = ((1 - saleNum / mrpNum) * 100).toFixed(2);
+                              }
+                              return {
+                                ...prev,
+                                subUnitSalePrice: newSale,
+                                subUnitDiscount: disc,
+                              };
+                            });
+                          }}
+                          placeholder="Sale"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                          Discount %
+                        </label>
+                        <input
+                          type="number"
+                          className="w-full bg-white border-2 border-indigo-100 rounded-xl py-2 px-3 text-sm font-bold text-rose-500 focus:ring-2 focus:ring-indigo-500 outline-none"
+                          value={formData.subUnitDiscount}
+                          onChange={(e) => {
+                            const newDisc = e.target.value;
+                            setFormData((prev) => {
+                              const discNum = Number(newDisc);
+                              const mrpNum = Number(prev.subUnitMrp);
+                              let sale = prev.subUnitSalePrice;
+                              if (mrpNum > 0 && discNum >= 0 && discNum <= 100) {
+                                sale = (mrpNum * (1 - discNum / 100)).toFixed(2);
+                              }
+                              return {
+                                ...prev,
+                                subUnitDiscount: newDisc,
+                                subUnitSalePrice: sale,
+                              };
+                            });
+                          }}
+                          placeholder="Disc"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                        Subunit Barcode (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full bg-white border-2 border-indigo-100 rounded-xl py-2 px-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                        value={formData.subUnitBarcode}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            subUnitBarcode: e.target.value,
+                          })
+                        }
+                        placeholder="Scan or type barcode"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Continuous Mode Toggle */}

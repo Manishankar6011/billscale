@@ -88,6 +88,35 @@ const productSchema: Schema = new mongoose.Schema({
     expiryDate: {
         type: Date
     },
+    hasSubUnit: {
+        type: Boolean,
+        default: false
+    },
+    subUnitName: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+    subUnitValue: {
+        type: Number
+    },
+    subUnitMrp: {
+        type: Number
+    },
+    subUnitSalePrice: {
+        type: Number
+    },
+    subUnitPurchasePrice: {
+        type: Number
+    },
+    subUnitBarcode: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+    subUnitDiscount: {
+        type: Number
+    },
     createdAt: {
         type: Date,
         default: Date.now
@@ -97,6 +126,7 @@ const productSchema: Schema = new mongoose.Schema({
 // Indices for faster searching and multi-tenancy
 productSchema.index({ tenantId: 1, name: 1 });
 productSchema.index({ tenantId: 1, barcode: 1 });
+productSchema.index({ tenantId: 1, subUnitBarcode: 1 });
 productSchema.index({ tenantId: 1, category: 1 });
 
 export default mongoose.model<IProduct>('Product', productSchema);

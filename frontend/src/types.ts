@@ -70,6 +70,15 @@ export interface Product {
   drugSchedule?: string;
   rackLocation?: string;
   expiryDate?: string | undefined;
+  // Subunit fields
+  hasSubUnit?: boolean;
+  subUnitName?: string;
+  subUnitValue?: number;
+  subUnitMrp?: number;
+  subUnitSalePrice?: number;
+  subUnitPurchasePrice?: number;
+  subUnitBarcode?: string;
+  subUnitDiscount?: number;
 }
 
 export interface PaginatedResponse<T> {
@@ -189,6 +198,7 @@ export interface Purchase {
     name: string;
     quantity: number;
     unit: string;
+    conversionFactor?: number;
     purchasePrice: number;
     taxRate?: number;
     taxAmount?: number;

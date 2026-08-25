@@ -128,7 +128,7 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                                     {item.expiryDate && ` | E: ${item.expiryDate}`}
                                 </p>
                             </td>
-                            <td className="py-2 text-center font-black">{item.quantity}</td>
+                            <td className="py-2 text-center font-black">{item.quantity} <span className="text-[10px] font-medium text-slate-500 ml-0.5">{item.unit}</span></td>
                             <td className="py-2 text-right">{(item.sellingPrice || 0).toFixed(2)}</td>
                             <td className="py-2 text-right font-black">{((item.quantity || 0) * (item.sellingPrice || 0) * (100 / (100 + (item.taxRate || 0)))).toFixed(2)}</td>
                         </tr>

@@ -136,7 +136,7 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                                     </p>
                                 </td>
                                 <td className="py-5 px-2 text-right font-bold text-black">₹{(item.mrpAtTime || 0).toFixed(0)}</td>
-                                <td className="py-5 px-2 text-center font-black text-black text-base">{item.quantity}</td>
+                                <td className="py-5 px-2 text-center font-black text-black text-base">{item.quantity} <span className="text-[10px] font-medium text-slate-500 ml-0.5">{item.unit}</span></td>
                                 <td className="py-5 px-2 text-right font-bold text-black">₹{(item.sellingPrice || 0).toFixed(0)}</td>
                                 <td className="py-5 px-2 text-right font-black text-black text-base">₹{((item.quantity || 0) * (item.sellingPrice || 0) * (100 / (100 + (item.taxRate || 0)))).toFixed(2)}</td>
                             </tr>

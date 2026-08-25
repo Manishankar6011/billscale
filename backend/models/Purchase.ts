@@ -50,6 +50,10 @@ const purchaseSchema: Schema = new mongoose.Schema({
             type: String,
             required: true
         },
+        conversionFactor: {
+            type: Number,
+            default: 1
+        },
         purchasePrice: {
             type: Number,
             required: true

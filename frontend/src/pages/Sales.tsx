@@ -99,6 +99,7 @@ type CartItem = {
   gstRate?: number | undefined;
   batchNumber?: string | undefined;
   expiryDate?: string | undefined;
+  isSubUnit?: boolean;
 };
 
 const SummaryCard = ({
@@ -812,7 +813,9 @@ const Sales = () => {
       }
 
       // Try local search first
-      let product = products.find((p) => p.barcode === trimmedCode);
+      let product = products.find((p) => p.barcode === trimmedCode || p.subUnitBarcode === trimmedCode);
+
+      let isSubUnitScan = false;
 
       if (!product) {
         try {
@@ -830,6 +833,7 @@ const Sales = () => {
         setIsScannerOpen(false);
         setHwScannerInput("");
         const pid = product._id!;
+        isSubUnitScan = Boolean(product.hasSubUnit && product.subUnitBarcode === trimmedCode);
 
         if (itemsModalMode !== null) {
           // Add to scannedProducts so it appears at top
@@ -853,7 +857,8 @@ const Sales = () => {
           showToast(`${product.name} qty increased in list`, "success");
         } else {
           setCart((prev) => {
-            const existingIndex = prev.findIndex((item) => item.productId === pid);
+            // we should try to match both product ID AND whether it's a subunit
+            const existingIndex = prev.findIndex((item) => item.productId === pid && Boolean(item.isSubUnit) === isSubUnitScan);
             if (existingIndex !== -1) {
               // Move existing item to top and increment qty
               const item = prev[existingIndex]!;
@@ -866,23 +871,24 @@ const Sales = () => {
                 productId: pid,
                 name: product!.name,
                 quantity: 1,
-                unit: product!.unit,
-                conversionFactor: 1,
-                sellingPrice: product!.pricePerUnit,
-                originalSellingPrice: product!.pricePerUnit,
+                unit: isSubUnitScan ? (product!.subUnitName || 'SubUnit') : product!.unit,
+                conversionFactor: isSubUnitScan ? (product!.subUnitValue || 1) : 1,
+                sellingPrice: isSubUnitScan ? (product!.subUnitSalePrice || product!.pricePerUnit) : product!.pricePerUnit,
+                originalSellingPrice: isSubUnitScan ? (product!.subUnitSalePrice || product!.pricePerUnit) : product!.pricePerUnit,
                 discountPercent: (() => {
-                  const mrp = product!.mrp || 0;
-                  const sale = product!.pricePerUnit || 0;
+                  const mrp = isSubUnitScan ? (product!.subUnitMrp || 0) : (product!.mrp || 0);
+                  const sale = isSubUnitScan ? (product!.subUnitSalePrice || 0) : (product!.pricePerUnit || 0);
                   return mrp > 0 && sale > 0 && mrp >= sale
                     ? parseFloat(((1 - sale / mrp) * 100).toFixed(2))
                     : 0;
                 })(),
-                purchasePrice: product!.purchasePrice,
-                mrp: product!.mrp || 0,
+                purchasePrice: isSubUnitScan ? (product!.subUnitPurchasePrice || product!.purchasePrice) : product!.purchasePrice,
+                mrp: isSubUnitScan ? (product!.subUnitMrp || 0) : (product!.mrp || 0),
                 hsnCode: product!.hsnCode,
                 gstRate: product!.gstRate,
                 batchNumber: product!.batchNumber,
                 expiryDate: product!.expiryDate ? format(new Date(product!.expiryDate), "dd MMM yy") : undefined,
+                isSubUnit: isSubUnitScan,
               },
               ...prev,
             ];
@@ -2054,8 +2060,47 @@ const Sales = () => {
                                 className="text-slate-300 group-hover/price:text-primary-500 transition-colors"
                               />
                               <div className="flex items-center gap-2 border-slate-100">
+                                {(() => {
+                                  const originalProduct = products.find(p => p._id === item.productId);
+                                  if (originalProduct?.hasSubUnit) {
+                                    return (
+                                      <select
+                                        value={item.isSubUnit ? 'subunit' : 'unit'}
+                                        onChange={(e) => {
+                                          const isSub = e.target.value === 'subunit';
+                                          const mrp = isSub ? (originalProduct.subUnitMrp || 0) : (originalProduct.mrp || 0);
+                                          const sale = isSub ? (originalProduct.subUnitSalePrice || originalProduct.pricePerUnit || 0) : (originalProduct.pricePerUnit || 0);
+                                          const cost = isSub ? (originalProduct.subUnitPurchasePrice || originalProduct.purchasePrice || 0) : (originalProduct.purchasePrice || 0);
+                                          const uName = isSub ? (originalProduct.subUnitName || 'SubUnit') : originalProduct.unit;
+                                          const cFactor = isSub ? (originalProduct.subUnitValue || 1) : 1;
+                                          
+                                          setCart(prev => prev.map((it, i) => i === idx ? {
+                                            ...it,
+                                            isSubUnit: isSub,
+                                            unit: uName,
+                                            conversionFactor: cFactor,
+                                            sellingPrice: sale,
+                                            originalSellingPrice: sale,
+                                            mrp: mrp,
+                                            purchasePrice: cost,
+                                            discountPercent: (mrp > 0 && sale > 0 && mrp >= sale) ? parseFloat(((1 - sale / mrp) * 100).toFixed(2)) : 0
+                                          } : it));
+                                        }}
+                                        className="text-[10px] text-indigo-600 font-black uppercase tracking-widest bg-indigo-50 border-none rounded focus:ring-0 px-1 py-0.5 cursor-pointer mr-1"
+                                      >
+                                        <option value="unit">{originalProduct.unit}</option>
+                                        <option value="subunit">{originalProduct.subUnitName || 'SubUnit'}</option>
+                                      </select>
+                                    );
+                                  }
+                                  return (
+                                    <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest mr-1">
+                                      {item.unit}
+                                    </span>
+                                  );
+                                })()}
                                 <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
-                                  {item.unit} × ₹
+                                  × ₹
                                 </span>
                                 <input
                                   type="number"
@@ -2735,7 +2780,15 @@ const Sales = () => {
                           </p>
                         </td>
                         <td className="px-4 py-3 text-sm font-black text-slate-600">
-                          {Number(p.stock).toFixed(2)}
+                          {p.hasSubUnit && p.subUnitValue ? (
+                            <>
+                              {Math.floor(Number(p.stock))} <span className="text-[10px] font-bold text-slate-400">{p.unit}</span>
+                              <br/>
+                              {Math.round((Number(p.stock) - Math.floor(Number(p.stock))) * p.subUnitValue)} <span className="text-[10px] font-bold text-slate-400">{p.subUnitName}</span>
+                            </>
+                          ) : (
+                            Number(p.stock).toFixed(2)
+                          )}
                         </td>
                         <td className="px-4 py-3 text-sm font-bold text-slate-500">
                           ₹{p.mrp || 0}
@@ -3058,7 +3111,13 @@ const Sales = () => {
                       ₹{p.pricePerUnit.toLocaleString()}
                     </p>
                     <p className="text-[10px] text-slate-400 font-medium">
-                      Stock: {Number(p.stock).toFixed(2)} {p.unit}
+                      Stock: {p.hasSubUnit && p.subUnitValue ? (
+                        <>
+                          {Math.floor(Number(p.stock))} {p.unit}, {Math.round((Number(p.stock) - Math.floor(Number(p.stock))) * p.subUnitValue)} {p.subUnitName}
+                        </>
+                      ) : (
+                        `${Number(p.stock).toFixed(2)} ${p.unit}`
+                      )}
                     </p>
                   </div>
                 </button>
