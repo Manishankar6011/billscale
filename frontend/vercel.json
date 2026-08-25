@@ -4,19 +4,6 @@
       "source": "/api/:path*",
       "destination": "http://129.159.232.6:8002/api/:path*"
     }
-  ],
-  "redirects": [
-    {
-      "source": "/(.*)",
-      "has": [
-        {
-          "type": "host",
-          "value": "businessmate-plum.vercel.app"
-        }
-      ],
-      "destination": "https://billscale.in/$1",
-      "permanent": true
-    }
   ]
 }
 
