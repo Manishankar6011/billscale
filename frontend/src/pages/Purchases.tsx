@@ -503,7 +503,13 @@ const Purchases = () => {
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                                   Current Stock: {p.hasSubUnit && p.subUnitValue ? (
                                     <>
-                                      {Math.floor(Number(p.stock))} {p.unit}, {Math.round((Number(p.stock) - Math.floor(Number(p.stock))) * p.subUnitValue)} {p.subUnitName}
+                                      {Math.floor(Number(p.stock))} {p.unit}
+                                      {Math.round((Number(p.stock) - Math.floor(Number(p.stock))) * p.subUnitValue) > 0 && (
+                                        <>, {Math.round((Number(p.stock) - Math.floor(Number(p.stock))) * p.subUnitValue)} {p.subUnitName}</>
+                                      )}
+                                      <span className="ml-1 text-indigo-400 opacity-80">
+                                        (1 {p.unit} = {p.subUnitValue} {p.subUnitName})
+                                      </span>
                                     </>
                                   ) : (
                                     `${p.stock} ${p.unit}`

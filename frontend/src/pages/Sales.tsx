@@ -172,6 +172,10 @@ const SummaryCard = ({
   );
 };
 
+const getSubUnitMrp = (p: Product) => (p.subUnitMrp && p.subUnitMrp > 0 && p.subUnitMrp < (p.mrp || 0)) ? p.subUnitMrp : ((p.mrp || 0) / (p.subUnitValue || 1));
+const getSubUnitSalePrice = (p: Product) => (p.subUnitSalePrice && p.subUnitSalePrice > 0 && p.subUnitSalePrice < (p.pricePerUnit || 0)) ? p.subUnitSalePrice : ((p.pricePerUnit || 0) / (p.subUnitValue || 1));
+const getSubUnitPurchasePrice = (p: Product) => (p.subUnitPurchasePrice && p.subUnitPurchasePrice > 0 && p.subUnitPurchasePrice < (p.purchasePrice || 0)) ? p.subUnitPurchasePrice : ((p.purchasePrice || 0) / (p.subUnitValue || 1));
+
 const Sales = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -475,7 +479,7 @@ const Sales = () => {
 
   const [itemQtyMap, setItemQtyMap] = useState<Record<string, string>>({});
   const [itemPriceMap, setItemPriceMap] = useState<Record<string, string>>({});
-
+  const [itemUnitMap, setItemUnitMap] = useState<Record<string, 'unit' | 'subunit'>>({});
   // Additional charge inputs (new)
   const [newChargeName, setNewChargeName] = useState("");
   const [newChargePrice, setNewChargePrice] = useState("");
@@ -845,9 +849,13 @@ const Sales = () => {
             ...prev,
             [pid]: (Number(prev[pid] || 0) + 1).toString(),
           }));
+          setItemUnitMap((prev) => ({
+            ...prev,
+            [pid]: isSubUnitScan ? 'subunit' : 'unit',
+          }));
           setItemPriceMap((prev) => ({
             ...prev,
-            [pid]: product!.pricePerUnit.toString(),
+            [pid]: isSubUnitScan ? (product!.subUnitSalePrice || product!.pricePerUnit).toString() : product!.pricePerUnit.toString(),
           }));
           setSelectedProducts((prev) => ({
             ...prev,
@@ -873,17 +881,17 @@ const Sales = () => {
                 quantity: 1,
                 unit: isSubUnitScan ? (product!.subUnitName || 'SubUnit') : product!.unit,
                 conversionFactor: isSubUnitScan ? (product!.subUnitValue || 1) : 1,
-                sellingPrice: isSubUnitScan ? (product!.subUnitSalePrice || product!.pricePerUnit) : product!.pricePerUnit,
-                originalSellingPrice: isSubUnitScan ? (product!.subUnitSalePrice || product!.pricePerUnit) : product!.pricePerUnit,
+                sellingPrice: isSubUnitScan ? getSubUnitSalePrice(product!) : product!.pricePerUnit,
+                originalSellingPrice: isSubUnitScan ? getSubUnitSalePrice(product!) : product!.pricePerUnit,
                 discountPercent: (() => {
-                  const mrp = isSubUnitScan ? (product!.subUnitMrp || 0) : (product!.mrp || 0);
-                  const sale = isSubUnitScan ? (product!.subUnitSalePrice || 0) : (product!.pricePerUnit || 0);
+                  const mrp = isSubUnitScan ? getSubUnitMrp(product!) : (product!.mrp || 0);
+                  const sale = isSubUnitScan ? getSubUnitSalePrice(product!) : (product!.pricePerUnit || 0);
                   return mrp > 0 && sale > 0 && mrp >= sale
                     ? parseFloat(((1 - sale / mrp) * 100).toFixed(2))
                     : 0;
                 })(),
-                purchasePrice: isSubUnitScan ? (product!.subUnitPurchasePrice || product!.purchasePrice) : product!.purchasePrice,
-                mrp: isSubUnitScan ? (product!.subUnitMrp || 0) : (product!.mrp || 0),
+                purchasePrice: isSubUnitScan ? getSubUnitPurchasePrice(product!) : product!.purchasePrice,
+                mrp: isSubUnitScan ? getSubUnitMrp(product!) : (product!.mrp || 0),
                 hsnCode: product!.hsnCode,
                 gstRate: product!.gstRate,
                 batchNumber: product!.batchNumber,
@@ -943,24 +951,28 @@ const Sales = () => {
       if (Number(qty) > 0) {
         const product = products.find((p) => p._id === productId) || selectedProducts[productId];
         if (product) {
-          const price = Number(itemPriceMap[productId]) || product.pricePerUnit;
+          const isSub = Boolean(itemUnitMap[productId] === 'subunit' && product.hasSubUnit);
+          const baseSale = isSub ? getSubUnitSalePrice(product) : product.pricePerUnit;
+          const baseMrp = isSub ? getSubUnitMrp(product) : (product.mrp || 0);
+          const baseCost = isSub ? getSubUnitPurchasePrice(product) : product.purchasePrice;
+          const price = Number(itemPriceMap[productId]) || baseSale;
+
           newItems.push({
             productId,
             name: product.name,
             quantity: Number(qty),
             sellingPrice: price,
-            originalSellingPrice: product.pricePerUnit,
+            originalSellingPrice: baseSale,
             discountPercent: (() => {
-              const mrp = product.mrp || 0;
-              const sale = product.pricePerUnit || 0;
-              return mrp > 0 && sale > 0 && mrp >= sale
-                ? parseFloat(((1 - sale / mrp) * 100).toFixed(2))
+              return baseMrp > 0 && price > 0 && baseMrp >= price
+                ? parseFloat(((1 - price / baseMrp) * 100).toFixed(2))
                 : 0;
             })(),
-            purchasePrice: product.purchasePrice,
-            mrp: product.mrp,
-            unit: product.unit,
-            conversionFactor: 1,
+            purchasePrice: isSub ? (product.subUnitPurchasePrice || calculatedCost) : product.purchasePrice,
+            mrp: baseMrp,
+            unit: isSub ? (product.subUnitName || 'SubUnit') : product.unit,
+            conversionFactor: isSub ? (product.subUnitValue || 1) : 1,
+            isSubUnit: isSub,
             hsnCode: product.hsnCode,
             gstRate: product.gstRate,
             batchNumber: product.batchNumber,
@@ -1542,14 +1554,10 @@ const Sales = () => {
                   const isLastElement = index === sales.length - 1;
 
                   const totalMrp = (sale.items || []).reduce((acc, item) => {
-                    const factor = item.conversionFactor || 1;
-                    return acc + item.mrpAtTime * (item.quantity / factor);
+                    return acc + item.mrpAtTime * item.quantity;
                   }, 0);
                   const totalCost = (sale.items || []).reduce((acc, item) => {
-                    const factor = item.conversionFactor || 1;
-                    return (
-                      acc + item.purchasePriceAtTime * (item.quantity / factor)
-                    );
+                    return acc + item.purchasePriceAtTime * item.quantity;
                   }, 0);
                   const additionalChargesTotal = (
                     sale.additionalItems || []
@@ -2068,9 +2076,9 @@ const Sales = () => {
                                         value={item.isSubUnit ? 'subunit' : 'unit'}
                                         onChange={(e) => {
                                           const isSub = e.target.value === 'subunit';
-                                          const mrp = isSub ? (originalProduct.subUnitMrp || 0) : (originalProduct.mrp || 0);
-                                          const sale = isSub ? (originalProduct.subUnitSalePrice || originalProduct.pricePerUnit || 0) : (originalProduct.pricePerUnit || 0);
-                                          const cost = isSub ? (originalProduct.subUnitPurchasePrice || originalProduct.purchasePrice || 0) : (originalProduct.purchasePrice || 0);
+                                          const mrp = isSub ? getSubUnitMrp(originalProduct) : (originalProduct.mrp || 0);
+                                          const sale = isSub ? getSubUnitSalePrice(originalProduct) : (originalProduct.pricePerUnit || 0);
+                                          const cost = isSub ? getSubUnitPurchasePrice(originalProduct) : (originalProduct.purchasePrice || 0);
                                           const uName = isSub ? (originalProduct.subUnitName || 'SubUnit') : originalProduct.unit;
                                           const cFactor = isSub ? (originalProduct.subUnitValue || 1) : 1;
                                           
@@ -2754,6 +2762,9 @@ const Sales = () => {
                     <th className="px-4 py-3 text-[10px] font-black uppercase text-slate-400 tracking-widest">
                       MRP
                     </th>
+                    <th className="px-4 py-3 text-[10px] font-black uppercase text-slate-400 tracking-widest w-[110px]">
+                      Unit
+                    </th>
                     <th className="px-4 py-3 text-[10px] font-black uppercase text-slate-400 tracking-widest">
                       Sale Price
                     </th>
@@ -2783,21 +2794,52 @@ const Sales = () => {
                           {p.hasSubUnit && p.subUnitValue ? (
                             <>
                               {Math.floor(Number(p.stock))} <span className="text-[10px] font-bold text-slate-400">{p.unit}</span>
+                              {Math.round((Number(p.stock) - Math.floor(Number(p.stock))) * p.subUnitValue) > 0 && (
+                                <>
+                                  <br/>
+                                  {Math.round((Number(p.stock) - Math.floor(Number(p.stock))) * p.subUnitValue)} <span className="text-[10px] font-bold text-slate-400">{p.subUnitName}</span>
+                                </>
+                              )}
                               <br/>
-                              {Math.round((Number(p.stock) - Math.floor(Number(p.stock))) * p.subUnitValue)} <span className="text-[10px] font-bold text-slate-400">{p.subUnitName}</span>
+                              <span className="text-[9px] font-bold text-indigo-400 opacity-80 uppercase tracking-wider">
+                                (1 {p.unit} = {p.subUnitValue} {p.subUnitName})
+                              </span>
                             </>
                           ) : (
                             Number(p.stock).toFixed(2)
                           )}
                         </td>
                         <td className="px-4 py-3 text-sm font-bold text-slate-500">
-                          ₹{p.mrp || 0}
+                          ₹{itemUnitMap[p._id!] === 'subunit' ? getSubUnitMrp(p) : (p.mrp || 0)}
+                        </td>
+                        <td className="px-4 py-3">
+                          {p.hasSubUnit && p.subUnitValue ? (
+                            <select
+                              value={itemUnitMap[p._id!] || 'unit'}
+                              onChange={(e) => {
+                                const val = e.target.value as 'unit' | 'subunit';
+                                setItemUnitMap(prev => ({ ...prev, [p._id!]: val }));
+                                // Clear custom price so it defaults to the selected unit's price
+                                setItemPriceMap(prev => {
+                                  const next = { ...prev };
+                                  delete next[p._id!];
+                                  return next;
+                                });
+                              }}
+                              className="text-[10px] text-indigo-600 font-black uppercase tracking-widest bg-indigo-50 border-none rounded-lg focus:ring-0 px-2 py-1.5 cursor-pointer w-full"
+                            >
+                              <option value="unit">{p.unit}</option>
+                              <option value="subunit">{p.subUnitName}</option>
+                            </select>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{p.unit}</span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <input
                             type="number"
                             className="w-24 bg-white border border-slate-200 rounded-xl p-2 text-sm font-bold focus:ring-2 focus:ring-primary-500"
-                            placeholder={p.pricePerUnit.toString()}
+                            placeholder={itemUnitMap[p._id!] === 'subunit' ? (p.subUnitSalePrice || (p.pricePerUnit / (p.subUnitValue || 1))).toString() : p.pricePerUnit.toString()}
                             value={itemPriceMap[p._id!] || ""}
                             onChange={(e) =>
                               setItemPriceMap((prev) => ({
@@ -2817,9 +2859,10 @@ const Sales = () => {
                                   ...prev,
                                   [p._id!]: "1",
                                 }));
+                                const isSub = itemUnitMap[p._id!] === 'subunit';
                                 setItemPriceMap((prev) => ({
                                   ...prev,
-                                  [p._id!]: p.pricePerUnit.toString(),
+                                  [p._id!]: isSub ? (p.subUnitSalePrice || p.pricePerUnit).toString() : p.pricePerUnit.toString(),
                                 }));
                                 setSelectedProducts((prev) => ({
                                   ...prev,
@@ -3075,19 +3118,25 @@ const Sales = () => {
                   key={p._id}
                   type="button"
                   onClick={() => {
+                    const isSubUnitScan = Boolean(p.hasSubUnit && p.subUnitBarcode === hwScannerInput);
+                    
+                    const mrp = isSubUnitScan ? getSubUnitMrp(p) : (p.mrp || 0);
+                    const sale = isSubUnitScan ? getSubUnitSalePrice(p) : (p.pricePerUnit || 0);
+                    const cost = isSubUnitScan ? getSubUnitPurchasePrice(p) : (p.purchasePrice || 0);
+
                     setCart((prev) => [
                       ...prev,
                       {
                         productId: p._id!,
                         name: p.name,
                         quantity: 1,
-                        sellingPrice: p.pricePerUnit,
-                        originalSellingPrice: p.pricePerUnit,
-                        discountPercent: 0,
-                        purchasePrice: p.purchasePrice,
-                        mrp: p.mrp,
-                        unit: p.unit,
-                        conversionFactor: 1,
+                        sellingPrice: sale,
+                        originalSellingPrice: sale,
+                        discountPercent: (mrp > 0 && sale > 0 && mrp >= sale) ? parseFloat(((1 - sale / mrp) * 100).toFixed(2)) : 0,
+                        purchasePrice: cost,
+                        mrp: mrp,
+                        unit: isSubUnitScan ? (p.subUnitName || 'SubUnit') : p.unit,
+                        conversionFactor: isSubUnitScan ? (p.subUnitValue || 1) : 1,
                         hsnCode: p.hsnCode,
                         gstRate: p.gstRate,
                       },
@@ -3113,7 +3162,13 @@ const Sales = () => {
                     <p className="text-[10px] text-slate-400 font-medium">
                       Stock: {p.hasSubUnit && p.subUnitValue ? (
                         <>
-                          {Math.floor(Number(p.stock))} {p.unit}, {Math.round((Number(p.stock) - Math.floor(Number(p.stock))) * p.subUnitValue)} {p.subUnitName}
+                          {Math.floor(Number(p.stock))} {p.unit}
+                          {Math.round((Number(p.stock) - Math.floor(Number(p.stock))) * p.subUnitValue) > 0 && (
+                            <>, {Math.round((Number(p.stock) - Math.floor(Number(p.stock))) * p.subUnitValue)} {p.subUnitName}</>
+                          )}
+                          <span className="ml-1 text-indigo-400 opacity-80">
+                            (1 {p.unit} = {p.subUnitValue} {p.subUnitName})
+                          </span>
                         </>
                       ) : (
                         `${Number(p.stock).toFixed(2)} ${p.unit}`

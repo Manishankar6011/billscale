@@ -288,7 +288,23 @@ const Inventory = () => {
   };
 
   // ── 3-way price sync helpers ──────────────────────────────────────────────
-  // All handlers use functional setFormData(prev => ...) to avoid stale closure.
+  // All handlers use functional setFormData(prev => ...) to avoid stale closure.  // Helper to sync subunit prices
+  const syncSubUnitPrices = (prev: typeof formData, updates: Partial<typeof formData>) => {
+    const merged = { ...prev, ...updates };
+    const numVal = Number(merged.subUnitValue);
+    if (merged.hasSubUnit && numVal > 0) {
+      const mrp = Number(merged.mrp) || 0;
+      const sprice = Number(merged.pricePerUnit) || 0;
+      const cost = Number(merged.purchasePrice) || 0;
+      return {
+        ...merged,
+        subUnitMrp: mrp > 0 ? (mrp / numVal).toFixed(2) : "",
+        subUnitSalePrice: sprice > 0 ? (sprice / numVal).toFixed(2) : "",
+        subUnitPurchasePrice: cost > 0 ? (cost / numVal).toFixed(2) : "",
+      };
+    }
+    return merged;
+  };
 
   // MRP changes → if discount > 0 recalculate sale; else if sale exists recalculate discount
   const handleMrpChange = (val: string) => {
@@ -300,14 +316,14 @@ const Inventory = () => {
         if (!isNaN(disc) && disc > 0) {
           // Discount is genuinely set (>0) → recalculate sale price
           const newSale = parseFloat((mrp * (1 - disc / 100)).toFixed(2));
-          return { ...prev, mrp: val, pricePerUnit: newSale.toString() };
+          return syncSubUnitPrices(prev, { mrp: val, pricePerUnit: newSale.toString() });
         } else if (!isNaN(sale) && sale > 0) {
           // Sale price is set → recalculate discount
           const newDisc = parseFloat(((1 - sale / mrp) * 100).toFixed(2));
-          return { ...prev, mrp: val, discountPercent: newDisc > 0 ? newDisc.toString() : "" };
+          return syncSubUnitPrices(prev, { mrp: val, discountPercent: newDisc > 0 ? newDisc.toString() : "" });
         }
       }
-      return { ...prev, mrp: val };
+      return syncSubUnitPrices(prev, { mrp: val });
     });
   };
 
@@ -319,9 +335,9 @@ const Inventory = () => {
       if (!isNaN(sale) && !isNaN(mrp) && mrp > 0) {
         const newDisc = parseFloat(((1 - sale / mrp) * 100).toFixed(2));
         // Only store discount if it's meaningfully > 0
-        return { ...prev, pricePerUnit: val, discountPercent: newDisc > 0 ? newDisc.toString() : "" };
+        return syncSubUnitPrices(prev, { pricePerUnit: val, discountPercent: newDisc > 0 ? newDisc.toString() : "" });
       }
-      return { ...prev, pricePerUnit: val };
+      return syncSubUnitPrices(prev, { pricePerUnit: val });
     });
   };
 
@@ -332,10 +348,10 @@ const Inventory = () => {
       const mrp = parseFloat(prev.mrp);
       if (!isNaN(disc) && disc > 0 && !isNaN(mrp) && mrp > 0) {
         const newSale = parseFloat((mrp * (1 - disc / 100)).toFixed(2));
-        return { ...prev, discountPercent: val, pricePerUnit: newSale.toString() };
+        return syncSubUnitPrices(prev, { discountPercent: val, pricePerUnit: newSale.toString() });
       }
       // disc = 0 or mrp not set: just store the typed value, don't force sale price
-      return { ...prev, discountPercent: val };
+      return syncSubUnitPrices(prev, { discountPercent: val });
     });
   };
 
@@ -1224,9 +1240,16 @@ const Inventory = () => {
                       <>
                         {Math.floor(Number(product.stock))}{" "}
                         <span className="text-sm font-medium text-slate-400">{product.unit}</span>
-                        <span className="mx-1 text-slate-300">,</span>
-                        {Math.round((Number(product.stock) - Math.floor(Number(product.stock))) * product.subUnitValue)}{" "}
-                        <span className="text-sm font-medium text-slate-400">{product.subUnitName}</span>
+                        {Math.round((Number(product.stock) - Math.floor(Number(product.stock))) * product.subUnitValue) > 0 && (
+                          <>
+                            <span className="mx-1 text-slate-300">,</span>
+                            {Math.round((Number(product.stock) - Math.floor(Number(product.stock))) * product.subUnitValue)}{" "}
+                            <span className="text-sm font-medium text-slate-400">{product.subUnitName}</span>
+                          </>
+                        )}
+                        <span className="block text-[10px] text-indigo-500 font-bold uppercase tracking-wider mt-1 opacity-80 leading-tight">
+                          (1 {product.unit} = {product.subUnitValue} {product.subUnitName})
+                        </span>
                       </>
                     ) : (
                       <>
@@ -1614,10 +1637,7 @@ const Inventory = () => {
                       placeholder="Supplier Cost per unit"
                       value={formData.purchasePrice}
                       onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          purchasePrice: e.target.value,
-                        })
+                        setFormData((prev) => syncSubUnitPrices(prev, { purchasePrice: e.target.value }))
                       }
                       onWheel={(e) => e.currentTarget.blur()}
                     />
