@@ -27,7 +27,11 @@ interface CatalogData {
   products: CatalogProduct[];
 }
 
-const Catalog = () => {
+interface CatalogProps {
+  customDomainMode?: boolean;
+}
+
+const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
   const { slug } = useParams<{ slug: string }>();
   const [data, setData] = useState<CatalogData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,7 +44,12 @@ const Catalog = () => {
   useEffect(() => {
     const fetchCatalog = async () => {
       try {
-        const res = await axios.get(`/api/catalog/${slug}`);
+        let res;
+        if (customDomainMode) {
+          res = await axios.get('/api/catalog/by-domain/lookup');
+        } else {
+          res = await axios.get(`/api/catalog/${slug}`);
+        }
         setData(res.data);
       } catch (err: any) {
         setError(err.response?.data?.message || "Catalog not found");
@@ -49,11 +58,12 @@ const Catalog = () => {
       }
     };
     fetchCatalog();
-  }, [slug]);
+  }, [slug, customDomainMode]);
 
   useEffect(() => {
     // Load cart from localStorage
-    const savedCart = localStorage.getItem(`cart_${slug}`);
+    const cartKey = customDomainMode ? `cart_${window.location.hostname}` : `cart_${slug}`;
+    const savedCart = localStorage.getItem(cartKey);
     if (savedCart) {
       try {
         setCart(JSON.parse(savedCart));
@@ -61,14 +71,15 @@ const Catalog = () => {
         console.error("Failed to parse cart", e);
       }
     }
-  }, [slug]);
+  }, [slug, customDomainMode]);
 
   useEffect(() => {
     // Save cart to localStorage
     if (data) {
-      localStorage.setItem(`cart_${slug}`, JSON.stringify(cart));
+      const cartKey = customDomainMode ? `cart_${window.location.hostname}` : `cart_${slug}`;
+      localStorage.setItem(cartKey, JSON.stringify(cart));
     }
-  }, [cart, slug, data]);
+  }, [cart, slug, data, customDomainMode]);
 
   if (loading) {
     return (

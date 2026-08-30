@@ -46,6 +46,29 @@ const PageLoader = () => (
 const App: React.FC = () => {
   const { user } = useAuth();
 
+  const hostname = window.location.hostname;
+  const isCustomDomain = 
+    !hostname.includes('localhost') && 
+    !hostname.includes('127.0.0.1') && 
+    !hostname.includes('buildmate-erp.vercel.app') &&
+    !hostname.includes('businessmate.onrender.com') &&
+    !hostname.includes('onrender.com') &&
+    !hostname.includes('businessmate-plum.vercel.app') &&
+    !hostname.includes('billscale.in'); // Also exclude the main production domain
+
+  if (isCustomDomain) {
+    return (
+      <ToastProvider>
+        <ToastContainer />
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route path="/*" element={<Catalog customDomainMode={true} />} />
+          </Routes>
+        </Suspense>
+      </ToastProvider>
+    );
+  }
+
   return (
     <ToastProvider>
       <ToastContainer />

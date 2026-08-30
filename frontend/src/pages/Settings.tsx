@@ -839,7 +839,7 @@ const Settings = () => {
                                                                 <tr>
                                                                     <td className="px-4 py-3 text-slate-700 font-black">CNAME</td>
                                                                     <td className="px-4 py-3 text-violet-700 font-bold">{savedCustomDomain.split('.')[0]}</td>
-                                                                    <td className="px-4 py-3 text-emerald-700 font-bold">cname.vercel-dns.com</td>
+                                                                    <td className="px-4 py-3 text-emerald-700 font-bold">cname.billscale.in</td>
                                                                 </tr>
                                                             </tbody>
                                                         </table>

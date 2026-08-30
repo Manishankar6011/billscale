@@ -4,6 +4,7 @@ import Product from '../models/Product';
 import { AuthRequest } from '../middleware/auth';
 import dns from 'dns';
 import { promisify } from 'util';
+import axios from 'axios';
 
 const resolveCname = promisify(dns.resolveCname);
 
@@ -96,6 +97,27 @@ export const saveCustomDomain = async (req: AuthRequest, res: Response) => {
             return res.status(409).json({ message: 'This domain is already connected to another store.' });
         }
 
+        // Vercel API Integration to add domain
+        if (process.env.VERCEL_API_TOKEN && process.env.VERCEL_PROJECT_ID) {
+            try {
+                await axios.post(
+                    `https://api.vercel.com/v9/projects/${process.env.VERCEL_PROJECT_ID}/domains`,
+                    { name: cleaned },
+                    {
+                        headers: {
+                            Authorization: `Bearer ${process.env.VERCEL_API_TOKEN}`,
+                        },
+                    }
+                );
+            } catch (vercelError: any) {
+                // If it's already added to the project, Vercel might throw a 400/409, we can ignore if it's already ours, but let's log it
+                console.error("Vercel API Error adding domain:", vercelError.response?.data || vercelError.message);
+                if (vercelError.response?.data?.error?.code !== 'domain_already_in_use') {
+                    return res.status(500).json({ message: 'Failed to register domain with Vercel.', error: vercelError.response?.data });
+                }
+            }
+        }
+
         const tenant = await Tenant.findByIdAndUpdate(
             req.user?.tenantId,
             {
@@ -126,33 +148,43 @@ export const verifyCustomDomain = async (req: AuthRequest, res: Response) => {
         }
 
         const domain = tenant.customDomain;
-        // Expected CNAME target — your Vercel deployment domain
         const appDomain = process.env.APP_DOMAIN || 'buildmate-erp.vercel.app';
+        let isVerified = false;
+        let foundRecord = null;
 
-        let cnameRecords: string[] = [];
-
-        try {
-            cnameRecords = await resolveCname(domain);
-        } catch (dnsErr: any) {
-            // DNS lookup failed (no record found)
-            await Tenant.findByIdAndUpdate(req.user?.tenantId, {
-                customDomainStatus: 'failed'
-            });
-
-            return res.status(422).json({
-                message: `DNS lookup failed for "${domain}". Make sure you have added the CNAME record and DNS has propagated (can take up to 48 hours).`,
-                customDomainStatus: 'failed',
-                expected: appDomain,
-                found: null
-            });
+        if (process.env.VERCEL_API_TOKEN && process.env.VERCEL_PROJECT_ID) {
+            // Use Vercel API for verification check
+            try {
+                const response = await axios.get(
+                    `https://api.vercel.com/v9/projects/${process.env.VERCEL_PROJECT_ID}/domains/${domain}`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${process.env.VERCEL_API_TOKEN}`,
+                        },
+                    }
+                );
+                isVerified = response.data.verified;
+            } catch (vercelError: any) {
+                console.error("Vercel API Error verifying domain:", vercelError.response?.data || vercelError.message);
+                // Fallback to manual DNS if Vercel API fails for some reason
+            }
         }
 
-        // Check if any CNAME points to our app domain
-        const isVerified = cnameRecords.some(record =>
-            record.toLowerCase().includes(appDomain.toLowerCase()) ||
-            record.toLowerCase().endsWith('.vercel.app') ||
-            record.toLowerCase().endsWith('.vercel-dns.com')
-        );
+        // Manual DNS fallback if Vercel API isn't configured or failed
+        if (!isVerified && (!process.env.VERCEL_API_TOKEN || !process.env.VERCEL_PROJECT_ID)) {
+            try {
+                const cnameRecords = await resolveCname(domain);
+                isVerified = cnameRecords.some(record =>
+                    record.toLowerCase().includes(appDomain.toLowerCase()) ||
+                    record.toLowerCase().endsWith('.vercel.app') ||
+                    record.toLowerCase().endsWith('.vercel-dns.com') ||
+                    record.toLowerCase().endsWith('.billscale.in')
+                );
+                if (!isVerified) foundRecord = cnameRecords[0];
+            } catch (dnsErr: any) {
+                // DNS lookup failed
+            }
+        }
 
         if (isVerified) {
             await Tenant.findByIdAndUpdate(req.user?.tenantId, {
@@ -171,10 +203,12 @@ export const verifyCustomDomain = async (req: AuthRequest, res: Response) => {
             });
 
             return res.status(422).json({
-                message: `CNAME record found but points to "${cnameRecords[0]}" instead of "${appDomain}". Please update your DNS settings.`,
+                message: foundRecord 
+                    ? `CNAME record found but points to "${foundRecord}" instead of Vercel. Please update your DNS settings.`
+                    : `DNS lookup failed for "${domain}". Make sure you have added the CNAME record and DNS has propagated (can take up to 48 hours).`,
                 customDomainStatus: 'failed',
                 expected: appDomain,
-                found: cnameRecords[0]
+                found: foundRecord
             });
         }
     } catch (error: any) {
@@ -185,6 +219,24 @@ export const verifyCustomDomain = async (req: AuthRequest, res: Response) => {
 // ─── Protected: Remove custom domain ───────────────────────────────────────
 export const removeCustomDomain = async (req: AuthRequest, res: Response) => {
     try {
+        const tenant = await Tenant.findById(req.user?.tenantId);
+        
+        if (tenant?.customDomain && process.env.VERCEL_API_TOKEN && process.env.VERCEL_PROJECT_ID) {
+            try {
+                await axios.delete(
+                    `https://api.vercel.com/v9/projects/${process.env.VERCEL_PROJECT_ID}/domains/${tenant.customDomain}`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${process.env.VERCEL_API_TOKEN}`,
+                        },
+                    }
+                );
+            } catch (vercelError: any) {
+                console.error("Vercel API Error removing domain:", vercelError.response?.data || vercelError.message);
+                // We continue removing it from our DB even if Vercel API fails
+            }
+        }
+
         await Tenant.findByIdAndUpdate(req.user?.tenantId, {
             customDomain: '',
             customDomainStatus: 'pending',
