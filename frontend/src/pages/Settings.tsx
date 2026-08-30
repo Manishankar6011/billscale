@@ -57,6 +57,14 @@ const Settings = () => {
     const [staffFormData, setStaffFormData] = useState({ name: '', email: '', password: '' });
     const [creatingStaff, setCreatingStaff] = useState(false);
 
+    // Custom Domain State
+    const [customDomainInput, setCustomDomainInput] = useState('');
+    const [customDomainStatus, setCustomDomainStatus] = useState<'pending' | 'active' | 'failed' | ''>('');
+    const [savedCustomDomain, setSavedCustomDomain] = useState('');
+    const [domainSaving, setDomainSaving] = useState(false);
+    const [domainVerifying, setDomainVerifying] = useState(false);
+    const [domainRemoving, setDomainRemoving] = useState(false);
+
     const { data: staffUsers = [], refetch: refetchStaff } = useQuery({
         queryKey: ['staff-users'],
         queryFn: async () => {
@@ -85,8 +93,57 @@ const Settings = () => {
                 stateCode: profile.tenantId?.stateCode || '',
                 invoiceFormat: profile.tenantId?.invoiceFormat || 'modern',
             });
+            // Load saved custom domain info
+            setSavedCustomDomain(profile.tenantId?.customDomain || '');
+            setCustomDomainInput(profile.tenantId?.customDomain || '');
+            setCustomDomainStatus(profile.tenantId?.customDomainStatus || '');
         }
     }, [profile]);
+
+    const handleSaveCustomDomain = async () => {
+        if (!customDomainInput.trim()) return;
+        setDomainSaving(true);
+        try {
+            const res = await axios.post('/api/catalog/custom-domain/save', { domain: customDomainInput.trim() });
+            setSavedCustomDomain(res.data.customDomain);
+            setCustomDomainStatus('pending');
+            showToast('Domain saved! Now add the CNAME record and verify.', 'success');
+        } catch (err: any) {
+            showToast(err.response?.data?.message || 'Failed to save domain', 'error');
+        } finally {
+            setDomainSaving(false);
+        }
+    };
+
+    const handleVerifyCustomDomain = async () => {
+        setDomainVerifying(true);
+        try {
+            const res = await axios.post('/api/catalog/custom-domain/verify');
+            setCustomDomainStatus('active');
+            showToast(res.data.message, 'success');
+        } catch (err: any) {
+            setCustomDomainStatus('failed');
+            showToast(err.response?.data?.message || 'Verification failed', 'error');
+        } finally {
+            setDomainVerifying(false);
+        }
+    };
+
+    const handleRemoveCustomDomain = async () => {
+        if (!window.confirm('Are you sure you want to remove your custom domain?')) return;
+        setDomainRemoving(true);
+        try {
+            await axios.delete('/api/catalog/custom-domain/remove');
+            setSavedCustomDomain('');
+            setCustomDomainInput('');
+            setCustomDomainStatus('');
+            showToast('Custom domain removed successfully.', 'success');
+        } catch (err: any) {
+            showToast(err.response?.data?.message || 'Failed to remove domain', 'error');
+        } finally {
+            setDomainRemoving(false);
+        }
+    };
 
     const uploadToCloudinary = async (file: File, field: 'logoUrl' | 'signature') => {
         const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
@@ -659,6 +716,7 @@ const Settings = () => {
                                     </div>
                                 ) : (
                                     <div className="space-y-8">
+                                        {/* ── Slug Section ── */}
                                         <div className="space-y-4">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Your Shop URL Slug</label>
                                             <div className="flex flex-col sm:flex-row items-stretch gap-2">
@@ -676,6 +734,7 @@ const Settings = () => {
                                             <p className="text-[10px] text-slate-400 font-bold ml-1 italic">Use letters, numbers, and dashes only.</p>
                                         </div>
 
+                                        {/* ── Public Store Link Card ── */}
                                         <div className="p-8 bg-slate-900 rounded-[2.5rem] border border-white/10 shadow-2xl relative overflow-hidden group/link">
                                             <div className="absolute -right-10 -bottom-10 p-12 text-white/5 opacity-20 group-hover/link:scale-110 transition-transform">
                                                 <ExternalLink size={160} />
@@ -713,6 +772,142 @@ const Settings = () => {
                                                     </a>
                                                 </div>
                                             </div>
+                                        </div>
+
+                                        {/* ══════════════════════════════════════════════
+                                             CUSTOM DOMAIN SECTION
+                                        ══════════════════════════════════════════════ */}
+                                        <div className="border-t border-slate-100 pt-8 space-y-6">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 bg-violet-50 text-violet-600 rounded-xl flex items-center justify-center">
+                                                    <Globe size={16} />
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight">Custom Domain</h4>
+                                                    <p className="text-[10px] text-slate-400 font-medium">Connect your own domain like <span className="font-black text-slate-600">shop.yourdomain.com</span></p>
+                                                </div>
+                                            </div>
+
+                                            {/* Domain Input + Save */}
+                                            <div className="space-y-3">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Your Domain</label>
+                                                <div className="flex flex-col sm:flex-row gap-3">
+                                                    <input
+                                                        id="custom-domain-input"
+                                                        type="text"
+                                                        className="flex-grow bg-slate-50 border border-slate-200 rounded-2xl py-4 px-6 text-sm font-bold focus:ring-2 focus:ring-violet-500/20 focus:bg-white focus:border-violet-300 transition-all outline-none placeholder:text-slate-300"
+                                                        placeholder="shop.yourdomain.com"
+                                                        value={customDomainInput}
+                                                        onChange={(e) => setCustomDomainInput(e.target.value.toLowerCase().trim().replace(/^https?:\/\//, ''))}
+                                                        disabled={domainSaving}
+                                                    />
+                                                    <button
+                                                        id="btn-save-custom-domain"
+                                                        type="button"
+                                                        onClick={handleSaveCustomDomain}
+                                                        disabled={domainSaving || !customDomainInput.trim() || customDomainInput.trim() === savedCustomDomain}
+                                                        className="px-8 py-4 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-violet-500/20 transition-all flex items-center justify-center gap-2 whitespace-nowrap active:scale-95"
+                                                    >
+                                                        {domainSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                                                        {domainSaving ? 'Saving...' : 'Save Domain'}
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* DNS Instructions — shown only when domain is saved */}
+                                            {savedCustomDomain && (
+                                                <div className="p-6 bg-amber-50 border border-amber-200 rounded-[1.5rem] space-y-4">
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="w-7 h-7 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center shrink-0 mt-0.5">
+                                                            <AlertCircle size={14} />
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs font-black text-amber-800 mb-1">Step 1 — Add this CNAME record to your DNS provider</p>
+                                                            <p className="text-[10px] text-amber-700 font-medium">Go to your domain registrar (GoDaddy, Namecheap, Cloudflare, etc.) and add:</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="bg-white border border-amber-200 rounded-xl overflow-hidden">
+                                                        <table className="w-full text-xs font-mono">
+                                                            <thead>
+                                                                <tr className="bg-amber-100/60">
+                                                                    <th className="text-left px-4 py-2 text-amber-700 font-black uppercase tracking-widest text-[9px]">Type</th>
+                                                                    <th className="text-left px-4 py-2 text-amber-700 font-black uppercase tracking-widest text-[9px]">Name / Host</th>
+                                                                    <th className="text-left px-4 py-2 text-amber-700 font-black uppercase tracking-widest text-[9px]">Value / Target</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                <tr>
+                                                                    <td className="px-4 py-3 text-slate-700 font-black">CNAME</td>
+                                                                    <td className="px-4 py-3 text-violet-700 font-bold">{savedCustomDomain.split('.')[0]}</td>
+                                                                    <td className="px-4 py-3 text-emerald-700 font-bold">cname.billscale.in</td>
+                                                                </tr>
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                    <p className="text-[10px] text-amber-600 font-bold italic ml-1">⏱ DNS changes can take 5 minutes to 48 hours to propagate.</p>
+                                                </div>
+                                            )}
+
+                                            {/* Status + Verify/Remove */}
+                                            {savedCustomDomain && (
+                                                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 bg-slate-50 rounded-[1.5rem] border border-slate-100">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="text-sm font-bold text-slate-700 truncate">{savedCustomDomain}</div>
+                                                        {customDomainStatus === 'active' && (
+                                                            <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1">
+                                                                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                                                                Active
+                                                            </span>
+                                                        )}
+                                                        {customDomainStatus === 'pending' && (
+                                                            <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1">
+                                                                <span className="w-1.5 h-1.5 bg-amber-500 rounded-full"></span>
+                                                                Pending DNS
+                                                            </span>
+                                                        )}
+                                                        {customDomainStatus === 'failed' && (
+                                                            <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1">
+                                                                <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+                                                                Failed
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex gap-2 w-full sm:w-auto">
+                                                        {customDomainStatus !== 'active' && (
+                                                            <button
+                                                                id="btn-verify-custom-domain"
+                                                                type="button"
+                                                                onClick={handleVerifyCustomDomain}
+                                                                disabled={domainVerifying}
+                                                                className="flex-1 sm:flex-none px-5 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-xl font-black uppercase tracking-widest text-[9px] shadow-md shadow-violet-200 transition-all flex items-center justify-center gap-2 active:scale-95"
+                                                            >
+                                                                {domainVerifying ? <Loader2 size={12} className="animate-spin" /> : <ShieldCheck size={12} />}
+                                                                {domainVerifying ? 'Checking...' : 'Verify DNS'}
+                                                            </button>
+                                                        )}
+                                                        {customDomainStatus === 'active' && (
+                                                            <a
+                                                                href={`https://${savedCustomDomain}`}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                className="flex-1 sm:flex-none px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-black uppercase tracking-widest text-[9px] shadow-md shadow-emerald-200 transition-all flex items-center justify-center gap-2"
+                                                            >
+                                                                Visit Store <ExternalLink size={11} />
+                                                            </a>
+                                                        )}
+                                                        <button
+                                                            id="btn-remove-custom-domain"
+                                                            type="button"
+                                                            onClick={handleRemoveCustomDomain}
+                                                            disabled={domainRemoving}
+                                                            className="flex-1 sm:flex-none px-5 py-2.5 bg-red-50 hover:bg-red-100 disabled:opacity-50 text-red-600 rounded-xl font-black uppercase tracking-widest text-[9px] border border-red-100 transition-all flex items-center justify-center gap-2 active:scale-95"
+                                                        >
+                                                            {domainRemoving ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                                                            Remove
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 )}

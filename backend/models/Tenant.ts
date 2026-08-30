@@ -95,6 +95,22 @@ const tenantSchema: Schema = new mongoose.Schema({
         enum: ['thermal', 'modern', 'gst'],
         default: 'modern'
     },
+    customDomain: {
+        type: String,
+        trim: true,
+        lowercase: true,
+        sparse: true,
+        unique: true,
+        default: ''
+    },
+    customDomainStatus: {
+        type: String,
+        enum: ['pending', 'active', 'failed'],
+        default: 'pending'
+    },
+    customDomainVerifiedAt: {
+        type: Date
+    },
     createdAt: {
         type: Date,
         default: Date.now
