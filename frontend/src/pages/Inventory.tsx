@@ -164,6 +164,7 @@ const Inventory = () => {
     batchNumber: string;
     hsnCode: string;
     gstRate: string;
+    category: string;
     // Medical fields
     genericName: string;
     manufacturer: string;
@@ -191,6 +192,7 @@ const Inventory = () => {
     batchNumber: "",
     hsnCode: "",
     gstRate: "0",
+    category: "General",
     genericName: "",
     manufacturer: "",
     drugSchedule: "",
@@ -269,6 +271,7 @@ const Inventory = () => {
       batchNumber: "",
       hsnCode: "",
       gstRate: "0",
+      category: "General",
       genericName: "",
       manufacturer: "",
       drugSchedule: "",
@@ -399,6 +402,7 @@ const Inventory = () => {
           batchNumber: "",
           hsnCode: "",
           gstRate: "0",
+          category: "General",
           genericName: "",
           manufacturer: "",
           drugSchedule: "",
@@ -430,6 +434,7 @@ const Inventory = () => {
           batchNumber: "",
           hsnCode: "",
           gstRate: "0",
+          category: "General",
           genericName: "",
           manufacturer: "",
           drugSchedule: "",
@@ -492,6 +497,7 @@ const Inventory = () => {
       batchNumber: product.batchNumber || "",
       hsnCode: product.hsnCode || "",
       gstRate: (product.gstRate || 0).toString(),
+      category: product.category || "General",
       genericName: product.genericName || "",
       manufacturer: product.manufacturer || "",
       drugSchedule: product.drugSchedule || "",
@@ -530,6 +536,7 @@ const Inventory = () => {
       batchNumber: formData.batchNumber,
       hsnCode: formData.hsnCode,
       gstRate: Number(formData.gstRate),
+      category: formData.category,
       genericName: formData.genericName,
       manufacturer: formData.manufacturer,
       drugSchedule: formData.drugSchedule,
@@ -1358,21 +1365,37 @@ const Inventory = () => {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              <div>
-                <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
-                  {user?.businessType === 'Medical' ? "Medicine Name (Brand Name)" : t("common.name")}
-                </label>
-                <input
-                  required
-                  ref={nameInputRef}
-                  type="text"
-                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold placeholder:font-medium"
-                  placeholder={t("placeholders.product_name")}
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
+                    {user?.businessType === 'Medical' ? "Medicine Name (Brand Name)" : t("common.name")}
+                  </label>
+                  <input
+                    required
+                    ref={nameInputRef}
+                    type="text"
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold placeholder:font-medium"
+                    placeholder={t("placeholders.product_name")}
+                    value={formData.name}
+                    onChange={(e) =>
+                      setFormData({ ...formData, name: e.target.value })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
+                    Category
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold placeholder:font-medium"
+                    placeholder="e.g. Snacks, Electronics"
+                    value={formData.category}
+                    onChange={(e) =>
+                      setFormData({ ...formData, category: e.target.value })
+                    }
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

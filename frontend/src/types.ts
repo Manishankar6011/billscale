@@ -64,6 +64,7 @@ export interface Product {
   imageUrl?: string | undefined;
   hsnCode?: string | undefined;
   gstRate?: number | undefined;
+  category?: string;
   // Medical fields
   genericName?: string;
   manufacturer?: string;

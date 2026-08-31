@@ -63,7 +63,7 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                     <img src={companyLogo} alt="Company Logo" className="h-14 mx-auto mb-2 object-contain" />
                 )}
                 <h1 className="text-xl font-bold uppercase tracking-tight">{businessName}</h1>
-                {ownerName && <p className="text-[10px] font-bold mt-0.5">Proprietor: {ownerName}</p>}
+                {/* {ownerName && <p className="text-[10px] font-bold mt-0.5">Proprietor: {ownerName}</p>} */}
                 <div className="mt-2 space-y-0.5 text-[11px] font-medium">
                     {companyPhone && <p>Contact: {companyPhone}</p>}
                     {companyEmail && <p>Email: {companyEmail}</p>}
@@ -207,6 +207,7 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
 
                 {(() => {
                     const rOff = Number(sale.roundOffAmount || (sale as any).roundoffAmount || 0);
+                    if (rOff === 0) return null;
                     return (
                         <div className="flex justify-between items-center text-[11px] font-bold italic text-slate-600">
                             <span>Round Off:</span>
@@ -248,7 +249,7 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
 
                 {/* Footer Notes */}
                 <div className="text-center mt-6 space-y-2 pt-2">
-                    <p className="text-[11px] font-black border-y-2 border-black py-1">Items: {totalItems} | MODE: {sale.paymentMode?.toUpperCase() || 'CASH'}</p>
+                    {/* <p className="text-[11px] font-black border-y-2 border-black py-1">Items: {totalItems} | MODE: {sale.paymentMode?.toUpperCase() || 'CASH'}</p> */}
                     
                     {signature && (
                         <div className="flex flex-col items-center mt-4">

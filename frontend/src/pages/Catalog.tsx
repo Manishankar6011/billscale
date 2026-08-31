@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import axios from "axios";
 import { ShoppingCart, MessageCircle, Phone, MapPin, Search, Package, IndianRupee, Loader2, Plus, Minus, Trash2, X } from "lucide-react";
 import { createPortal } from "react-dom";
+import { Helmet } from "react-helmet-async";
 
 interface CatalogProduct {
   _id: string;
@@ -174,6 +175,12 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
+      <Helmet>
+        <title>{data.shopName} - Digital Catalog</title>
+        <meta name="description" content={`Browse products from ${data.shopName} and place your orders online.`} />
+        <meta property="og:title" content={`${data.shopName} - Digital Catalog`} />
+      </Helmet>
+
       {/* Header */}
       <header className="bg-white border-b border-slate-100 sticky top-0 z-30 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
