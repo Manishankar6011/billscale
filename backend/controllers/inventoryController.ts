@@ -387,3 +387,26 @@ export const deleteProduct = async (req: AuthRequest, res: Response) => {
         res.status(500).json({ message: err.message });
     }
 };
+
+// @desc    Update multiple products
+// @route   PUT /api/inventory/bulk-update
+// @access  Private
+export const bulkUpdateProducts = async (req: AuthRequest, res: Response): Promise<any> => {
+    try {
+        const { productIds, updateData } = req.body;
+        
+        if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
+            return res.status(400).json({ message: 'No products provided for update' });
+        }
+
+        await Product.updateMany(
+            { _id: { $in: productIds }, tenantId: req.tenantId },
+            { $set: updateData }
+        );
+
+        res.status(200).json({ message: 'Products updated successfully' });
+    } catch (err: any) {
+        console.error('Bulk update error:', err);
+        res.status(500).json({ message: err.message || 'Failed to update products' });
+    }
+};

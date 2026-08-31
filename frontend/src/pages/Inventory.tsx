@@ -132,6 +132,12 @@ const Inventory = () => {
     return data?.pages.flatMap((page) => page.products) || [];
   }, [data]);
 
+  const existingCategories = useMemo(() => {
+    const cats = [...new Set(products.map((p: any) => p.category).filter(Boolean))] as string[];
+    if (!cats.includes("General")) cats.unshift("General");
+    return cats;
+  }, [products]);
+
   // Infinite Scroll Observer
   const observer = useRef<IntersectionObserver | null>(null);
   const lastElementRef = useCallback(
@@ -212,6 +218,11 @@ const Inventory = () => {
   const [isContinuousMode, setIsContinuousMode] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
+
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [isBulkCategoryModalOpen, setIsBulkCategoryModalOpen] = useState(false);
+  const [bulkCategoryValue, setBulkCategoryValue] = useState("General");
+  const [isCreatingNewCategory, setIsCreatingNewCategory] = useState(false);
 
   const [printLabelData, setPrintLabelData] = useState<Product | null>(null);
   const [adjustmentType, setAdjustmentType] = useState<"add" | "reduce">("add");
@@ -454,6 +465,24 @@ const Inventory = () => {
     onError: (err: any) => {
       showToast(err.response?.data?.message || t("common.error"), "error");
     },
+  });
+
+  const bulkUpdateCategoryMutation = useMutation({
+    mutationFn: async (data: { productIds: string[], updateData: any }) => {
+      return axios.put('/api/inventory/bulk-update', data, {
+        headers: { Authorization: `Bearer ${user?.token}` }
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      showToast(t("inventory.updated_success") || "Categories updated successfully", "success");
+      setIsBulkCategoryModalOpen(false);
+      setSelectedProductIds([]);
+      setBulkCategoryValue("");
+    },
+    onError: (err: any) => {
+      showToast(err.response?.data?.message || t("common.error"), "error");
+    }
   });
 
   const deleteMutation = useMutation({
@@ -1001,6 +1030,15 @@ const Inventory = () => {
           >
             <ShoppingBag size={18} /> Smart Add
           </button>
+          
+          {selectedProductIds.length > 0 && (
+            <button
+              onClick={() => setIsBulkCategoryModalOpen(true)}
+              className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 bg-white border border-indigo-200 rounded-2xl text-sm font-bold text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 transition-all shadow-sm whitespace-nowrap animate-in fade-in zoom-in duration-200"
+            >
+              <Layers size={18} /> Assign Category ({selectedProductIds.length})
+            </button>
+          )}
           <button
             onClick={() => {
               if (user?.planType === "free" || user?.planType === "basic") {
@@ -1103,6 +1141,20 @@ const Inventory = () => {
         </div>
 
         <div className="grid grid-cols-2 sm:flex items-center gap-3 w-full sm:w-auto">
+          {/* Select All Checkbox */}
+          <label className="flex items-center justify-center gap-2 px-4 py-4 bg-white border border-slate-100 rounded-2xl text-sm font-bold text-slate-600 cursor-pointer shadow-sm hover:bg-slate-50 transition-colors w-full sm:w-auto whitespace-nowrap">
+            <input 
+              type="checkbox"
+              className="w-5 h-5 rounded-full border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+              checked={filteredProducts.length > 0 && selectedProductIds.length === filteredProducts.length}
+              onChange={(e) => {
+                if(e.target.checked) setSelectedProductIds(filteredProducts.map(p => p._id!));
+                else setSelectedProductIds([]);
+              }}
+            />
+            Select All
+          </label>
+
           {/* Filter Dropdown */}
           <div className="relative group">
             <select
@@ -1168,10 +1220,21 @@ const Inventory = () => {
             >
               {/* Product Card Content (unchanged) */}
               <div className="flex items-start justify-between mb-4">
-                <div
-                  className={`p-3 rounded-xl ${isLowStock ? "bg-rose-50 text-rose-600" : "bg-primary-50 text-primary-600"}`}
-                >
-                  <Box size={24} />
+                <div className="flex items-center gap-3">
+                  <input 
+                    type="checkbox"
+                    className="w-6 h-6 rounded-full border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer shadow-sm"
+                    checked={selectedProductIds.includes(product._id!)}
+                    onChange={(e) => {
+                      if(e.target.checked) setSelectedProductIds([...selectedProductIds, product._id!]);
+                      else setSelectedProductIds(selectedProductIds.filter(id => id !== product._id));
+                    }}
+                  />
+                  <div
+                    className={`p-3 rounded-xl ${isLowStock ? "bg-rose-50 text-rose-600" : "bg-primary-50 text-primary-600"}`}
+                  >
+                    <Box size={24} />
+                  </div>
                 </div>
                 <div className="flex items-center gap-2 transition-opacity">
                   <button
@@ -2278,6 +2341,94 @@ const Inventory = () => {
           mfgDate={barcodeMfgDate}
           expDate={barcodeExpDate}
         />
+      )}
+
+      {/* Bulk Category Assign Modal */}
+      {isBulkCategoryModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-8 animate-in zoom-in duration-200">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center">
+                  <Layers size={24} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-800">Assign Category</h3>
+                  <p className="text-sm text-slate-500">Updating {selectedProductIds.length} items</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsBulkCategoryModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Category</label>
+                {!isCreatingNewCategory ? (
+                    <select
+                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-6 text-base font-bold focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all appearance-none cursor-pointer"
+                        value={bulkCategoryValue}
+                        onChange={(e) => {
+                            if (e.target.value === "__NEW__") {
+                                setIsCreatingNewCategory(true);
+                                setBulkCategoryValue("");
+                            } else {
+                                setBulkCategoryValue(e.target.value);
+                            }
+                        }}
+                    >
+                        {existingCategories.map((cat: string) => (
+                            <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                        <option value="__NEW__">+ Create New Category</option>
+                    </select>
+                ) : (
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="text"
+                            placeholder="Enter new category name..."
+                            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-6 text-base font-bold focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
+                            value={bulkCategoryValue}
+                            onChange={(e) => setBulkCategoryValue(e.target.value)}
+                            autoFocus
+                        />
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setIsCreatingNewCategory(false);
+                                setBulkCategoryValue("General");
+                            }}
+                            className="p-4 bg-slate-100 text-slate-500 hover:text-rose-600 rounded-2xl transition-colors shrink-0"
+                            title="Cancel"
+                        >
+                            <X size={20} />
+                        </button>
+                    </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setIsBulkCategoryModalOpen(false)}
+                  className="flex-1 px-6 py-4 rounded-2xl font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={!bulkCategoryValue.trim() || bulkUpdateCategoryMutation.isPending}
+                  onClick={() => bulkUpdateCategoryMutation.mutate({ productIds: selectedProductIds, updateData: { category: bulkCategoryValue.trim() } })}
+                  className="flex-1 px-6 py-4 rounded-2xl font-black uppercase tracking-widest text-xs text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                >
+                  {bulkUpdateCategoryMutation.isPending ? <Loader2 className="animate-spin" size={18} /> : "Update"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {isBulkModalOpen && (
