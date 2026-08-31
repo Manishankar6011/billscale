@@ -123,7 +123,8 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                     <tr className="border-b-2 border-black text-left font-black text-[11px] uppercase">
                         <th className="py-1">Items</th>
                         <th className="py-1 text-center">Qty</th>
-                        <th className="py-1 text-right">Price</th>
+                        <th className="py-1 text-right">MRP</th>
+                        {totalDiscount > 0 && <th className="py-1 text-right">Disc</th>}
                         <th className="py-1 text-right">Total</th>
                     </tr>
                 </thead>
@@ -148,22 +149,24 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                                         {item.description}
                                     </p>
                                 )}
+                                {(item.batchNumber || item.expiryDate) && (
                                 <p className="text-[10px] font-bold ml-1 uppercase">
-                                    MRP: ₹{mrp.toFixed(2)} 
-                                    {discPerUnit > 0 && ` | SAVE: ₹${discPerUnit.toFixed(2)}/unit`}
-                                    {item.batchNumber && ` | B: ${item.batchNumber}`}
-                                    {item.expiryDate && ` | E: ${item.expiryDate}`}
+                                    {item.batchNumber && `B: ${item.batchNumber}`}
+                                    {item.batchNumber && item.expiryDate && ` | `}
+                                    {item.expiryDate && `E: ${item.expiryDate}`}
                                 </p>
+                                )}
                             </td>
                             <td className="py-2 text-center font-black">{item.quantity} <span className="text-[10px] font-medium text-slate-500 ml-0.5">{item.unit}</span></td>
-                            <td className="py-2 text-right">{(item.sellingPrice || 0).toFixed(2)}</td>
-                            <td className="py-2 text-right font-black">{((item.quantity || 0) * (item.sellingPrice || 0) * (100 / (100 + (item.taxRate || 0)))).toFixed(2)}</td>
+                            <td className="py-2 text-right">{mrp.toFixed(2).replace(/\.00$/, '')}</td>
+                            {totalDiscount > 0 && <td className="py-2 text-right">{discPerUnit > 0 ? `${Number(((discPerUnit / mrp) * 100).toFixed(2))}%` : '-'}</td>}
+                            <td className="py-2 text-right font-black">{((item.quantity || 0) * (item.sellingPrice || 0) * (100 / (100 + (item.taxRate || 0)))).toFixed(2).replace(/\.00$/, '')}</td>
                         </tr>
                         );
                     })}
                     {(sale.additionalItems || []).length > 0 && (
                         <tr className="bg-slate-100/50">
-                            <td colSpan={4} className="py-1 px-1 text-[10px] font-black uppercase tracking-widest border-y border-black border-dashed">
+                            <td colSpan={totalDiscount > 0 ? 5 : 4} className="py-1 px-1 text-[10px] font-black uppercase tracking-widest border-y border-black border-dashed">
                                 Additional Charges & Services
                             </td>
                         </tr>
@@ -172,8 +175,9 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                         <tr key={`add-${i}`} className="border-b border-black border-dashed italic">
                             <td className="py-2 pr-1 font-black text-[12px]">{(sale.items?.length || 0) + i + 1}. {item.name}</td>
                             <td className="py-2 text-center font-bold">1</td>
-                            <td className="py-2 text-right">{(item.price || 0).toFixed(2)}</td>
-                            <td className="py-2 text-right font-black">{(item.price || 0).toFixed(2)}</td>
+                            <td className="py-2 text-right">{(item.price || 0).toFixed(2).replace(/\.00$/, '')}</td>
+                            {totalDiscount > 0 && <td className="py-2 text-right">-</td>}
+                            <td className="py-2 text-right font-black">{(item.price || 0).toFixed(2).replace(/\.00$/, '')}</td>
                         </tr>
                     ))}
                 </tbody>
