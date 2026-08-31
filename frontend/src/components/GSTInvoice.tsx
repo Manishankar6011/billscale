@@ -47,6 +47,21 @@ const GSTInvoice: React.FC<GSTInvoiceProps> = ({
 
   if (!sale) return null;
 
+  const totalDiscount = React.useMemo(() => {
+      return (sale?.items || []).reduce((acc: number, item: any) => {
+          let mrp = item.mrpAtTime || 0;
+          if (item.productId && typeof item.productId === 'object') {
+              const p = item.productId as any;
+              if (p.hasSubUnit && item.unit === p.subUnitName) {
+                  const boxMrp = p.mrp || item.mrpAtTime || 0;
+                  mrp = (p.subUnitMrp && p.subUnitMrp > 0 && p.subUnitMrp < boxMrp) ? p.subUnitMrp : (boxMrp / (p.subUnitValue || 1));
+              }
+          }
+          const discPerUnit = mrp - (item.sellingPrice || 0);
+          return acc + (discPerUnit > 0 ? discPerUnit * (item.quantity || 0) : 0);
+      }, 0);
+  }, [sale]);
+
   const invoiceDate = format(new Date(sale.date), "d-MMM-yy");
 
   // Tax Calculations
@@ -272,7 +287,19 @@ const GSTInvoice: React.FC<GSTInvoiceProps> = ({
                                     mrp = (p.subUnitMrp && p.subUnitMrp > 0 && p.subUnitMrp < boxMrp) ? p.subUnitMrp : (boxMrp / (p.subUnitValue || 1));
                                 }
                             }
-                            return mrp > 0 ? <span>MRP: ₹{mrp}</span> : null;
+                            return mrp > 0 ? <span>MRP: ₹{mrp.toFixed(2)}</span> : null;
+                        })()}
+                        {(() => {
+                            let mrp = item.mrpAtTime || 0;
+                            if (item.productId && typeof item.productId === 'object') {
+                                const p = item.productId as any;
+                                if (p.hasSubUnit && item.unit === p.subUnitName) {
+                                    const boxMrp = p.mrp || item.mrpAtTime || 0;
+                                    mrp = (p.subUnitMrp && p.subUnitMrp > 0 && p.subUnitMrp < boxMrp) ? p.subUnitMrp : (boxMrp / (p.subUnitValue || 1));
+                                }
+                            }
+                            const discPerUnit = mrp - (item.sellingPrice || 0);
+                            return discPerUnit > 0 ? <span className="text-green-700"> | SAVE: ₹{discPerUnit.toFixed(2)}/unit</span> : null;
                         })()}
                         {item.batchNumber && <span> | B: {item.batchNumber}</span>}
                         {item.expiryDate && <span> | E: {item.expiryDate}</span>}
@@ -541,6 +568,13 @@ const GSTInvoice: React.FC<GSTInvoiceProps> = ({
 
         {/* Bottom Section */}
         <div className="border-t border-black p-1">
+          {totalDiscount > 0 && (
+            <div className="mb-2 p-1 border border-green-600 border-dashed bg-green-50 w-full">
+                <p className="text-[10px] font-black uppercase tracking-widest text-green-700 text-center">
+                    🎉 Wow! You Saved ₹{totalDiscount.toFixed(2)} on this bill! 🎉
+                </p>
+            </div>
+          )}
           <p className="text-[9px] mb-1">
             Tax Amount (in words) :{" "}
             <span className="font-bold italic uppercase underline">

@@ -55,6 +55,21 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
 
     const totalItems = (sale.items?.length || 0) + (sale.additionalItems?.length || 0);
 
+    const totalDiscount = React.useMemo(() => {
+        return (sale?.items || []).reduce((acc: number, item: any) => {
+            let mrp = item.mrpAtTime || 0;
+            if (item.productId && typeof item.productId === 'object') {
+                const p = item.productId as any;
+                if (p.hasSubUnit && item.unit === p.subUnitName) {
+                    const boxMrp = p.mrp || item.mrpAtTime || 0;
+                    mrp = (p.subUnitMrp && p.subUnitMrp > 0 && p.subUnitMrp < boxMrp) ? p.subUnitMrp : (boxMrp / (p.subUnitValue || 1));
+                }
+            }
+            const discPerUnit = mrp - (item.sellingPrice || 0);
+            return acc + (discPerUnit > 0 ? discPerUnit * (item.quantity || 0) : 0);
+        }, 0);
+    }, [sale]);
+
     return (
         <div id="printable-invoice" className={`${isPreview ? 'block shadow-md' : 'hidden print:block'} bg-white text-black p-2 w-full max-w-[85mm] mx-auto font-sans text-[12px] leading-tight`}>
             {/* Header */}
@@ -113,7 +128,18 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                     </tr>
                 </thead>
                 <tbody className="font-bold">
-                    {(sale.items || []).map((item: any, i: number) => (
+                    {(sale.items || []).map((item: any, i: number) => {
+                        let mrp = item.mrpAtTime || 0;
+                        if (item.productId && typeof item.productId === 'object') {
+                            const p = item.productId as any;
+                            if (p.hasSubUnit && item.unit === p.subUnitName) {
+                                const boxMrp = p.mrp || item.mrpAtTime || 0;
+                                mrp = (p.subUnitMrp && p.subUnitMrp > 0 && p.subUnitMrp < boxMrp) ? p.subUnitMrp : (boxMrp / (p.subUnitValue || 1));
+                            }
+                        }
+                        const discPerUnit = mrp - (item.sellingPrice || 0);
+
+                        return (
                         <tr key={i} className="border-b border-black border-dashed">
                             <td className="py-2 pr-1">
                                 <p className="font-black text-[12px] leading-tight mb-1">{i + 1}. {item.productId?.name || item.name || 'Item'}</p>
@@ -123,17 +149,8 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                                     </p>
                                 )}
                                 <p className="text-[10px] font-bold ml-1 uppercase">
-                                    MRP: ₹{(() => {
-                                        let mrp = item.mrpAtTime || 0;
-                                        if (item.productId && typeof item.productId === 'object') {
-                                            const p = item.productId as any;
-                                            if (p.hasSubUnit && item.unit === p.subUnitName) {
-                                                const boxMrp = p.mrp || item.mrpAtTime || 0;
-                                                mrp = (p.subUnitMrp && p.subUnitMrp > 0 && p.subUnitMrp < boxMrp) ? p.subUnitMrp : (boxMrp / (p.subUnitValue || 1));
-                                            }
-                                        }
-                                        return mrp;
-                                    })()} 
+                                    MRP: ₹{mrp.toFixed(2)} 
+                                    {discPerUnit > 0 && ` | SAVE: ₹${discPerUnit.toFixed(2)}/unit`}
                                     {item.batchNumber && ` | B: ${item.batchNumber}`}
                                     {item.expiryDate && ` | E: ${item.expiryDate}`}
                                 </p>
@@ -142,7 +159,8 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                             <td className="py-2 text-right">{(item.sellingPrice || 0).toFixed(2)}</td>
                             <td className="py-2 text-right font-black">{((item.quantity || 0) * (item.sellingPrice || 0) * (100 / (100 + (item.taxRate || 0)))).toFixed(2)}</td>
                         </tr>
-                    ))}
+                        );
+                    })}
                     {(sale.additionalItems || []).length > 0 && (
                         <tr className="bg-slate-100/50">
                             <td colSpan={4} className="py-1 px-1 text-[10px] font-black uppercase tracking-widest border-y border-black border-dashed">
@@ -249,6 +267,13 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
 
                 {/* Footer Notes */}
                 <div className="text-center mt-6 space-y-2 pt-2">
+                    {totalDiscount > 0 && (
+                        <div className="mb-4 p-2 border-2 border-black border-dashed rounded-lg bg-gray-50">
+                            <p className="text-[11px] font-black text-center uppercase tracking-widest">
+                                🎉 Wow! You Saved ₹{totalDiscount.toFixed(2)} on this bill! 🎉
+                            </p>
+                        </div>
+                    )}
                     {/* <p className="text-[11px] font-black border-y-2 border-black py-1">Items: {totalItems} | MODE: {sale.paymentMode?.toUpperCase() || 'CASH'}</p> */}
                     
                     {signature && (

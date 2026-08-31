@@ -49,6 +49,21 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
 
     if (!sale) return null;
 
+    const totalDiscount = React.useMemo(() => {
+        return (sale?.items || []).reduce((acc: number, item: any) => {
+            let mrp = item.mrpAtTime || 0;
+            if (item.productId && typeof item.productId === 'object') {
+                const p = item.productId as any;
+                if (p.hasSubUnit && item.unit === p.subUnitName) {
+                    const boxMrp = p.mrp || item.mrpAtTime || 0;
+                    mrp = (p.subUnitMrp && p.subUnitMrp > 0 && p.subUnitMrp < boxMrp) ? p.subUnitMrp : (boxMrp / (p.subUnitValue || 1));
+                }
+            }
+            const discPerUnit = mrp - (item.sellingPrice || 0);
+            return acc + (discPerUnit > 0 ? discPerUnit * (item.quantity || 0) : 0);
+        }, 0);
+    }, [sale]);
+
     return (
         <div id="a4-invoice" className={`${isPreview ? 'block shadow-2xl' : 'hidden print:block'} bg-white text-black p-12 w-[210mm] min-h-[297mm] mx-auto font-sans text-base`}>
             {/* Top Toolbar Info */}
@@ -134,6 +149,25 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                                         {item.batchNumber && ` | Batch: ${item.batchNumber}`}
                                         {item.expiryDate && ` | Exp: ${item.expiryDate}`}
                                     </p>
+                                    {(() => {
+                                        let mrp = item.mrpAtTime || 0;
+                                        if (item.productId && typeof item.productId === 'object') {
+                                            const p = item.productId as any;
+                                            if (p.hasSubUnit && item.unit === p.subUnitName) {
+                                                const boxMrp = p.mrp || item.mrpAtTime || 0;
+                                                mrp = (p.subUnitMrp && p.subUnitMrp > 0 && p.subUnitMrp < boxMrp) ? p.subUnitMrp : (boxMrp / (p.subUnitValue || 1));
+                                            }
+                                        }
+                                        const discPerUnit = mrp - (item.sellingPrice || 0);
+                                        if (discPerUnit > 0) {
+                                            return (
+                                                <p className="text-[10px] text-green-700 font-black uppercase tracking-widest mt-0.5">
+                                                    Saved ₹{discPerUnit.toFixed(2)}/unit
+                                                </p>
+                                            );
+                                        }
+                                        return null;
+                                    })()}
                                 </td>
                                 <td className="py-5 px-2 text-right font-bold text-black">₹{(() => {
                                     let mrp = item.mrpAtTime || 0;
@@ -258,8 +292,15 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                 </div>
             </div>
 
-            <div className="mt-12 flex justify-between items-end">
+            <div className="mt-8 flex justify-between items-end">
                 <div className="text-black text-[11px] font-bold space-y-1">
+                    {totalDiscount > 0 && (
+                        <div className="mb-4 p-3 border-2 border-green-600 border-dashed rounded-xl bg-green-50 w-fit">
+                            <p className="text-[13px] font-black uppercase tracking-widest text-green-700">
+                                🎉 Wow! You Saved ₹{totalDiscount.toFixed(2)} on this bill! 🎉
+                            </p>
+                        </div>
+                    )}
                     <p className="uppercase tracking-widest text-black mb-2 border-b-2 border-black w-fit">Terms & Conditions</p>
                     <p>1. Goods once sold will not be taken back.</p>
                     <p>2. Subject to local jurisdiction.</p>
