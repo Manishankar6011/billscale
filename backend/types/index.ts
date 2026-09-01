@@ -30,6 +30,7 @@ export interface ITenant extends Document {
   customDomain?: string;
   customDomainStatus?: 'pending' | 'active' | 'failed';
   customDomainVerifiedAt?: Date;
+  enableInventoryImageUpload?: boolean;
   createdAt: Date;
 }
 
