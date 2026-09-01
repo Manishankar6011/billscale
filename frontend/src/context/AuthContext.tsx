@@ -44,6 +44,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             stateCode: t.stateCode || data.stateCode,
             invoiceFormat: t.invoiceFormat || data.invoiceFormat,
             businessType: t.businessType || data.businessType,
+            enableInventoryImageUpload: t.enableInventoryImageUpload ?? data.enableInventoryImageUpload ?? false,
             token: token || data.token
         };
     };

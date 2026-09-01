@@ -111,6 +111,10 @@ const tenantSchema: Schema = new mongoose.Schema({
     customDomainVerifiedAt: {
         type: Date
     },
+    enableInventoryImageUpload: {
+        type: Boolean,
+        default: false
+    },
     createdAt: {
         type: Date,
         default: Date.now

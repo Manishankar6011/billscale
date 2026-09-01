@@ -33,6 +33,8 @@ import {
   ArrowUpDown,
   X,
   ShoppingBag,
+  Image as ImageIcon,
+  Upload,
 } from "lucide-react";
 import BarcodeScanner from "../components/BarcodeScanner";
 import JsBarcode from "jsbarcode";
@@ -185,6 +187,7 @@ const Inventory = () => {
     subUnitPurchasePrice: string;
     subUnitBarcode: string;
     subUnitDiscount: string;
+    imageUrl: string;
   }>({
     name: "",
     unit: "piece",
@@ -212,6 +215,7 @@ const Inventory = () => {
     subUnitPurchasePrice: "",
     subUnitBarcode: "",
     subUnitDiscount: "",
+    imageUrl: "",
   });
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [showLeaveWarning, setShowLeaveWarning] = useState(false);
@@ -296,6 +300,7 @@ const Inventory = () => {
       subUnitPurchasePrice: "",
       subUnitBarcode: "",
       subUnitDiscount: "",
+      imageUrl: "",
     });
     setAdjustmentType("add");
     setAdjustmentValue("");
@@ -427,6 +432,7 @@ const Inventory = () => {
           subUnitPurchasePrice: "",
           subUnitBarcode: "",
           subUnitDiscount: "",
+          imageUrl: "",
         });
         setTimeout(() => nameInputRef.current?.focus(), 100);
       } else {
@@ -459,6 +465,7 @@ const Inventory = () => {
           subUnitPurchasePrice: "",
           subUnitBarcode: "",
           subUnitDiscount: "",
+          imageUrl: "",
         });
       }
     },
@@ -540,8 +547,32 @@ const Inventory = () => {
       subUnitPurchasePrice: product.subUnitPurchasePrice ? product.subUnitPurchasePrice.toString() : "",
       subUnitBarcode: product.subUnitBarcode || "",
       subUnitDiscount: product.subUnitDiscount ? product.subUnitDiscount.toString() : "",
+      imageUrl: product.imageUrl || "",
     });
     setIsModalOpen(true);
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check file size (50KB)
+    if (file.size > 50 * 1024) {
+      showToast("Image size must be less than 50KB", "error");
+      return;
+    }
+
+    // Check if it's an image
+    if (!file.type.startsWith('image/')) {
+      showToast("Please upload a valid image file", "error");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setFormData(prev => ({ ...prev, imageUrl: reader.result as string }));
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -579,6 +610,7 @@ const Inventory = () => {
       subUnitPurchasePrice: Number(formData.subUnitPurchasePrice),
       subUnitBarcode: formData.subUnitBarcode,
       subUnitDiscount: Number(formData.subUnitDiscount),
+      imageUrl: formData.imageUrl,
     };
     saveMutation.mutate(data);
   };
@@ -1230,11 +1262,17 @@ const Inventory = () => {
                       else setSelectedProductIds(selectedProductIds.filter(id => id !== product._id));
                     }}
                   />
-                  <div
-                    className={`p-3 rounded-xl ${isLowStock ? "bg-rose-50 text-rose-600" : "bg-primary-50 text-primary-600"}`}
-                  >
-                    <Box size={24} />
-                  </div>
+                  {product.imageUrl ? (
+                    <div className="w-12 h-12 rounded-xl overflow-hidden shadow-sm shrink-0 border border-slate-100">
+                      <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                    </div>
+                  ) : (
+                    <div
+                      className={`p-3 rounded-xl shrink-0 ${isLowStock ? "bg-rose-50 text-rose-600" : "bg-primary-50 text-primary-600"}`}
+                    >
+                      <Box size={24} />
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 transition-opacity">
                   <button
@@ -1495,6 +1533,46 @@ const Inventory = () => {
                   </select>
                 </div>
               </div>
+
+              {user?.enableInventoryImageUpload && (
+                <div>
+                  {/* Product Image Upload */}
+                  <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
+                    Product Image
+                  </label>
+                  <div className="flex items-center gap-4">
+                    {formData.imageUrl ? (
+                      <div className="relative w-24 h-24 rounded-2xl border-2 border-slate-100 overflow-hidden group">
+                        <img src={formData.imageUrl} alt="Product preview" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, imageUrl: "" }))}
+                          className="absolute inset-0 bg-slate-900/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Trash2 className="text-white" size={20} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="w-24 h-24 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 bg-slate-50 shrink-0">
+                        <ImageIcon size={24} className="mb-1 opacity-50" />
+                        <span className="text-[9px] font-black uppercase tracking-widest">No Image</span>
+                      </div>
+                    )}
+                    <div className="flex-grow">
+                      <label className="flex items-center justify-center gap-2 w-full bg-slate-50 hover:bg-slate-100 border-2 border-slate-100 rounded-2xl py-3 px-4 text-slate-600 font-black text-xs uppercase tracking-widest cursor-pointer transition-colors">
+                        <Upload size={16} />
+                        Upload Image (Max 50KB)
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleImageChange}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {user?.businessType === 'Medical' && (
                 <div className="p-6 bg-blue-50/50 rounded-[2rem] border border-blue-100 space-y-5 animate-in slide-in-from-top-2">

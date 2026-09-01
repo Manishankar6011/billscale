@@ -46,7 +46,8 @@ const Settings = () => {
         pan: '',
         stateName: '',
         stateCode: '',
-        invoiceFormat: 'modern' as 'modern' | 'gst'
+        invoiceFormat: 'modern' as 'modern' | 'gst',
+        enableInventoryImageUpload: false
     });
 
     const logoInputRef = useRef<HTMLInputElement>(null);
@@ -92,6 +93,7 @@ const Settings = () => {
                 stateName: profile.tenantId?.stateName || '',
                 stateCode: profile.tenantId?.stateCode || '',
                 invoiceFormat: profile.tenantId?.invoiceFormat || 'modern',
+                enableInventoryImageUpload: profile.tenantId?.enableInventoryImageUpload || false,
             });
             // Load saved custom domain info
             setSavedCustomDomain(profile.tenantId?.customDomain || '');
@@ -949,6 +951,34 @@ const Settings = () => {
                                             <option value="modern">Modern Professional (A4)</option>
                                             <option value="gst">GST Tax Invoice (A4)</option>
                                         </select>
+                                    </div>
+                                    
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Enable Inventory Image Upload</label>
+                                            {profile?.tenantId?.planType !== 'business' && (
+                                                <div className="flex items-center gap-1 text-[9px] font-bold text-amber-500 bg-amber-50 px-2 py-0.5 rounded-md">
+                                                    <Crown size={10} /> Business Plan
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <button 
+                                                type="button"
+                                                disabled={profile?.tenantId?.planType !== 'business'}
+                                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${
+                                                    formData.enableInventoryImageUpload ? 'bg-orange-500' : 'bg-slate-200'
+                                                } ${profile?.tenantId?.planType !== 'business' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                onClick={() => setFormData({...formData, enableInventoryImageUpload: !formData.enableInventoryImageUpload})}
+                                            >
+                                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                                    formData.enableInventoryImageUpload ? 'translate-x-6' : 'translate-x-1'
+                                                }`} />
+                                            </button>
+                                            <span className="text-xs font-bold text-slate-600">
+                                                {formData.enableInventoryImageUpload ? 'Enabled' : 'Disabled'}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
