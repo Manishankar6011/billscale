@@ -126,7 +126,7 @@ export const getProfile = async (req: AuthRequest, res: Response, next: NextFunc
 };
 
 export const updateProfile = async (req: AuthRequest, res: Response, next: NextFunction) => {
-    const { name, companyName, address, phone, billingEmail, billingAddress, logoUrl, signature, upiId, slug, gstin, pan, stateName, stateCode, invoiceFormat } = req.body;
+    const { name, companyName, address, phone, billingEmail, billingAddress, logoUrl, signature, upiId, slug, gstin, pan, stateName, stateCode, invoiceFormat, enableInventoryImageUpload } = req.body;
 
     try {
         const user = await User.findById(req.user?._id);
@@ -151,6 +151,7 @@ export const updateProfile = async (req: AuthRequest, res: Response, next: NextF
                 if (stateName !== undefined) tenant.stateName = stateName;
                 if (stateCode !== undefined) tenant.stateCode = stateCode;
                 if (invoiceFormat !== undefined) tenant.invoiceFormat = invoiceFormat;
+                if (enableInventoryImageUpload !== undefined) tenant.enableInventoryImageUpload = enableInventoryImageUpload;
                 if (slug) tenant.slug = slugify(slug);
                 
                 // Handle Logo Update & Cleanup

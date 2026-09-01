@@ -21,6 +21,7 @@ export interface Tenant {
   stateCode?: string;
   invoiceFormat?: 'thermal' | 'modern' | 'gst';
   businessType?: string;
+  enableInventoryImageUpload?: boolean;
 }
 
 export interface User {
@@ -48,6 +49,7 @@ export interface User {
   stateName?: string;
   stateCode?: string;
   invoiceFormat?: 'thermal' | 'modern' | 'gst';
+  enableInventoryImageUpload?: boolean;
 }
 
 export interface Product {

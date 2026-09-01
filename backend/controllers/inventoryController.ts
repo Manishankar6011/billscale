@@ -170,6 +170,11 @@ export const addProduct = async (req: AuthRequest, res: Response) => {
         // 3. New Batch: Name exists but price differs, or name is completely new
         console.log(`[addProduct] Creating new batch/product for ${normalizedName}`);
         const productData = { ...req.body, tenantId: req.tenantId };
+
+        if (productData.imageUrl && productData.imageUrl.startsWith('data:image')) {
+            const { uploadImage } = require('../utils/cloudinary');
+            productData.imageUrl = await uploadImage(productData.imageUrl, `tenants/${req.tenantId}/inventory`);
+        }
         
         // Auto-generate batch number if missing or colliding
         if (!productData.batchNumber || productData.batchNumber === 'Default' || productData.batchNumber === '') {
@@ -356,9 +361,29 @@ export const bulkAddProducts = async (req: AuthRequest, res: Response) => {
 
 export const updateProduct = async (req: AuthRequest, res: Response) => {
     try {
+        const productData = { ...req.body };
+
+        if (productData.imageUrl !== undefined) {
+            const existingProduct = await Product.findOne({ _id: req.params.id, tenantId: req.tenantId });
+            if (existingProduct && productData.imageUrl !== existingProduct.imageUrl) {
+                if (existingProduct.imageUrl) {
+                    try {
+                        const { deleteImageFromCloudinary } = require('../utils/cloudinary');
+                        await deleteImageFromCloudinary(existingProduct.imageUrl);
+                    } catch (err) {
+                        console.error('Failed to delete old image:', err);
+                    }
+                }
+                if (productData.imageUrl.startsWith('data:image')) {
+                    const { uploadImage } = require('../utils/cloudinary');
+                    productData.imageUrl = await uploadImage(productData.imageUrl, `tenants/${req.tenantId}/inventory`);
+                }
+            }
+        }
+
         const product = await Product.findOneAndUpdate(
             { _id: req.params.id, tenantId: req.tenantId },
-            { ...req.body },
+            { $set: productData },
             { new: true }
         );
 
@@ -380,6 +405,15 @@ export const deleteProduct = async (req: AuthRequest, res: Response) => {
 
         if (!product) {
             return res.status(404).json({ message: 'Product not found' });
+        }
+
+        if (product.imageUrl) {
+            try {
+                const { deleteImageFromCloudinary } = require('../utils/cloudinary');
+                await deleteImageFromCloudinary(product.imageUrl);
+            } catch (err) {
+                console.error('Failed to delete image:', err);
+            }
         }
 
         res.status(200).json({ message: 'Product removed' });
