@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import axios from "axios";
-import { ShoppingCart, MessageCircle, Phone, MapPin, Search, Package, IndianRupee, Loader2, Plus, Minus, Trash2, X } from "lucide-react";
+import { ShoppingCart, MessageCircle, Phone, MapPin, Search, Package, IndianRupee, Loader2, Plus, Minus, Trash2, X, Share2, Check } from "lucide-react";
 import { createPortal } from "react-dom";
 import { Helmet } from "react-helmet-async";
 
@@ -38,7 +38,9 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("All");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [selectedCategory, setSelectedCategory] = useState(searchParams.get("category") || "All");
+  const [isCopied, setIsCopied] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
 
@@ -254,11 +256,17 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
             />
           </div>
           
-          <div className="flex overflow-x-auto gap-2 pb-2 no-scrollbar">
+          <div className="flex overflow-x-auto gap-2 pb-2 no-scrollbar items-center">
             {categories.map(cat => (
               <button
                 key={cat}
-                onClick={() => setSelectedCategory(cat)}
+                onClick={() => {
+                  setSelectedCategory(cat);
+                  const newParams = new URLSearchParams(searchParams);
+                  if (cat === "All") newParams.delete("category");
+                  else newParams.set("category", cat);
+                  setSearchParams(newParams);
+                }}
                 className={`px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all shadow-sm ${
                   selectedCategory === cat
                     ? "bg-primary-600 text-white shadow-primary-200"
@@ -268,6 +276,27 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
                 {cat}
               </button>
             ))}
+            <div className="w-px h-6 bg-slate-200 mx-1 shrink-0"></div>
+            <button
+              onClick={() => {
+                const url = new URL(window.location.href);
+                if (selectedCategory !== "All") {
+                  url.searchParams.set("category", selectedCategory);
+                } else {
+                  url.searchParams.delete("category");
+                }
+                navigator.clipboard.writeText(url.toString());
+                setIsCopied(true);
+                setTimeout(() => setIsCopied(false), 2000);
+              }}
+              className="px-4 py-2.5 rounded-2xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all flex items-center gap-2 whitespace-nowrap shrink-0 ml-1"
+              title="Copy link for selected category"
+            >
+              {isCopied ? <Check size={14} /> : <Share2 size={14} />}
+              <span className="text-[10px] font-black uppercase tracking-widest">
+                {isCopied ? "Link Copied!" : "Share Category"}
+              </span>
+            </button>
           </div>
         </div>
       </div>

@@ -218,6 +218,7 @@ const Inventory = () => {
     imageUrl: "",
   });
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [imageInputMode, setImageInputMode] = useState<"upload" | "url">("upload");
   const [showLeaveWarning, setShowLeaveWarning] = useState(false);
   const [isContinuousMode, setIsContinuousMode] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -1536,13 +1537,38 @@ const Inventory = () => {
 
               {user?.enableInventoryImageUpload && (
                 <div>
-                  {/* Product Image Upload */}
                   <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
                     Product Image
                   </label>
+                  
+                  <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-xl w-fit">
+                    <button
+                      type="button"
+                      onClick={() => setImageInputMode("upload")}
+                      className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                        imageInputMode === "upload" 
+                          ? "bg-white text-slate-800 shadow-sm" 
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      Upload File
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setImageInputMode("url")}
+                      className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                        imageInputMode === "url" 
+                          ? "bg-white text-slate-800 shadow-sm" 
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      Image URL
+                    </button>
+                  </div>
+
                   <div className="flex items-center gap-4">
                     {formData.imageUrl ? (
-                      <div className="relative w-24 h-24 rounded-2xl border-2 border-slate-100 overflow-hidden group">
+                      <div className="relative w-24 h-24 rounded-2xl border-2 border-slate-100 overflow-hidden group shrink-0">
                         <img src={formData.imageUrl} alt="Product preview" className="w-full h-full object-cover" />
                         <button
                           type="button"
@@ -1559,16 +1585,26 @@ const Inventory = () => {
                       </div>
                     )}
                     <div className="flex-grow">
-                      <label className="flex items-center justify-center gap-2 w-full bg-slate-50 hover:bg-slate-100 border-2 border-slate-100 rounded-2xl py-3 px-4 text-slate-600 font-black text-xs uppercase tracking-widest cursor-pointer transition-colors">
-                        <Upload size={16} />
-                        Upload Image (Max 50KB)
+                      {imageInputMode === "upload" ? (
+                        <label className="flex items-center justify-center gap-2 w-full bg-slate-50 hover:bg-slate-100 border-2 border-slate-100 rounded-2xl py-3 px-4 text-slate-600 font-black text-xs uppercase tracking-widest cursor-pointer transition-colors">
+                          <Upload size={16} />
+                          Upload Image (Max 50KB)
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleImageChange}
+                          />
+                        </label>
+                      ) : (
                         <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={handleImageChange}
+                          type="url"
+                          placeholder="Paste image URL here..."
+                          className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold placeholder:font-medium"
+                          value={formData.imageUrl}
+                          onChange={(e) => setFormData(prev => ({ ...prev, imageUrl: e.target.value }))}
                         />
-                      </label>
+                      )}
                     </div>
                   </div>
                 </div>
