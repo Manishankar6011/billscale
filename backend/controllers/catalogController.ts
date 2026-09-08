@@ -36,8 +36,8 @@ export const getCatalogBySlug = async (req: Request, res: Response) => {
 
 // ─── Public: Get catalog by custom domain (used by custom domain routing) ──
 export const getCatalogByDomain = async (req: Request, res: Response) => {
-    // Host header se domain nikaalo (port remove karo)
-    const host = req.headers.host?.split(':')[0]?.toLowerCase();
+    // Host header se domain nikaalo (support for proxy/vercel rewrites)
+    const host = (req.headers['x-forwarded-host'] || req.headers.host)?.toString().split(':')[0]?.toLowerCase();
 
     if (!host) {
         return res.status(400).json({ message: 'No host header found' });
@@ -46,7 +46,10 @@ export const getCatalogByDomain = async (req: Request, res: Response) => {
     try {
         const tenant = await Tenant.findOne({
             customDomain: host,
-            customDomainStatus: 'active'
+            $or: [
+                { customDomainStatus: 'active' },
+                { customDomainStatus: { $exists: false } }
+            ]
         });
 
         if (!tenant) {
