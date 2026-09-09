@@ -156,6 +156,7 @@ export interface ISale extends Document {
   paymentMode: "cash" | "credit" | "upi" | "card" | "bank_transfer";
   status: "paid" | "pending" | "partial";
   additionalItems?: { name: string, price: number, profitPercent?: number }[];
+  customItems?: { name: string, price: number, quantity: number, profitPercent?: number }[];
   invoiceNumber: string;
   date: Date;
   showQRCode?: boolean;

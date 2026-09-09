@@ -164,6 +164,15 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                         </tr>
                         );
                     })}
+                    {(sale.customItems || []).map((item: any, i: number) => (
+                        <tr key={`custom-${i}`} className="border-b border-black border-dashed">
+                            <td className="py-2 pr-1 font-black text-[12px]">{(sale.items?.length || 0) + i + 1}. {item.name}</td>
+                            <td className="py-2 text-center font-bold">{item.quantity}</td>
+                            <td className="py-2 text-right">{(item.price || 0).toFixed(2).replace(/\.00$/, '')}</td>
+                            {totalDiscount > 0 && <td className="py-2 text-right">-</td>}
+                            <td className="py-2 text-right font-black">{((item.quantity || 1) * (item.price || 0)).toFixed(2).replace(/\.00$/, '')}</td>
+                        </tr>
+                    ))}
                     {(sale.additionalItems || []).length > 0 && (
                         <tr className="bg-slate-100/50">
                             <td colSpan={totalDiscount > 0 ? 5 : 4} className="py-1 px-1 text-[10px] font-black uppercase tracking-widest border-y border-black border-dashed">
@@ -173,7 +182,7 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                     )}
                     {(sale.additionalItems || []).map((item: any, i: number) => (
                         <tr key={`add-${i}`} className="border-b border-black border-dashed italic">
-                            <td className="py-2 pr-1 font-black text-[12px]">{(sale.items?.length || 0) + i + 1}. {item.name}</td>
+                            <td className="py-2 pr-1 font-black text-[12px]">{(sale.items?.length || 0) + (sale.customItems?.length || 0) + i + 1}. {item.name}</td>
                             <td className="py-2 text-center font-bold">1</td>
                             <td className="py-2 text-right">{(item.price || 0).toFixed(2).replace(/\.00$/, '')}</td>
                             {totalDiscount > 0 && <td className="py-2 text-right">-</td>}

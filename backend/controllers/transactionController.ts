@@ -123,6 +123,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     customerAddress,
     items,
     additionalItems,
+    customItems,
     paymentMode,
     status,
     date,
@@ -277,6 +278,18 @@ export const processSale = async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // Add custom direct-sale items to totalAmount & totalProfit
+    if (customItems && Array.isArray(customItems)) {
+      for (const item of customItems) {
+        const customPrice = Number(item.price) || 0;
+        const customQuantity = Number(item.quantity) || 1;
+        const lineTotal = customPrice * customQuantity;
+        const profitPercent = Number(item.profitPercent) || 0;
+        totalAmount += lineTotal;
+        totalProfit += (lineTotal * profitPercent) / 100;
+      }
+    }
+
     // Apply Round Off if provided
     const finalRoundOff = Number(roundOffAmount) || 0;
     totalAmount += finalRoundOff;
@@ -309,6 +322,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
       invoiceNumber,
       items: processedItems,
       additionalItems: additionalItems || [],
+      customItems: customItems || [],
       totalAmount,
       totalProfit,
       taxAmount: totalTaxAmount,
@@ -318,7 +332,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
       roundOffAmount: finalRoundOff,
       paymentMode,
       status: calculatedStatus,
-      date: date || new Date(),
+      date: date ? new Date(date) : new Date(),
       showQRCode: !!showQRCode,
       createdBy: req.user?._id,
     });
@@ -349,6 +363,7 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
     customerAddress,
     items,
     additionalItems,
+    customItems,
     paymentMode,
     status,
     date,
@@ -498,6 +513,17 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
       }
     }
 
+    if (customItems && Array.isArray(customItems)) {
+      for (const item of customItems) {
+        const customPrice = Number(item.price) || 0;
+        const customQuantity = Number(item.quantity) || 1;
+        const lineTotal = customPrice * customQuantity;
+        const profitPercent = Number(item.profitPercent) || 0;
+        totalAmount += lineTotal;
+        totalProfit += (lineTotal * profitPercent) / 100;
+      }
+    }
+
     const finalRoundOff = Number(roundOffAmount) || 0;
     totalAmount += finalRoundOff;
     const finalAmountPaid = Number(amountPaid) || 0;
@@ -518,6 +544,7 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
     oldSale.customerStateCode = customerStateCode || oldSale.customerStateCode;
     oldSale.items = processedItems;
     oldSale.additionalItems = additionalItems || [];
+    oldSale.customItems = customItems || [];
     oldSale.totalAmount = totalAmount;
     oldSale.totalProfit = totalProfit;
     oldSale.taxAmount = totalTaxAmount;
@@ -527,7 +554,7 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
     oldSale.roundOffAmount = finalRoundOff;
     oldSale.paymentMode = paymentMode;
     oldSale.status = calculatedStatus;
-    oldSale.date = date || oldSale.date;
+    oldSale.date = date ? new Date(date) : oldSale.date;
     oldSale.showQRCode = !!showQRCode;
     if (!oldSale.createdBy) oldSale.createdBy = req.user?._id;
 
