@@ -1818,7 +1818,8 @@ const Sales = () => {
                           </div>
                           <p className="font-black text-slate-800 tracking-tight">
                             {(sale.items?.length || 0) +
-                              (sale.additionalItems?.length || 0)}
+                              (sale.additionalItems?.length || 0) +
+                              (sale.customItems?.length || 0)}
                           </p>
                         </div>
                       </td>
