@@ -600,7 +600,9 @@ const Sales = () => {
   const rawTotal =
     cart.reduce((acc, item) => acc + item.quantity * item.sellingPrice, 0) +
     additionalItems.reduce((acc, item) => acc + (Number(item.price) || 0), 0) +
-    customItems.reduce((acc, item) => acc + (Number(item.price) || 0) * (Number(item.quantity) || 1), 0);
+    customItems.reduce((acc, item) => acc + (Number(item.price) || 0) * (Number(item.quantity) || 1), 0) +
+    (newChargeName && newChargePrice ? (Number(newChargePrice) || 0) : 0) +
+    (newCustomName && newCustomPrice ? (Number(newCustomPrice) || 0) * (Number(newCustomQuantity) || 1) : 0);
   const roundOffAmount = roundOff ? Math.round(rawTotal) - rawTotal : 0;
   const grandTotal = rawTotal + roundOffAmount;
   const changeAmount =
@@ -750,7 +752,7 @@ const Sales = () => {
         }
     }
 
-    if (cart.length === 0) {
+    if (cart.length === 0 && customItems.length === 0 && !newCustomName && additionalItems.length === 0 && !newChargeName) {
       showToast("Add at least one item to cart", "error");
       return;
     }
@@ -1069,14 +1071,24 @@ const Sales = () => {
     doc.setFontSize(10);
     doc.text(`Generated: ${format(new Date(), "dd MMM yyyy HH:mm")}`, 14, 28);
     const rows = filteredSales.map((sale) => {
-      const cost = (sale.items || []).reduce(
+      let cost = (sale.items || []).reduce(
         (acc, item) =>
           acc +
           item.purchasePriceAtTime *
             (item.quantity / (item.conversionFactor || 1)),
         0,
       );
-      const profit = sale.totalAmount - cost;
+      cost += (sale.customItems || []).reduce((acc, item) => {
+        const lineTotal = (Number(item.price) || 0) * (Number(item.quantity) || 1);
+        const profitPercent = Number(item.profitPercent) || 0;
+        return acc + (lineTotal - (lineTotal * profitPercent) / 100);
+      }, 0);
+      cost += (sale.additionalItems || []).reduce((acc, item) => {
+        const lineTotal = Number(item.price) || 0;
+        const profitPercent = Number(item.profitPercent) || 0;
+        return acc + (lineTotal - (lineTotal * profitPercent) / 100);
+      }, 0);
+      const profit = sale.totalProfit !== undefined ? sale.totalProfit : sale.totalAmount - cost;
       const margin =
         sale.totalAmount > 0
           ? ((profit / sale.totalAmount) * 100).toFixed(1)
@@ -1115,14 +1127,24 @@ const Sales = () => {
   // Export Excel
   const exportExcel = () => {
     const rows = filteredSales.map((sale) => {
-      const cost = (sale.items || []).reduce(
+      let cost = (sale.items || []).reduce(
         (acc, item) =>
           acc +
           item.purchasePriceAtTime *
             (item.quantity / (item.conversionFactor || 1)),
         0,
       );
-      const profit = sale.totalAmount - cost;
+      cost += (sale.customItems || []).reduce((acc, item) => {
+        const lineTotal = (Number(item.price) || 0) * (Number(item.quantity) || 1);
+        const profitPercent = Number(item.profitPercent) || 0;
+        return acc + (lineTotal - (lineTotal * profitPercent) / 100);
+      }, 0);
+      cost += (sale.additionalItems || []).reduce((acc, item) => {
+        const lineTotal = Number(item.price) || 0;
+        const profitPercent = Number(item.profitPercent) || 0;
+        return acc + (lineTotal - (lineTotal * profitPercent) / 100);
+      }, 0);
+      const profit = sale.totalProfit !== undefined ? sale.totalProfit : sale.totalAmount - cost;
       const margin =
         sale.totalAmount > 0
           ? ((profit / sale.totalAmount) * 100).toFixed(1)
@@ -1631,7 +1653,7 @@ const Sales = () => {
                     }
                     return acc + mrp * item.quantity;
                   }, 0);
-                  const totalCost = (sale.items || []).reduce((acc, item) => {
+                  let totalCost = (sale.items || []).reduce((acc, item) => {
                     let cost = item.purchasePriceAtTime || 0;
                     if (item.productId && typeof item.productId === 'object') {
                       const p = item.productId as any;
@@ -1643,6 +1665,11 @@ const Sales = () => {
                       }
                     }
                     return acc + cost * item.quantity;
+                  }, 0);
+                  totalCost += (sale.customItems || []).reduce((acc, item) => {
+                    const lineTotal = (Number(item.price) || 0) * (Number(item.quantity) || 1);
+                    const profitPercent = Number(item.profitPercent) || 0;
+                    return acc + (lineTotal - (lineTotal * profitPercent) / 100);
                   }, 0);
                   const additionalChargesTotal = (
                     sale.additionalItems || []
@@ -1656,7 +1683,7 @@ const Sales = () => {
                         100,
                     0,
                   );
-                  const profit =
+                  const profit = sale.totalProfit !== undefined ? sale.totalProfit :
                     (sale.totalAmount || 0) -
                     additionalChargesTotal +
                     additionalChargesProfit -
