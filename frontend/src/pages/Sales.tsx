@@ -474,6 +474,9 @@ const Sales = () => {
   const [additionalItems, setAdditionalItems] = useState<
     { name: string; price: string; profitPercent: string }[]
   >([]);
+  const [customItems, setCustomItems] = useState<
+    { name: string; price: string; quantity: string; profitPercent: string }[]
+  >([]);
 
   // Item-Add modal (removed itemsModalMode from here)
 
@@ -484,6 +487,11 @@ const Sales = () => {
   const [newChargeName, setNewChargeName] = useState("");
   const [newChargePrice, setNewChargePrice] = useState("");
   const [newChargeProfitPercent, setNewChargeProfitPercent] = useState("0");
+
+  const [newCustomName, setNewCustomName] = useState("");
+  const [newCustomPrice, setNewCustomPrice] = useState("");
+  const [newCustomQuantity, setNewCustomQuantity] = useState("1");
+  const [newCustomProfitPercent, setNewCustomProfitPercent] = useState("0");
 
   // UI Logic State
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -525,6 +533,7 @@ const Sales = () => {
   const isFormDirty =
     cart.length > 0 ||
     additionalItems.length > 0 ||
+    customItems.length > 0 ||
     customerName !== "" ||
     customerPhone !== "";
 
@@ -568,12 +577,17 @@ const Sales = () => {
     setCustomerId(null);
     setCart([]);
     setAdditionalItems([]);
+    setCustomItems([]);
     setPaymentMode("cash");
     setAmountReceived("");
     setRoundOff(false);
     setScannedProducts([]);
     setSelectedProducts({});
     setNewChargeProfitPercent("0");
+    setNewCustomName("");
+    setNewCustomPrice("");
+    setNewCustomQuantity("1");
+    setNewCustomProfitPercent("0");
   };
 
   const closeModal = () => {
@@ -585,7 +599,8 @@ const Sales = () => {
   // Grand total calculations
   const rawTotal =
     cart.reduce((acc, item) => acc + item.quantity * item.sellingPrice, 0) +
-    additionalItems.reduce((acc, item) => acc + (Number(item.price) || 0), 0);
+    additionalItems.reduce((acc, item) => acc + (Number(item.price) || 0), 0) +
+    customItems.reduce((acc, item) => acc + (Number(item.price) || 0) * (Number(item.quantity) || 1), 0);
   const roundOffAmount = roundOff ? Math.round(rawTotal) - rawTotal : 0;
   const grandTotal = rawTotal + roundOffAmount;
   const changeAmount =
@@ -769,7 +784,6 @@ const Sales = () => {
           price: Number(i.price) || 0,
           profitPercent: Number(i.profitPercent) || 0,
         })),
-        // Include pending charge if name and price are both present
         ...(newChargeName && newChargePrice
           ? [
               {
@@ -780,6 +794,25 @@ const Sales = () => {
             ]
           : []),
       ],
+      customItems: [
+        ...customItems.map((i) => ({
+          name: i.name,
+          price: Number(i.price) || 0,
+          quantity: Number(i.quantity) || 1,
+          profitPercent: Number(i.profitPercent) || 0,
+        })),
+        ...(newCustomName && newCustomPrice
+          ? [
+              {
+                name: newCustomName,
+                price: Number(newCustomPrice) || 0,
+                quantity: Number(newCustomQuantity) || 1,
+                profitPercent: Number(newCustomProfitPercent) || 0,
+              },
+            ]
+          : []),
+      ],
+
       paymentMode,
       date: (() => {
         const now = new Date();
@@ -1208,6 +1241,14 @@ const Sales = () => {
       (sale.additionalItems || []).map((i) => ({
         name: i.name,
         price: i.price.toString(),
+        profitPercent: (i.profitPercent || 0).toString(),
+      })),
+    );
+    setCustomItems(
+      (sale.customItems || []).map((i) => ({
+        name: i.name,
+        price: i.price.toString(),
+        quantity: (i.quantity || 1).toString(),
         profitPercent: (i.profitPercent || 0).toString(),
       })),
     );
@@ -1980,7 +2021,7 @@ const Sales = () => {
               </div>
 
               {/* Cart List */}
-              {(cart.length > 0 || additionalItems.length > 0) && (
+              {(cart.length > 0 || additionalItems.length > 0 || customItems.length > 0) && (
                 <div className="space-y-2 border-y border-slate-100 py-4">
                   {cart.map((item, idx) => (
                     <div
@@ -2236,6 +2277,53 @@ const Sales = () => {
                       </div>
                     </div>
                   ))}
+                  {customItems.map((item, idx) => (
+                    <div
+                      key={`cust-${idx}`}
+                      className="flex items-center justify-between text-sm bg-blue-50/30 p-4 rounded-2xl border border-blue-100/50 shadow-sm"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 flex items-center justify-center bg-blue-100 text-blue-600 rounded-xl font-black text-xs">
+                          {cart.length + additionalItems.length + idx + 1}
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-800">
+                            {item.name}
+                          </p>
+                          <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest">
+                            Custom Item / Direct Sale
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-1 mx-4 justify-end items-center gap-2">
+                        <div className="text-right">
+                          <p className="font-bold text-[10px] text-slate-400">Qty × Rate</p>
+                          <p className="font-bold text-slate-700">{item.quantity} × ₹{item.price}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div>
+                          <p className="font-black text-slate-800 text-right">
+                            ₹{(Number(item.price) * Number(item.quantity)).toLocaleString()}
+                          </p>
+                          <p className="text-[10px] text-emerald-600 font-bold text-right">
+                            Profit: {item.profitPercent}%
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCustomItems(
+                              customItems.filter((_, i) => i !== idx),
+                            )
+                          }
+                          className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
               {/* Additional Charges Section (New) */}
@@ -2298,6 +2386,86 @@ const Sales = () => {
                         }
                       }}
                       className="p-3 bg-amber-500 text-white rounded-xl hover:bg-amber-600 shadow-md hover:shadow-lg transition-all mb-0.5"
+                    >
+                      <Plus size={18} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Direct Sale (Custom Items) Section (New) */}
+              <div className="p-5 bg-blue-50 rounded-[2rem] border border-blue-100 space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">
+                  Direct Sale / Custom Item
+                </p>
+                <div className="flex flex-col md:flex-row gap-3 items-end">
+                  <div className="flex-1 w-full space-y-1">
+                    <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">Item Name</label>
+                    <input
+                      type="text"
+                      placeholder="E.g. Custom Pipe"
+                      className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold min-w-0 shadow-sm focus:border-blue-500 focus:ring-0"
+                      value={newCustomName}
+                      onChange={(e) => setNewCustomName(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex gap-2 w-full md:w-auto items-end flex-wrap sm:flex-nowrap">
+                    <div className="flex-1 sm:w-20 space-y-1">
+                      <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">Qty</label>
+                      <input
+                        type="number"
+                        placeholder="Qty"
+                        className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold shadow-sm focus:border-blue-500 focus:ring-0"
+                        value={newCustomQuantity}
+                        onChange={(e) => setNewCustomQuantity(e.target.value)}
+                        onWheel={(e) => e.currentTarget.blur()}
+                      />
+                    </div>
+                    <div className="flex-1 sm:w-24 space-y-1">
+                      <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">Rate</label>
+                      <input
+                        type="number"
+                        placeholder="₹"
+                        className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold shadow-sm focus:border-blue-500 focus:ring-0"
+                        value={newCustomPrice}
+                        onChange={(e) => setNewCustomPrice(e.target.value)}
+                        onWheel={(e) => e.currentTarget.blur()}
+                      />
+                    </div>
+                    <div className="flex-1 sm:w-24 space-y-1">
+                      <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">Profit %</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          placeholder="%"
+                          className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold pr-7 shadow-sm focus:border-blue-500 focus:ring-0"
+                          value={newCustomProfitPercent}
+                          onChange={(e) => setNewCustomProfitPercent(e.target.value)}
+                          onWheel={(e) => e.currentTarget.blur()}
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-blue-400">%</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (newCustomName && newCustomPrice) {
+                          setCustomItems((prev) => [
+                            ...prev,
+                            {
+                              name: newCustomName,
+                              price: newCustomPrice,
+                              quantity: newCustomQuantity || "1",
+                              profitPercent: newCustomProfitPercent || "0",
+                            },
+                          ]);
+                          setNewCustomName("");
+                          setNewCustomPrice("");
+                          setNewCustomQuantity("1");
+                          setNewCustomProfitPercent("0");
+                        }
+                      }}
+                      className="p-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 shadow-md hover:shadow-lg transition-all mb-0.5"
                     >
                       <Plus size={18} />
                     </button>

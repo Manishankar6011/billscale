@@ -128,6 +128,18 @@ export const generateInvoice = async (
             if (item.taxAmount) totalTax += item.taxAmount;
         });
 
+        if (sale.customItems && sale.customItems.length > 0) {
+            sale.customItems.forEach((item: any) => {
+                tableRows.push([
+                    item.name,
+                    "-",
+                    `${item.quantity} unit`,
+                    `Rs.${(item.price || 0).toFixed(2)}`,
+                    `Rs.${((item.quantity || 1) * (item.price || 0)).toFixed(2)}`
+                ]);
+            });
+        }
+
         if (sale.additionalItems && sale.additionalItems.length > 0) {
             sale.additionalItems.forEach((item: any) => {
                 tableRows.push([

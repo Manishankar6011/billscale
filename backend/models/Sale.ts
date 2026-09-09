@@ -145,6 +145,12 @@ const saleSchema: Schema = new mongoose.Schema({
         price: { type: Number, required: true },
         profitPercent: { type: Number, default: 0 }
     }],
+    customItems: [{
+        name: { type: String, required: true },
+        price: { type: Number, required: true },
+        quantity: { type: Number, default: 1 },
+        profitPercent: { type: Number, default: 0 }
+    }],
     invoiceNumber: {
         type: String,
     },

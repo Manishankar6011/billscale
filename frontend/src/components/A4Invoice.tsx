@@ -185,6 +185,18 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                                 <td className="py-5 px-2 text-right font-black text-black text-base">₹{((item.quantity || 0) * (item.sellingPrice || 0) * (100 / (100 + (item.taxRate || 0)))).toFixed(2)}</td>
                             </tr>
                         ))}
+                        {(sale.customItems || []).map((item: any, i: number) => (
+                            <tr key={`custom-${i}`} className="border-b border-black/5 hover:bg-slate-50 transition-colors">
+                                <td className="py-5 px-2 text-center text-slate-500 font-medium">{(sale.items?.length || 0) + i + 1}</td>
+                                <td className="py-5 px-2">
+                                    <p className="font-bold text-black text-base">{item.name}</p>
+                                </td>
+                                <td className="py-5 px-2 text-right font-bold text-black">₹{Number(item.price || 0).toFixed(0)}</td>
+                                <td className="py-5 px-2 text-center font-black text-black text-base">{item.quantity}</td>
+                                <td className="py-5 px-2 text-right font-bold text-black">₹{Number(item.price || 0).toFixed(0)}</td>
+                                <td className="py-5 px-2 text-right font-black text-black text-base">₹{(Number(item.quantity || 1) * Number(item.price || 0)).toFixed(2)}</td>
+                            </tr>
+                        ))}
                         {(sale.additionalItems || []).length > 0 && (
                             <tr className="bg-slate-50">
                                 <td colSpan={6} className="py-2 px-2 text-[10px] font-black uppercase tracking-widest border-y border-black/10">
@@ -194,7 +206,7 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                         )}
                         {(sale.additionalItems || []).map((item: any, i: number) => (
                             <tr key={`add-${i}`} className="text-black bg-slate-50/30 italic">
-                                <td className="py-5 px-2 font-bold text-black">{String((sale.items?.length || 0) + i + 1).padStart(2, '0')}</td>
+                                <td className="py-5 px-2 font-bold text-black">{String((sale.items?.length || 0) + (sale.customItems?.length || 0) + i + 1).padStart(2, '0')}</td>
                                 <td className="py-5 px-2">
                                     <p className="font-black text-black">{item.name}</p>
                                     <p className="text-[10px] text-black font-bold uppercase tracking-widest">Service Charge</p>
@@ -213,7 +225,7 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                 <div className="w-full max-w-sm space-y-3">
                     <div className="flex justify-between text-black font-bold text-base">
                         <span>Total Taxable Amount</span>
-                        <span>₹{((sale.items || []).reduce((acc: number, item: any) => acc + ((item.quantity || 0) * (item.sellingPrice || 0) * (100 / (100 + (item.taxRate || 0)))), 0)).toFixed(2)}</span>
+                        <span>₹{(((sale.items || []).reduce((acc: number, item: any) => acc + ((item.quantity || 0) * (item.sellingPrice || 0) * (100 / (100 + (item.taxRate || 0)))), 0)) + ((sale.customItems || []).reduce((acc: number, item: any) => acc + (Number(item.quantity) || 1) * Number(item.price), 0))).toFixed(2)}</span>
                     </div>
 
                     {/* Tax Breakdown */}
