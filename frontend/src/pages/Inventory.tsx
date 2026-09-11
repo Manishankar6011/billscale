@@ -60,9 +60,10 @@ import { canUseFeature, PLAN_LIMITS } from "../utils/planLimits";
 import UpgradePrompt from "../components/UpgradePrompt";
 
 const UNIT_GROUPS = {
-  weight: ["kg", "gm", "ton", "bag", "bundle", "pack"],
+  weight: ["kg", "gm", "quintal", "ton", "bag", "bundle", "pack"],
+  construction: ["cft", "brass", "cum", "trolley"],
   volume: ["litre", "ml"],
-  count: ["nos", "piece", "box", "dozen", "unit"],
+  count: ["nos", "piece", "box", "dozen", "roll", "coil", "unit"],
   length: ["meter", "ft", "inch"],
   area: ["sqft", "sqmtr"],
 };
