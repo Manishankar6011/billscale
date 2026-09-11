@@ -273,8 +273,17 @@ export const processSale = async (req: AuthRequest, res: Response) => {
       for (const item of additionalItems) {
         const chargePrice = Number(item.price) || 0;
         const profitPercent = Number(item.profitPercent) || 0;
+        const purchasePrice = Number(item.purchasePrice) || 0;
+        const profitAmount = Number(item.profitAmount) || 0;
+        
         totalAmount += chargePrice;
-        totalProfit += (chargePrice * profitPercent) / 100;
+        if (purchasePrice > 0) {
+          totalProfit += (chargePrice - purchasePrice);
+        } else if (profitAmount > 0) {
+          totalProfit += profitAmount;
+        } else {
+          totalProfit += (chargePrice * profitPercent) / 100;
+        }
       }
     }
 
@@ -285,8 +294,17 @@ export const processSale = async (req: AuthRequest, res: Response) => {
         const customQuantity = Number(item.quantity) || 1;
         const lineTotal = customPrice * customQuantity;
         const profitPercent = Number(item.profitPercent) || 0;
+        const purchasePrice = Number(item.purchasePrice) || 0;
+        const profitAmount = Number(item.profitAmount) || 0;
+
         totalAmount += lineTotal;
-        totalProfit += (lineTotal * profitPercent) / 100;
+        if (purchasePrice > 0) {
+          totalProfit += (customPrice - purchasePrice) * customQuantity;
+        } else if (profitAmount > 0) {
+          totalProfit += profitAmount * customQuantity;
+        } else {
+          totalProfit += (lineTotal * profitPercent) / 100;
+        }
       }
     }
 

@@ -473,10 +473,10 @@ const Sales = () => {
   // Cart State
   const [cart, setCart] = useState<CartItem[]>([]);
   const [additionalItems, setAdditionalItems] = useState<
-    { name: string; price: string; profitPercent: string }[]
+    { name: string; price: string; profitPercent: string; mrp?: string; purchasePrice?: string; profitAmount?: string }[]
   >([]);
   const [customItems, setCustomItems] = useState<
-    { name: string; price: string; quantity: string; profitPercent: string }[]
+    { name: string; price: string; quantity: string; profitPercent: string; mrp?: string; purchasePrice?: string; profitAmount?: string }[]
   >([]);
 
   // Item-Add modal (removed itemsModalMode from here)
@@ -493,6 +493,10 @@ const Sales = () => {
   const [newCustomPrice, setNewCustomPrice] = useState("");
   const [newCustomQuantity, setNewCustomQuantity] = useState("1");
   const [newCustomProfitPercent, setNewCustomProfitPercent] = useState("0");
+  const [newCustomMrp, setNewCustomMrp] = useState("");
+  const [newCustomPurchasePrice, setNewCustomPurchasePrice] = useState("");
+
+  const [saleTypeFilter, setSaleTypeFilter] = useState<'all' | 'inventory' | 'direct'>('all');
 
   // UI Logic State
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -1589,12 +1593,48 @@ const Sales = () => {
           </div>
         )}
 
+        {/* Sales Type Filter Tabs */}
+        <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-3 rounded-2xl border border-slate-100 shadow-sm mb-4">
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setSaleTypeFilter('all')}
+              className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
+                saleTypeFilter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              All Sales ({sales.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSaleTypeFilter('inventory')}
+              className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                saleTypeFilter === 'inventory' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              📦 Inventory Sales ({sales.filter(s => s.items && s.items.length > 0).length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSaleTypeFilter('direct')}
+              className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                saleTypeFilter === 'direct' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              ⚡ Direct Sales ({sales.filter(s => (s.customItems && s.customItems.length > 0) || (s.additionalItems && s.additionalItems.length > 0)).length})
+            </button>
+          </div>
+        </div>
+
         {/* Sales Table */}
         <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50/50">
+                  <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
+                    Type
+                  </th>
                   <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
                     {t("common.date")}
                   </th>
@@ -1638,7 +1678,15 @@ const Sales = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {sales.map((sale, index) => {
+                {sales
+                  .filter((sale) => {
+                    const hasInventory = sale.items && sale.items.length > 0;
+                    const hasDirect = (sale.customItems && sale.customItems.length > 0) || (sale.additionalItems && sale.additionalItems.length > 0);
+                    if (saleTypeFilter === 'inventory') return hasInventory;
+                    if (saleTypeFilter === 'direct') return hasDirect;
+                    return true;
+                  })
+                  .map((sale, index) => {
                   const isLastElement = index === sales.length - 1;
 
                   const totalMrp = (sale.items || []).reduce((acc, item) => {
@@ -1704,6 +1752,19 @@ const Sales = () => {
                       ref={isLastElement ? lastSaleElementRef : null}
                       className="hover:bg-slate-50/50 transition-all border-l-4 border-transparent hover:border-primary-500"
                     >
+                      <td className="px-4 py-5">
+                        {(() => {
+                          const hasInv = sale.items && sale.items.length > 0;
+                          const hasDir = (sale.customItems && sale.customItems.length > 0) || (sale.additionalItems && sale.additionalItems.length > 0);
+                          if (hasInv && hasDir) {
+                            return <span className="px-2.5 py-1 bg-purple-50 text-purple-700 border border-purple-100 rounded-full text-[10px] font-black uppercase">🔀 Mixed</span>;
+                          }
+                          if (hasDir) {
+                            return <span className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-full text-[10px] font-black uppercase">⚡ Direct</span>;
+                          }
+                          return <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-full text-[10px] font-black uppercase">📦 Store</span>;
+                        })()}
+                      </td>
                       <td className="px-6 py-5">
                         <p className="text-sm font-bold text-slate-800">
                           {format(new Date(sale.date), "dd MMM yy")}
@@ -2422,81 +2483,176 @@ const Sales = () => {
                 </div>
               </div>
 
-              {/* Direct Sale (Custom Items) Section (New) */}
-              <div className="p-5 bg-blue-50 rounded-[2rem] border border-blue-100 space-y-3">
-                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">
-                  Direct Sale / Custom Item
-                </p>
-                <div className="flex flex-col md:flex-row gap-3 items-end">
-                  <div className="flex-1 w-full space-y-1">
+              {/* Direct Sale (Custom Items) Section */}
+              <div className="p-5 bg-blue-50/70 rounded-[2rem] border border-blue-100 space-y-3">
+                <div className="flex justify-between items-center">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">
+                    ⚡ Direct Sale / Custom Item
+                  </p>
+                  {(newCustomPrice || newCustomMrp) && (
+                    <span className="text-[10px] font-black px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full">
+                      Live Profit: ₹
+                      {(() => {
+                        const price = Number(newCustomPrice || newCustomMrp) || 0;
+                        const cost = Number(newCustomPurchasePrice) || 0;
+                        const qty = Number(newCustomQuantity) || 1;
+                        if (cost > 0) {
+                          return ((price - cost) * qty).toFixed(1);
+                        }
+                        const pPct = Number(newCustomProfitPercent) || 0;
+                        return (((price * qty) * pPct) / 100).toFixed(1);
+                      })()}{" "}
+                      ({(() => {
+                        const price = Number(newCustomPrice || newCustomMrp) || 0;
+                        const cost = Number(newCustomPurchasePrice) || 0;
+                        if (cost > 0) {
+                          return (((price - cost) / cost) * 100).toFixed(1);
+                        }
+                        return Number(newCustomProfitPercent) || 0;
+                      })()}%)
+                    </span>
+                  )}
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-2 items-end">
+                  <div className="md:col-span-2 space-y-1">
                     <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">Item Name</label>
                     <input
                       type="text"
-                      placeholder="E.g. Custom Pipe"
+                      placeholder="E.g. Custom Pipe / Sand Bag"
                       className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold min-w-0 shadow-sm focus:border-blue-500 focus:ring-0"
                       value={newCustomName}
                       onChange={(e) => setNewCustomName(e.target.value)}
                     />
                   </div>
-                  <div className="flex gap-2 w-full md:w-auto items-end flex-wrap sm:flex-nowrap">
-                    <div className="flex-1 sm:w-20 space-y-1">
-                      <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">Qty</label>
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">Qty</label>
+                    <input
+                      type="number"
+                      placeholder="1"
+                      className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold shadow-sm focus:border-blue-500 focus:ring-0"
+                      value={newCustomQuantity}
+                      onChange={(e) => setNewCustomQuantity(e.target.value)}
+                      onWheel={(e) => e.currentTarget.blur()}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">MRP (₹)</label>
+                    <input
+                      type="number"
+                      placeholder="MRP"
+                      className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold shadow-sm focus:border-blue-500 focus:ring-0"
+                      value={newCustomMrp}
+                      onChange={(e) => {
+                        const mrpVal = e.target.value;
+                        setNewCustomMrp(mrpVal);
+                        if (!newCustomPrice) setNewCustomPrice(mrpVal);
+                      }}
+                      onWheel={(e) => e.currentTarget.blur()}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">Sale Price (₹)</label>
+                    <input
+                      type="number"
+                      placeholder="Rate"
+                      className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold shadow-sm focus:border-blue-500 focus:ring-0"
+                      value={newCustomPrice}
+                      onChange={(e) => {
+                        const price = e.target.value;
+                        setNewCustomPrice(price);
+                        const cost = Number(newCustomPurchasePrice) || 0;
+                        if (cost > 0 && Number(price) > 0) {
+                          setNewCustomProfitPercent((((Number(price) - cost) / cost) * 100).toFixed(1));
+                        }
+                      }}
+                      onWheel={(e) => e.currentTarget.blur()}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">Cost Price (₹)</label>
+                    <input
+                      type="number"
+                      placeholder="Cost"
+                      className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold shadow-sm focus:border-blue-500 focus:ring-0"
+                      value={newCustomPurchasePrice}
+                      onChange={(e) => {
+                        const cost = e.target.value;
+                        setNewCustomPurchasePrice(cost);
+                        const price = Number(newCustomPrice || newCustomMrp) || 0;
+                        if (Number(cost) > 0 && price > 0) {
+                          setNewCustomProfitPercent((((price - Number(cost)) / Number(cost)) * 100).toFixed(1));
+                        }
+                      }}
+                      onWheel={(e) => e.currentTarget.blur()}
+                    />
+                  </div>
+
+                  <div className="md:col-span-6 flex justify-between items-center pt-2 border-t border-blue-100/60 mt-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-slate-500">Or Profit %:</span>
                       <input
                         type="number"
-                        placeholder="Qty"
-                        className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold shadow-sm focus:border-blue-500 focus:ring-0"
-                        value={newCustomQuantity}
-                        onChange={(e) => setNewCustomQuantity(e.target.value)}
+                        placeholder="%"
+                        className="w-20 bg-white border border-blue-200 rounded-xl p-2 text-xs font-bold text-center shadow-sm"
+                        value={newCustomProfitPercent}
+                        onChange={(e) => {
+                          const pct = e.target.value;
+                          setNewCustomProfitPercent(pct);
+                          const price = Number(newCustomPrice || newCustomMrp) || 0;
+                          if (price > 0 && Number(pct) >= 0) {
+                            const cost = price / (1 + Number(pct) / 100);
+                            setNewCustomPurchasePrice(cost.toFixed(1));
+                          }
+                        }}
                         onWheel={(e) => e.currentTarget.blur()}
                       />
                     </div>
-                    <div className="flex-1 sm:w-24 space-y-1">
-                      <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">Rate</label>
-                      <input
-                        type="number"
-                        placeholder="₹"
-                        className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold shadow-sm focus:border-blue-500 focus:ring-0"
-                        value={newCustomPrice}
-                        onChange={(e) => setNewCustomPrice(e.target.value)}
-                        onWheel={(e) => e.currentTarget.blur()}
-                      />
-                    </div>
-                    <div className="flex-1 sm:w-24 space-y-1">
-                      <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">Profit %</label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          placeholder="%"
-                          className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold pr-7 shadow-sm focus:border-blue-500 focus:ring-0"
-                          value={newCustomProfitPercent}
-                          onChange={(e) => setNewCustomProfitPercent(e.target.value)}
-                          onWheel={(e) => e.currentTarget.blur()}
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-blue-400">%</span>
-                      </div>
-                    </div>
+                    
                     <button
                       type="button"
                       onClick={() => {
-                        if (newCustomName && newCustomPrice) {
+                        const price = newCustomPrice || newCustomMrp;
+                        if (newCustomName && price) {
+                          const cost = Number(newCustomPurchasePrice) || 0;
+                          const rate = Number(price) || 0;
+                          const qty = Number(newCustomQuantity) || 1;
+                          let pAmt = 0;
+                          let pPct = Number(newCustomProfitPercent) || 0;
+                          if (cost > 0) {
+                            pAmt = (rate - cost) * qty;
+                            pPct = ((rate - cost) / cost) * 100;
+                          } else {
+                            pAmt = ((rate * qty) * pPct) / 100;
+                          }
+
                           setCustomItems((prev) => [
                             ...prev,
                             {
                               name: newCustomName,
-                              price: newCustomPrice,
+                              price: price,
                               quantity: newCustomQuantity || "1",
-                              profitPercent: newCustomProfitPercent || "0",
+                              profitPercent: pPct.toFixed(1),
+                              mrp: newCustomMrp || price,
+                              purchasePrice: newCustomPurchasePrice || "0",
+                              profitAmount: (pAmt / qty).toFixed(2),
                             },
                           ]);
                           setNewCustomName("");
                           setNewCustomPrice("");
+                          setNewCustomMrp("");
+                          setNewCustomPurchasePrice("");
                           setNewCustomQuantity("1");
                           setNewCustomProfitPercent("0");
                         }
                       }}
-                      className="p-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 shadow-md hover:shadow-lg transition-all mb-0.5"
+                      className="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
                     >
-                      <Plus size={18} />
+                      <Plus size={16} /> Add Direct Item
                     </button>
                   </div>
                 </div>
