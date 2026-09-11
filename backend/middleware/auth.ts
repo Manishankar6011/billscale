@@ -51,9 +51,13 @@ export const checkSubscription = async (req: AuthRequest, res: Response, next: N
             return res.status(404).json({ message: 'Tenant not found' });
         }
 
-        // Auto-expire check
+        // Auto-expire trial check
         if (tenant.subscriptionExpiryDate && new Date(tenant.subscriptionExpiryDate) < new Date()) {
-            if (tenant.subscriptionStatus !== 'inactive') {
+            if (tenant.subscriptionStatus === 'trial') {
+                tenant.subscriptionStatus = 'active';
+                tenant.planType = 'free';
+                await tenant.save();
+            } else if (tenant.subscriptionStatus !== 'inactive' && tenant.planType !== 'free') {
                 tenant.subscriptionStatus = 'inactive';
                 await tenant.save();
             }

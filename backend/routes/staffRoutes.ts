@@ -1,5 +1,5 @@
 import express from 'express';
-import { getStaff, addStaff, getStaffSummary, updateStaff, deleteStaff, paySalary } from '../controllers/staffController';
+import { getStaff, addStaff, getStaffSummary, updateStaff, deleteStaff, paySalary, deleteSalaryPayment } from '../controllers/staffController';
 import { protect, checkSubscription } from '../middleware/auth';
 import tenant from '../middleware/tenant';
 
@@ -14,5 +14,6 @@ router.put('/:id', checkSubscription, updateStaff);
 router.delete('/:id', checkSubscription, deleteStaff);
 router.get('/summary/:id', getStaffSummary);
 router.post('/pay', checkSubscription, paySalary);
+router.delete('/payment/:paymentId', checkSubscription, deleteSalaryPayment);
 
 export default router;

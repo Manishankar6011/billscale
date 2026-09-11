@@ -45,7 +45,9 @@ export const registerContractor = async (req: Request, res: Response, next: Next
             companyName,
             email,
             businessType: businessType || 'Retail',
-            planType: 'free',
+            planType: 'basic',
+            subscriptionStatus: 'trial',
+            subscriptionExpiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days trial on Basic Plan
             referredBy,
             slug: slugify(companyName)
         });

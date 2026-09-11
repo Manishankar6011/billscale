@@ -85,39 +85,46 @@ const Layout = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [navigate]);
 
+  const isContractor = user?.businessType === 'Contractor';
+
   const navItems = [
     { name: t("common.dashboard"), path: "/dashboard", icon: LayoutDashboard },
-    { name: t("common.inventory"), path: "/dashboard/inventory", icon: Box },
+    // These items are hidden for Contractors (Thekedar)
+    { name: t("common.inventory"), path: "/dashboard/inventory", icon: Box, hideForContractor: true },
     {
       name: t("common.purchases"),
       path: "/dashboard/purchases",
       icon: ShoppingCart,
+      hideForContractor: true,
     },
-    { name: t("common.sales"), path: "/dashboard/sales", icon: Receipt },
-    { name: "Customers", path: "/dashboard/customers", icon: UserRound },
-    { name: t("common.staff"), path: "/dashboard/staff", icon: Users, ownerOnly: true },
+    { name: t("common.sales"), path: "/dashboard/sales", icon: Receipt, hideForContractor: true },
+    { name: "Customers", path: "/dashboard/customers", icon: UserRound, hideForContractor: true },
+    // Staff-related — primary for Contractors
+    { name: isContractor ? "Workers (श्रमिक)" : t("common.staff"), path: "/dashboard/staff", icon: Users, ownerOnly: true },
     {
-      name: t("common.attendance"),
+      name: isContractor ? "Attendance (हाजिरी)" : t("common.attendance"),
       path: "/dashboard/attendance",
       icon: CalendarCheck,
       ownerOnly: true
     },
-    { name: t("common.salary"), path: "/dashboard/salary", icon: Wallet, ownerOnly: true },
+    { name: isContractor ? "Salary & Khata (वेतन / हिसाब)" : t("common.salary"), path: "/dashboard/salary", icon: Wallet, ownerOnly: true },
     { name: t("common.ledger"), path: "/dashboard/ledger", icon: FileText, ownerOnly: true },
-    { name: "Reports", path: "/dashboard/reports", icon: BarChart3, ownerOnly: true },
-    { name: "Product Sales", path: "/dashboard/item-sales", icon: PackageSearch, ownerOnly: true },
+    { name: "Reports", path: "/dashboard/reports", icon: BarChart3, ownerOnly: true, hideForContractor: true },
+    { name: "Product Sales", path: "/dashboard/item-sales", icon: PackageSearch, ownerOnly: true, hideForContractor: true },
     { 
       name: "GST Reports", 
       path: "/dashboard/gst-reports", 
       icon: ShieldCheck, 
       ownerOnly: true,
-      planRestricted: 'hasGSTReports' 
+      planRestricted: 'hasGSTReports',
+      hideForContractor: true,
     },
     { name: t("common.settings"), path: "/dashboard/settings", icon: Settings, ownerOnly: true },
     { name: "Refer & Earn", path: "/dashboard/referral", icon: Gift },
   ].filter(item => {
     const isOwner = (user?.role === 'owner' || user?.role === 'accountant' || user?.role === 'super-admin');
     if (item.ownerOnly && !isOwner) return false;
+    if (item.hideForContractor && isContractor) return false;
     
     if (item.planRestricted) {
       return canUseFeature((user?.planType as PlanType) || 'free', item.planRestricted as any);
@@ -125,6 +132,7 @@ const Layout = () => {
     
     return true;
   });
+
 
   if (!user) return null;
 
