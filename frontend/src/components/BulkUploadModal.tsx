@@ -44,8 +44,11 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSu
     const downloadTemplate = () => {
         const headers = [['Product Name', 'Batch Number', 'Item Code', 'HSN Code', 'GST Rate (%)', 'Purchase Price', 'Selling Price', 'MRP', 'Stock Quantity', 'Unit']];
         const sampleData = [
-            ['Example Cement', 'B-101', 'CX-1002', '2523', 18, 400, 450, 500, 100, 'piece'],
-            ['Steel Rod 12mm', 'ST-22', 'BAR-12', '7214', 12, 60, 75, 500, 10, 'kg']
+            ['Ultratech Cement PPC (50kg)', 'B-101', 'CEM-01', '2523', 28, 340, 380, 420, 200, 'bag'],
+            ['Balu / River Sand', 'DEFAULT', 'BALU-01', '2505', 5, 55, 65, 70, 1500, 'cft'],
+            ['Gitti 20mm (Stone Chips)', 'DEFAULT', 'GITTI-20', '2517', 5, 38, 48, 55, 1200, 'cft'],
+            ['Binding Wire Coil 18G', 'BW-01', 'COIL-18', '7217', 18, 70, 85, 95, 250, 'kg'],
+            ['TMT Sariya 12mm (Fe550D)', 'ST-12', 'TMT-12', '7214', 18, 58, 66, 75, 5000, 'kg']
         ];
         const rows = [...headers, ...sampleData];
         const wb = XLSX.utils.book_new();
