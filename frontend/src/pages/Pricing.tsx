@@ -30,7 +30,7 @@ const PLANS = [
             'Up to 100 Products',
             'WhatsApp Sharing',
             'Customer Ledger (Udhaar)',
-            'Single User Only',
+            'Up to 5 Staff Accounts',
             'Basic Inventory'
         ]
     },
@@ -51,7 +51,7 @@ const PLANS = [
             'Unlimited Bills & Products',
             'WhatsApp & Printing',
             'Digital Catalog (Basic)',
-            '1 Staff Account',
+            'Up to 50 Staff Accounts',
             'Low Stock Alerts',
             'Basic GST Reports'
         ]
@@ -73,7 +73,7 @@ const PLANS = [
         features: [
             'Everything in Basic',
             'Digital Catalog (Advanced)',
-            'Staff Management (5 Staff)',
+            'Unlimited Staff Accounts',
             'Daily Profit/Loss Analytics',
             'Expense Tracking',
             'AI Smart Assistant',

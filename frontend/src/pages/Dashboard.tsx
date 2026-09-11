@@ -590,10 +590,10 @@ const Dashboard = () => {
           </div>
           <div>
             <h1 className="text-3xl font-black text-slate-800 tracking-tight leading-none mb-1">
-              {t("dashboard.business_overview")}
+              {user?.businessType === 'Contractor' ? "Thekedar / Contractor Control Center" : t("dashboard.business_overview")}
             </h1>
             <p className="text-slate-500 font-medium">
-              {t("dashboard.subtitle")}
+              {user?.businessType === 'Contractor' ? "Complete Worker Attendance, Daily Wages, and Salary Khata Management" : t("dashboard.subtitle")}
             </p>
           </div>
         </div>
@@ -624,6 +624,55 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+
+      {user?.businessType === 'Contractor' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div 
+            onClick={() => navigate('/dashboard/staff')}
+            className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl hover:border-indigo-200 transition-all cursor-pointer group flex items-center gap-5"
+          >
+            <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
+              <Users size={28} />
+            </div>
+            <div>
+              <h3 className="font-black text-slate-800 text-lg group-hover:text-indigo-600 transition-colors">
+                Workers Management
+              </h3>
+              <p className="text-xs text-slate-400 font-medium">Add/edit staff, daily rate & role</p>
+            </div>
+          </div>
+
+          <div 
+            onClick={() => navigate('/dashboard/attendance')}
+            className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl hover:border-emerald-200 transition-all cursor-pointer group flex items-center gap-5"
+          >
+            <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
+              <Clock size={28} />
+            </div>
+            <div>
+              <h3 className="font-black text-slate-800 text-lg group-hover:text-emerald-600 transition-colors">
+                Daily Attendance
+              </h3>
+              <p className="text-xs text-slate-400 font-medium">Mark full day, half day or absent</p>
+            </div>
+          </div>
+
+          <div 
+            onClick={() => navigate('/dashboard/salary')}
+            className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl hover:border-amber-200 transition-all cursor-pointer group flex items-center gap-5"
+          >
+            <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
+              <Wallet size={28} />
+            </div>
+            <div>
+              <h3 className="font-black text-slate-800 text-lg group-hover:text-amber-600 transition-colors">
+                Wage & Payment Khata
+              </h3>
+              <p className="text-xs text-slate-400 font-medium">Check baki paisa & give advance</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error ? (
         <ErrorState message={error} onRetry={() => refetch()} />

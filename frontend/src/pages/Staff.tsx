@@ -114,15 +114,6 @@ const StaffPage = () => {
 
     if (loading) return <TableSkeleton rows={10} />;
 
-    if (user?.planType === 'free') {
-        return (
-            <UpgradePrompt 
-                feature="Staff Management" 
-                description="Managing a team requires a Basic or Business plan. Add staff members, track their attendance, and automate payroll effortlessly." 
-            />
-        );
-    }
-
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -134,29 +125,32 @@ const StaffPage = () => {
                     onClick={() => {
                         const currentCount = staffList.length;
                         const plan = user?.planType || 'free';
+                        const isContractor = user?.businessType === 'Contractor';
 
-                        if (plan === 'free') {
-                            showToast('Staff Management is only available in Basic & Business plans.', 'error');
-                            navigate('/dashboard/pricing');
-                            return;
-                        }
+                        if (isContractor) {
+                            if (currentCount >= 25) {
+                                showToast('Contractor tier limit reached (25 workers/staff).', 'error');
+                                return;
+                            }
+                        } else {
+                            if (plan === 'free' && currentCount >= 5) {
+                                showToast('Free Plan limit reached (5 staff members). Upgrade to Basic or Business plan to add more.', 'error');
+                                navigate('/dashboard/pricing');
+                                return;
+                            }
 
-                        if (plan === 'basic' && currentCount >= 1) {
-                            showToast('Basic Plan is limited to 1 staff member. Upgrade to Business for more.', 'error');
-                            navigate('/dashboard/pricing');
-                            return;
-                        }
-
-                        if (plan === 'business' && currentCount >= 5) {
-                            showToast('Business Pro Plan is limited to 5 staff members.', 'error');
-                            return;
+                            if (plan === 'basic' && currentCount >= 50) {
+                                showToast('Basic Plan limit reached (50 staff members). Upgrade to Business Plan for unlimited staff.', 'error');
+                                navigate('/dashboard/pricing');
+                                return;
+                            }
                         }
 
                         setEditingId(null);
                         setFormData({
                             name: '',
                             phone: '',
-                            role: 'Worker',
+                            role: isContractor ? 'Mistri (Mason)' : 'Worker',
                             salaryType: 'daily',
                             salaryAmount: '',
                             status: 'active'

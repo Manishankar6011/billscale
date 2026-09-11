@@ -15,7 +15,7 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
     free: {
         maxBillsPerMonth: 50,
         maxProducts: 100,
-        maxStaff: 0,
+        maxStaff: 5,
         hasDigitalCatalog: false,
         hasProfitAnalytics: false,
         hasExpenseTracking: false,
@@ -25,7 +25,7 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
     basic: {
         maxBillsPerMonth: Infinity,
         maxProducts: Infinity,
-        maxStaff: 1,
+        maxStaff: 50,
         hasDigitalCatalog: true,
         hasProfitAnalytics: false,
         hasExpenseTracking: false,
@@ -35,7 +35,7 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
     business: {
         maxBillsPerMonth: Infinity,
         maxProducts: Infinity,
-        maxStaff: 5,
+        maxStaff: Infinity,
         hasDigitalCatalog: true,
         hasProfitAnalytics: true,
         hasExpenseTracking: true,
