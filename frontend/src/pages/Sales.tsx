@@ -41,6 +41,7 @@ import {
   Edit,
   Eye,
   EyeOff,
+  Zap,
 } from "lucide-react";
 import BarcodeScanner from "../components/BarcodeScanner";
 import CustomerSearch from "../components/CustomerSearch";
@@ -2030,22 +2031,32 @@ const Sales = () => {
                 </div>
               </div>
 
-              {/* Scan and Add Items Buttons */}
+              {/* Scan, Add Items & Direct Sale Buttons */}
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   type="button"
                   onClick={() => setItemsModalMode("scan")}
-                  className="flex-1 flex items-center justify-center gap-3 p-5 rounded-2xl bg-white border-2 border-primary-100 text-primary-600 font-black uppercase tracking-widest text-sm hover:bg-primary-50 transition-all shadow-sm active:scale-[0.98]"
+                  className="flex-1 flex items-center justify-center gap-2 p-4 rounded-2xl bg-white border-2 border-primary-100 text-primary-600 font-black uppercase tracking-widest text-xs sm:text-sm hover:bg-primary-50 transition-all shadow-sm active:scale-[0.98]"
                 >
-                  <Scan size={20} />{" "}
+                  <Scan size={18} />{" "}
                   {t("billing.scan_products") || "Scan Items"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setItemsModalMode("all")}
-                  className="flex-1 flex items-center justify-center gap-3 p-5 rounded-2xl bg-primary-600 text-white font-black uppercase tracking-widest text-sm hover:bg-primary-700 transition-all shadow-lg shadow-primary-200 active:scale-[0.98]"
+                  className="flex-1 flex items-center justify-center gap-2 p-4 rounded-2xl bg-primary-600 text-white font-black uppercase tracking-widest text-xs sm:text-sm hover:bg-primary-700 transition-all shadow-lg shadow-primary-200 active:scale-[0.98]"
                 >
-                  <ShoppingCart size={20} /> {t("billing.add_from_inventory")}
+                  <ShoppingCart size={18} /> {t("billing.add_from_inventory")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById("direct-sale-section");
+                    if (el) el.scrollIntoView({ behavior: "smooth" });
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 p-4 rounded-2xl bg-blue-50 border-2 border-blue-200 text-blue-700 font-black uppercase tracking-widest text-xs sm:text-sm hover:bg-blue-100 transition-all shadow-sm active:scale-[0.98]"
+                >
+                  <Zap size={18} /> Direct Sale
                 </button>
               </div>
 
@@ -2423,9 +2434,9 @@ const Sales = () => {
               </div>
 
               {/* Direct Sale (Custom Items) Section (New) */}
-              <div className="p-5 bg-blue-50 rounded-[2rem] border border-blue-100 space-y-3">
+              <div id="direct-sale-section" className="p-5 bg-blue-50 rounded-[2rem] border border-blue-100 space-y-3">
                 <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">
-                  Direct Sale / Custom Item
+                  ⚡ Direct Sale / Custom Item
                 </p>
                 <div className="flex flex-col md:flex-row gap-3 items-end">
                   <div className="flex-1 w-full space-y-1">

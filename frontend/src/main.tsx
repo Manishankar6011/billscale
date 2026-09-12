@@ -20,8 +20,13 @@ import axios from 'axios'
 // Axios Global Configuration
 axios.defaults.baseURL = import.meta.env.VITE_API_BASE_URL || '';
 
-// Automatic update registration for the PWA
-registerSW({ immediate: true })
+// Automatic update registration for the PWA with auto-reload on update
+const updateSW = registerSW({
+  immediate: true,
+  onNeedRefresh() {
+    updateSW(true);
+  }
+})
 
 // Redirect Vercel domain to custom domain
 if (window.location.hostname === 'businessmate-plum.vercel.app') {
