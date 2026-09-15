@@ -21,6 +21,7 @@ export const getSales = async (req: AuthRequest, res: Response) => {
     const startDate = req.query.startDate as string;
     const endDate = req.query.endDate as string;
     const status = req.query.status as string;
+    const saleType = req.query.saleType as string;
 
     const tenantId = new mongoose.Types.ObjectId(req.tenantId as string);
     let query: any = { tenantId };
@@ -39,6 +40,23 @@ export const getSales = async (req: AuthRequest, res: Response) => {
         { invoiceNumber: { $regex: search, $options: "i" } },
         { customerPhone: { $regex: search, $options: "i" } },
       ];
+    }
+
+    if (saleType === "direct") {
+      const directCondition = {
+        $or: [
+          { "customItems.0": { $exists: true } },
+          { "additionalItems.0": { $exists: true } },
+        ],
+      };
+      if (query.$or) {
+        query.$and = [{ $or: query.$or }, directCondition];
+        delete query.$or;
+      } else {
+        query.$or = directCondition.$or;
+      }
+    } else if (saleType === "inventory") {
+      query["items.0"] = { $exists: true };
     }
 
     if (startDate || endDate) {
@@ -526,8 +544,17 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
       for (const item of additionalItems) {
         const chargePrice = Number(item.price) || 0;
         const profitPercent = Number(item.profitPercent) || 0;
+        const purchasePrice = Number(item.purchasePrice) || 0;
+        const profitAmount = Number(item.profitAmount) || 0;
+
         totalAmount += chargePrice;
-        totalProfit += (chargePrice * profitPercent) / 100;
+        if (purchasePrice > 0) {
+          totalProfit += (chargePrice - purchasePrice);
+        } else if (profitAmount > 0) {
+          totalProfit += profitAmount;
+        } else {
+          totalProfit += (chargePrice * profitPercent) / 100;
+        }
       }
     }
 
@@ -537,8 +564,17 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
         const customQuantity = Number(item.quantity) || 1;
         const lineTotal = customPrice * customQuantity;
         const profitPercent = Number(item.profitPercent) || 0;
+        const purchasePrice = Number(item.purchasePrice) || 0;
+        const profitAmount = Number(item.profitAmount) || 0;
+
         totalAmount += lineTotal;
-        totalProfit += (lineTotal * profitPercent) / 100;
+        if (purchasePrice > 0) {
+          totalProfit += (customPrice - purchasePrice) * customQuantity;
+        } else if (profitAmount > 0) {
+          totalProfit += profitAmount * customQuantity;
+        } else {
+          totalProfit += (lineTotal * profitPercent) / 100;
+        }
       }
     }
 

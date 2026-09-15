@@ -41,6 +41,7 @@ import {
   Edit,
   Eye,
   EyeOff,
+  Zap,
 } from "lucide-react";
 import BarcodeScanner from "../components/BarcodeScanner";
 import CustomerSearch from "../components/CustomerSearch";
@@ -236,6 +237,7 @@ const Sales = () => {
     setShowProfitRangeMenu(false);
   };
 
+  const [saleTypeFilter, setSaleTypeFilter] = useState<'all' | 'inventory' | 'direct'>('all');
   const [itemSearch, setItemSearch] = useState("");
   const [debouncedItemSearch, setDebouncedItemSearch] = useState("");
   const [scannedProducts, setScannedProducts] = useState<Product[]>([]);
@@ -261,7 +263,7 @@ const Sales = () => {
     hasNextPage: hasNextSalesPage,
     isFetchingNextPage: isFetchingNextSalesPage,
   } = useInfiniteQuery<PaginatedSalesResponse>({
-    queryKey: ["sales", debouncedFilterSearch, startDate, endDate, filterStatus],
+    queryKey: ["sales", debouncedFilterSearch, startDate, endDate, filterStatus, saleTypeFilter],
     queryFn: async ({ pageParam = 1 }) => {
       const res = await axios.get<PaginatedSalesResponse>(
         "/api/transactions/sales",
@@ -273,6 +275,7 @@ const Sales = () => {
             startDate,
             endDate,
             status: filterStatus,
+            saleType: saleTypeFilter !== "all" ? saleTypeFilter : undefined,
           },
           headers: { Authorization: `Bearer ${user?.token}` },
         },
@@ -495,8 +498,6 @@ const Sales = () => {
   const [newCustomProfitPercent, setNewCustomProfitPercent] = useState("0");
   const [newCustomMrp, setNewCustomMrp] = useState("");
   const [newCustomPurchasePrice, setNewCustomPurchasePrice] = useState("");
-
-  const [saleTypeFilter, setSaleTypeFilter] = useState<'all' | 'inventory' | 'direct'>('all');
 
   // UI Logic State
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -790,6 +791,9 @@ const Sales = () => {
           name: i.name,
           price: Number(i.price) || 0,
           profitPercent: Number(i.profitPercent) || 0,
+          mrp: Number(i.mrp) || Number(i.price) || 0,
+          purchasePrice: Number(i.purchasePrice) || 0,
+          profitAmount: Number(i.profitAmount) || 0,
         })),
         ...(newChargeName && newChargePrice
           ? [
@@ -797,6 +801,9 @@ const Sales = () => {
                 name: newChargeName,
                 price: Number(newChargePrice) || 0,
                 profitPercent: Number(newChargeProfitPercent) || 0,
+                mrp: Number(newChargePrice) || 0,
+                purchasePrice: 0,
+                profitAmount: 0,
               },
             ]
           : []),
@@ -807,15 +814,34 @@ const Sales = () => {
           price: Number(i.price) || 0,
           quantity: Number(i.quantity) || 1,
           profitPercent: Number(i.profitPercent) || 0,
+          mrp: Number(i.mrp) || Number(i.price) || 0,
+          purchasePrice: Number(i.purchasePrice) || 0,
+          profitAmount: Number(i.profitAmount) || 0,
         })),
-        ...(newCustomName && newCustomPrice
+        ...(newCustomName && (newCustomPrice || newCustomMrp)
           ? [
-              {
-                name: newCustomName,
-                price: Number(newCustomPrice) || 0,
-                quantity: Number(newCustomQuantity) || 1,
-                profitPercent: Number(newCustomProfitPercent) || 0,
-              },
+              (() => {
+                const price = Number(newCustomPrice || newCustomMrp) || 0;
+                const cost = Number(newCustomPurchasePrice) || 0;
+                const qty = Number(newCustomQuantity) || 1;
+                let pAmt = 0;
+                let pPct = Number(newCustomProfitPercent) || 0;
+                if (cost > 0) {
+                  pAmt = (price - cost) * qty;
+                  pPct = ((price - cost) / cost) * 100;
+                } else {
+                  pAmt = (price * qty * pPct) / 100;
+                }
+                return {
+                  name: newCustomName,
+                  price: price,
+                  quantity: qty,
+                  profitPercent: Number(pPct.toFixed(1)),
+                  mrp: Number(newCustomMrp) || price,
+                  purchasePrice: cost,
+                  profitAmount: Number((pAmt / qty).toFixed(2)),
+                };
+              })(),
             ]
           : []),
       ],
@@ -1050,15 +1076,147 @@ const Sales = () => {
     setItemsModalMode(null);
   };
 
-  // Sales are already filtered by the backend
-  const filteredSales = sales;
+  // Helpers for direct item cost calculations
+  const getCustomItemCost = (item: any) => {
+    const qty = Number(item.quantity) || 1;
+    const lineTotal = (Number(item.price) || 0) * qty;
+    const purchasePrice = Number(item.purchasePrice) || 0;
+    const profitAmount = Number(item.profitAmount) || 0;
+    const profitPercent = Number(item.profitPercent) || 0;
 
-  // Summary metrics from backend
+    if (purchasePrice > 0) {
+      return purchasePrice * qty;
+    }
+    if (profitAmount > 0) {
+      return Math.max(0, lineTotal - profitAmount * qty);
+    }
+    if (profitPercent > 0) {
+      return lineTotal / (1 + profitPercent / 100);
+    }
+    return lineTotal;
+  };
+
+  const getAdditionalItemCost = (item: any) => {
+    const lineTotal = Number(item.price) || 0;
+    const purchasePrice = Number(item.purchasePrice) || 0;
+    const profitAmount = Number(item.profitAmount) || 0;
+    const profitPercent = Number(item.profitPercent) || 0;
+
+    if (purchasePrice > 0) {
+      return purchasePrice;
+    }
+    if (profitAmount > 0) {
+      return Math.max(0, lineTotal - profitAmount);
+    }
+    if (profitPercent > 0) {
+      return lineTotal / (1 + profitPercent / 100);
+    }
+    return lineTotal;
+  };
+
+  // Sales filtered by active tab filter ('all' | 'inventory' | 'direct')
+  const filteredSales = useMemo(() => {
+    return sales.filter((sale) => {
+      const hasInventory = Boolean(sale.items && sale.items.length > 0);
+      const hasDirect = Boolean(
+        (sale.customItems && sale.customItems.length > 0) ||
+        (sale.additionalItems && sale.additionalItems.length > 0)
+      );
+      if (saleTypeFilter === "inventory") return hasInventory;
+      if (saleTypeFilter === "direct") return hasDirect;
+      return true;
+    });
+  }, [sales, saleTypeFilter]);
+
+  // Dynamic summary metrics based on saleTypeFilter
+  const displaySummary = useMemo(() => {
+    if (saleTypeFilter === "direct") {
+      let dAmount = 0;
+      let dCost = 0;
+      let dProfit = 0;
+
+      filteredSales.forEach((sale) => {
+        (sale.customItems || []).forEach((item) => {
+          const qty = Number(item.quantity) || 1;
+          const rate = Number(item.price) || 0;
+          const lineTotal = rate * qty;
+          const cost = getCustomItemCost(item);
+          dAmount += lineTotal;
+          dCost += cost;
+          dProfit += (lineTotal - cost);
+        });
+
+        (sale.additionalItems || []).forEach((item) => {
+          const rate = Number(item.price) || 0;
+          const cost = getAdditionalItemCost(item);
+          dAmount += rate;
+          dCost += cost;
+          dProfit += (rate - cost);
+        });
+      });
+
+      return {
+        totalAmount: dAmount,
+        totalProfit: dProfit,
+        invoicesCount: salesData?.pages[0]?.pagination?.totalCount ?? filteredSales.length,
+        margin: dAmount > 0 ? ((dProfit / dAmount) * 100).toFixed(1) : "0",
+      };
+    }
+
+    if (saleTypeFilter === "inventory") {
+      let iAmount = 0;
+      let iCost = 0;
+      let iProfit = 0;
+
+      filteredSales.forEach((sale) => {
+        (sale.items || []).forEach((item) => {
+          let cost = item.purchasePriceAtTime || 0;
+          if (item.productId && typeof item.productId === "object") {
+            const p = item.productId as any;
+            if (p.hasSubUnit && item.unit === p.subUnitName) {
+              const boxCost = p.purchasePrice || item.purchasePriceAtTime || 0;
+              cost =
+                p.subUnitPurchasePrice &&
+                p.subUnitPurchasePrice > 0 &&
+                p.subUnitPurchasePrice < boxCost
+                  ? p.subUnitPurchasePrice
+                  : boxCost / (p.subUnitValue || 1);
+            } else if (item.unit === p.unit) {
+              cost = p.purchasePrice || item.purchasePriceAtTime || 0;
+            }
+          }
+          const itemTotal = item.quantity * item.sellingPrice;
+          const itemCost = cost * item.quantity;
+          iAmount += itemTotal;
+          iCost += itemCost;
+          iProfit += (itemTotal - itemCost);
+        });
+      });
+
+      return {
+        totalAmount: iAmount,
+        totalProfit: iProfit,
+        invoicesCount: salesData?.pages[0]?.pagination?.totalCount ?? filteredSales.length,
+        margin: iAmount > 0 ? ((iProfit / iAmount) * 100).toFixed(1) : "0",
+      };
+    }
+
+    // Default 'all'
+    const totalAmount =
+      salesSummary.totalAmount -
+      (salesSummary.totalAdditionalCharges || 0) -
+      (salesSummary.totalRoundOff || 0);
+    const totalProfit = salesSummary.totalProfit;
+    return {
+      totalAmount,
+      totalProfit,
+      invoicesCount: salesData?.pages[0]?.pagination?.totalCount ?? sales.length,
+      margin: totalAmount > 0 ? ((totalProfit / totalAmount) * 100).toFixed(1) : "0",
+    };
+  }, [filteredSales, sales, saleTypeFilter, salesSummary, salesData]);
+
   // Summary metrics from backend (Excluding additional charges for accurate item-based profit view)
-  const totalSales =
-    salesSummary.totalAmount -
-    (salesSummary.totalAdditionalCharges || 0) -
-    (salesSummary.totalRoundOff || 0);
+  const totalSales = displaySummary.totalAmount;
   const totalPaid = Math.max(
     0,
     salesSummary.totalPaid -
@@ -1066,7 +1224,7 @@ const Sales = () => {
       (salesSummary.totalRoundOff || 0),
   );
   const totalUnpaid = salesSummary.totalUnpaid;
-  const totalNetProfit = salesSummary.totalProfit;
+  const totalNetProfit = displaySummary.totalProfit;
 
   // Export PDF
   const exportPDF = () => {
@@ -1083,16 +1241,8 @@ const Sales = () => {
             (item.quantity / (item.conversionFactor || 1)),
         0,
       );
-      cost += (sale.customItems || []).reduce((acc, item) => {
-        const lineTotal = (Number(item.price) || 0) * (Number(item.quantity) || 1);
-        const profitPercent = Number(item.profitPercent) || 0;
-        return acc + (lineTotal - (lineTotal * profitPercent) / 100);
-      }, 0);
-      cost += (sale.additionalItems || []).reduce((acc, item) => {
-        const lineTotal = Number(item.price) || 0;
-        const profitPercent = Number(item.profitPercent) || 0;
-        return acc + (lineTotal - (lineTotal * profitPercent) / 100);
-      }, 0);
+      cost += (sale.customItems || []).reduce((acc, item) => acc + getCustomItemCost(item), 0);
+      cost += (sale.additionalItems || []).reduce((acc, item) => acc + getAdditionalItemCost(item), 0);
       const profit = sale.totalProfit !== undefined ? sale.totalProfit : sale.totalAmount - cost;
       const margin =
         sale.totalAmount > 0
@@ -1139,16 +1289,8 @@ const Sales = () => {
             (item.quantity / (item.conversionFactor || 1)),
         0,
       );
-      cost += (sale.customItems || []).reduce((acc, item) => {
-        const lineTotal = (Number(item.price) || 0) * (Number(item.quantity) || 1);
-        const profitPercent = Number(item.profitPercent) || 0;
-        return acc + (lineTotal - (lineTotal * profitPercent) / 100);
-      }, 0);
-      cost += (sale.additionalItems || []).reduce((acc, item) => {
-        const lineTotal = Number(item.price) || 0;
-        const profitPercent = Number(item.profitPercent) || 0;
-        return acc + (lineTotal - (lineTotal * profitPercent) / 100);
-      }, 0);
+      cost += (sale.customItems || []).reduce((acc, item) => acc + getCustomItemCost(item), 0);
+      cost += (sale.additionalItems || []).reduce((acc, item) => acc + getAdditionalItemCost(item), 0);
       const profit = sale.totalProfit !== undefined ? sale.totalProfit : sale.totalAmount - cost;
       const margin =
         sale.totalAmount > 0
@@ -1269,6 +1411,9 @@ const Sales = () => {
         name: i.name,
         price: i.price.toString(),
         profitPercent: (i.profitPercent || 0).toString(),
+        mrp: i.mrp ? i.mrp.toString() : i.price.toString(),
+        purchasePrice: (i.purchasePrice || 0).toString(),
+        profitAmount: (i.profitAmount || 0).toString(),
       })),
     );
     setCustomItems(
@@ -1277,6 +1422,9 @@ const Sales = () => {
         price: i.price.toString(),
         quantity: (i.quantity || 1).toString(),
         profitPercent: (i.profitPercent || 0).toString(),
+        mrp: i.mrp ? i.mrp.toString() : i.price.toString(),
+        purchasePrice: (i.purchasePrice || 0).toString(),
+        profitAmount: (i.profitAmount || 0).toString(),
       })),
     );
     setIsModalOpen(true);
@@ -1496,8 +1644,41 @@ const Sales = () => {
           </div>
         </div>
 
+        {/* Sales Type Filter Tabs */}
+        <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-3 rounded-2xl border border-slate-100 shadow-sm mb-4">
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setSaleTypeFilter('all')}
+              className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
+                saleTypeFilter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              All Sales ({sales.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSaleTypeFilter('inventory')}
+              className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                saleTypeFilter === 'inventory' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              📦 Inventory Sales ({sales.filter(s => s.items && s.items.length > 0).length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSaleTypeFilter('direct')}
+              className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                saleTypeFilter === 'direct' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              ⚡ Direct Sales ({sales.filter(s => (s.customItems && s.customItems.length > 0) || (s.additionalItems && s.additionalItems.length > 0)).length})
+            </button>
+          </div>
+        </div>
+
         {user?.role !== 'staff' && (
-          <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-3xl p-5 flex flex-col lg:flex-row items-center justify-between gap-6 text-white shadow-xl group relative overflow-visible">
+          <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-3xl p-5 flex flex-col lg:flex-row items-center justify-between gap-6 text-white shadow-xl group relative overflow-visible mb-6">
             <div className="flex flex-col sm:flex-row items-center gap-6 w-full lg:w-auto">
               <div className="flex items-center gap-4 w-full sm:w-auto">
                 <div className="p-3 bg-white/10 rounded-2xl flex-shrink-0">
@@ -1505,7 +1686,11 @@ const Sales = () => {
                 </div>
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2 mb-1">
-                    {t("billing.net_profit")}
+                    {saleTypeFilter === 'direct'
+                      ? '⚡ Direct Sales Profit'
+                      : saleTypeFilter === 'inventory'
+                      ? '📦 Inventory Sales Profit'
+                      : t("billing.net_profit")}
                     <button
                       onClick={() => setShowProfit(!showProfit)}
                       className="p-1 hover:bg-white/10 rounded-lg transition-colors text-slate-400 hover:text-white"
@@ -1514,12 +1699,15 @@ const Sales = () => {
                     </button>
                   </p>
                   <p
-                    className={`text-2xl font-black tracking-tight transition-all duration-300 ${showProfit ? (totalNetProfit >= 0 ? "text-emerald-400" : "text-rose-400") : "text-slate-600 blur-sm select-none"}`}
+                    className={`text-2xl font-black tracking-tight transition-all duration-300 ${showProfit ? (displaySummary.totalProfit >= 0 ? "text-emerald-400" : "text-rose-400") : "text-slate-600 blur-sm select-none"}`}
                   >
                     {showProfit ? (
                       <>
-                        {totalNetProfit >= 0 ? "+" : ""}₹
-                        {Math.abs(totalNetProfit).toLocaleString()}
+                        {displaySummary.totalProfit >= 0 ? "+" : ""}₹
+                        {Math.abs(displaySummary.totalProfit).toLocaleString(undefined, {
+                          minimumFractionDigits: 0,
+                          maximumFractionDigits: 1,
+                        })}
                       </>
                     ) : (
                       "₹ *****"
@@ -1564,67 +1752,33 @@ const Sales = () => {
             <div className="flex items-center gap-8 text-right w-full lg:w-auto justify-between lg:justify-end border-t lg:border-t-0 border-white/10 pt-4 lg:pt-0">
               <div>
                 <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">
-                  {t("billing.margin")}
+                  {saleTypeFilter === 'direct'
+                    ? 'Direct Margin'
+                    : saleTypeFilter === 'inventory'
+                    ? 'Store Margin'
+                    : t("billing.margin")}
                 </p>
                 <p
                   className={`text-xl font-black transition-all duration-300 ${showProfit ? "text-white" : "text-slate-600 blur-sm select-none"}`}
                 >
-                  {showProfit ? (
-                    <>
-                      {totalSales > 0
-                        ? ((totalNetProfit / totalSales) * 100).toFixed(1)
-                        : 0}
-                      %
-                    </>
-                  ) : (
-                    "**%"
-                  )}
+                  {showProfit ? `${displaySummary.margin}%` : "**%"}
                 </p>
               </div>
               <div>
                 <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">
-                  {t("billing.invoices")}
+                  {saleTypeFilter === 'direct'
+                    ? 'Direct Invoices'
+                    : saleTypeFilter === 'inventory'
+                    ? 'Store Invoices'
+                    : t("billing.invoices")}
                 </p>
                 <p className="text-xl font-black text-white">
-                  {salesData?.pages[0]?.pagination.totalCount || 0}
+                  {displaySummary.invoicesCount}
                 </p>
               </div>
             </div>
           </div>
         )}
-
-        {/* Sales Type Filter Tabs */}
-        <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-3 rounded-2xl border border-slate-100 shadow-sm mb-4">
-          <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-xl">
-            <button
-              type="button"
-              onClick={() => setSaleTypeFilter('all')}
-              className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
-                saleTypeFilter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              All Sales ({sales.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setSaleTypeFilter('inventory')}
-              className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
-                saleTypeFilter === 'inventory' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              📦 Inventory Sales ({sales.filter(s => s.items && s.items.length > 0).length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setSaleTypeFilter('direct')}
-              className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
-                saleTypeFilter === 'direct' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              ⚡ Direct Sales ({sales.filter(s => (s.customItems && s.customItems.length > 0) || (s.additionalItems && s.additionalItems.length > 0)).length})
-            </button>
-          </div>
-        </div>
 
         {/* Sales Table */}
         <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
@@ -1678,16 +1832,8 @@ const Sales = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {sales
-                  .filter((sale) => {
-                    const hasInventory = sale.items && sale.items.length > 0;
-                    const hasDirect = (sale.customItems && sale.customItems.length > 0) || (sale.additionalItems && sale.additionalItems.length > 0);
-                    if (saleTypeFilter === 'inventory') return hasInventory;
-                    if (saleTypeFilter === 'direct') return hasDirect;
-                    return true;
-                  })
-                  .map((sale, index) => {
-                  const isLastElement = index === sales.length - 1;
+                {filteredSales.map((sale, index) => {
+                  const isLastElement = index === filteredSales.length - 1;
 
                   const totalMrp = (sale.items || []).reduce((acc, item) => {
                     let mrp = item.mrpAtTime || 0;
@@ -1701,7 +1847,11 @@ const Sales = () => {
                       }
                     }
                     return acc + mrp * item.quantity;
+                  }, 0) + (sale.customItems || []).reduce((acc, item) => {
+                    const mrp = Number(item.mrp) || Number(item.price) || 0;
+                    return acc + mrp * (Number(item.quantity) || 1);
                   }, 0);
+
                   let totalCost = (sale.items || []).reduce((acc, item) => {
                     let cost = item.purchasePriceAtTime || 0;
                     if (item.productId && typeof item.productId === 'object') {
@@ -1715,11 +1865,7 @@ const Sales = () => {
                     }
                     return acc + cost * item.quantity;
                   }, 0);
-                  totalCost += (sale.customItems || []).reduce((acc, item) => {
-                    const lineTotal = (Number(item.price) || 0) * (Number(item.quantity) || 1);
-                    const profitPercent = Number(item.profitPercent) || 0;
-                    return acc + (lineTotal - (lineTotal * profitPercent) / 100);
-                  }, 0);
+                  totalCost += (sale.customItems || []).reduce((acc, item) => acc + getCustomItemCost(item), 0);
                   const additionalChargesTotal = (
                     sale.additionalItems || []
                   ).reduce((acc, item) => acc + (Number(item.price) || 0), 0);
@@ -2091,22 +2237,32 @@ const Sales = () => {
                 </div>
               </div>
 
-              {/* Scan and Add Items Buttons */}
+              {/* Scan, Add Items & Direct Sale Buttons */}
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   type="button"
                   onClick={() => setItemsModalMode("scan")}
-                  className="flex-1 flex items-center justify-center gap-3 p-5 rounded-2xl bg-white border-2 border-primary-100 text-primary-600 font-black uppercase tracking-widest text-sm hover:bg-primary-50 transition-all shadow-sm active:scale-[0.98]"
+                  className="flex-1 flex items-center justify-center gap-2 p-4 rounded-2xl bg-white border-2 border-primary-100 text-primary-600 font-black uppercase tracking-widest text-xs sm:text-sm hover:bg-primary-50 transition-all shadow-sm active:scale-[0.98]"
                 >
-                  <Scan size={20} />{" "}
+                  <Scan size={18} />{" "}
                   {t("billing.scan_products") || "Scan Items"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setItemsModalMode("all")}
-                  className="flex-1 flex items-center justify-center gap-3 p-5 rounded-2xl bg-primary-600 text-white font-black uppercase tracking-widest text-sm hover:bg-primary-700 transition-all shadow-lg shadow-primary-200 active:scale-[0.98]"
+                  className="flex-1 flex items-center justify-center gap-2 p-4 rounded-2xl bg-primary-600 text-white font-black uppercase tracking-widest text-xs sm:text-sm hover:bg-primary-700 transition-all shadow-lg shadow-primary-200 active:scale-[0.98]"
                 >
-                  <ShoppingCart size={20} /> {t("billing.add_from_inventory")}
+                  <ShoppingCart size={18} /> {t("billing.add_from_inventory")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById("direct-sale-section");
+                    if (el) el.scrollIntoView({ behavior: "smooth" });
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 p-4 rounded-2xl bg-blue-50 border-2 border-blue-200 text-blue-700 font-black uppercase tracking-widest text-xs sm:text-sm hover:bg-blue-100 transition-all shadow-sm active:scale-[0.98]"
+                >
+                  <Zap size={18} /> Direct Sale
                 </button>
               </div>
 
@@ -2484,7 +2640,7 @@ const Sales = () => {
               </div>
 
               {/* Direct Sale (Custom Items) Section */}
-              <div className="p-5 bg-blue-50/70 rounded-[2rem] border border-blue-100 space-y-3">
+              <div id="direct-sale-section" className="p-5 bg-blue-50/70 rounded-[2rem] border border-blue-100 space-y-3">
                 <div className="flex justify-between items-center">
                   <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">
                     ⚡ Direct Sale / Custom Item
