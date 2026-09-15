@@ -143,13 +143,19 @@ const saleSchema: Schema = new mongoose.Schema({
     additionalItems: [{
         name: { type: String, required: true },
         price: { type: Number, required: true },
-        profitPercent: { type: Number, default: 0 }
+        profitPercent: { type: Number, default: 0 },
+        mrp: { type: Number, default: 0 },
+        purchasePrice: { type: Number, default: 0 },
+        profitAmount: { type: Number, default: 0 }
     }],
     customItems: [{
         name: { type: String, required: true },
         price: { type: Number, required: true },
         quantity: { type: Number, default: 1 },
-        profitPercent: { type: Number, default: 0 }
+        profitPercent: { type: Number, default: 0 },
+        mrp: { type: Number, default: 0 },
+        purchasePrice: { type: Number, default: 0 },
+        profitAmount: { type: Number, default: 0 }
     }],
     invoiceNumber: {
         type: String,
