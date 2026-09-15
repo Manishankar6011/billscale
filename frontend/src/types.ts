@@ -182,8 +182,8 @@ export interface Sale {
   roundOffAmount: number;
   paymentMode: "cash" | "credit";
   status: "paid" | "pending" | "partial";
-  additionalItems?: { name: string; price: number; profitPercent?: number }[];
-  customItems?: { name: string; price: number; quantity: number; profitPercent?: number }[];
+  additionalItems?: { name: string; price: number; profitPercent?: number; mrp?: number; purchasePrice?: number; profitAmount?: number }[];
+  customItems?: { name: string; price: number; quantity: number; profitPercent?: number; mrp?: number; purchasePrice?: number; profitAmount?: number }[];
   invoiceNumber: string;
   date: string;
   showQRCode?: boolean;
