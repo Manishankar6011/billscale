@@ -8,6 +8,7 @@ import React, {
 import {
   useInfiniteQuery,
   useMutation,
+  useQuery,
   useQueryClient,
   keepPreviousData,
 } from "@tanstack/react-query";
@@ -35,6 +36,7 @@ import {
   ShoppingBag,
   Image as ImageIcon,
   Upload,
+  Check,
 } from "lucide-react";
 import BarcodeScanner from "../components/BarcodeScanner";
 import JsBarcode from "jsbarcode";
@@ -69,6 +71,25 @@ const UNIT_GROUPS = {
 };
 
 const ALL_UNITS = Object.values(UNIT_GROUPS).flat();
+
+const DEFAULT_CATEGORIES = [
+  "General",
+  "Pooja",
+  "Dry Fruits",
+  "Cosmetics",
+  "Home Care",
+  "Personal Care",
+  "Birthday",
+  "Grocery",
+  "Electric",
+  "Stationary",
+  "Ice-cream",
+  "Cold Drink",
+  "Chocolate",
+  "Gift",
+  "Faishon",
+  "Cake",
+];
 
 const Inventory = () => {
   const { t } = useTranslation();
@@ -135,11 +156,92 @@ const Inventory = () => {
     return data?.pages.flatMap((page) => page.products) || [];
   }, [data]);
 
-  const existingCategories = useMemo(() => {
-    const cats = [...new Set(products.map((p: any) => p.category).filter(Boolean))] as string[];
-    if (!cats.includes("General")) cats.unshift("General");
-    return cats;
-  }, [products]);
+  // Query server categories (tenant custom + products + defaults)
+  const { data: serverCategories = [] } = useQuery({
+    queryKey: ["inventory-categories"],
+    queryFn: async () => {
+      try {
+        const res = await axios.get("/api/inventory/categories", {
+          headers: { Authorization: `Bearer ${user?.token}` },
+        });
+        if (Array.isArray(res.data)) {
+          try {
+            localStorage.setItem(
+              `buildmate_categories_${user?.tenantId || "default"}`,
+              JSON.stringify(res.data)
+            );
+          } catch (e) {}
+          return res.data as string[];
+        }
+      } catch (err) {
+        console.error("Failed to fetch inventory categories:", err);
+      }
+      return [];
+    },
+    enabled: !!user?.token,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const localCategories = useMemo(() => {
+    try {
+      const stored = localStorage.getItem(
+        `buildmate_categories_${user?.tenantId || "default"}`
+      );
+      return stored ? (JSON.parse(stored) as string[]) : [];
+    } catch {
+      return [];
+    }
+  }, [user?.tenantId]);
+
+  const allCategories = useMemo(() => {
+    const fromProducts = products
+      .map((p: any) => p.category)
+      .filter(Boolean) as string[];
+    const combined = [
+      ...DEFAULT_CATEGORIES,
+      ...serverCategories,
+      ...localCategories,
+      ...fromProducts,
+    ];
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const cat of combined) {
+      if (!cat || typeof cat !== "string") continue;
+      const trimmed = cat.trim();
+      if (!trimmed) continue;
+      const lower = trimmed.toLowerCase();
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        result.push(trimmed);
+      }
+    }
+    return result;
+  }, [products, serverCategories, localCategories]);
+
+  const existingCategories = allCategories;
+
+  const addCategoryMutation = useMutation({
+    mutationFn: async (newCat: string) => {
+      const res = await axios.post(
+        "/api/inventory/categories",
+        { category: newCat },
+        { headers: { Authorization: `Bearer ${user?.token}` } }
+      );
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["inventory-categories"] });
+      try {
+        const key = `buildmate_categories_${user?.tenantId || "default"}`;
+        const stored = localStorage.getItem(key);
+        const list: string[] = stored ? JSON.parse(stored) : [];
+        if (data?.category && !list.includes(data.category)) {
+          list.push(data.category);
+          localStorage.setItem(key, JSON.stringify(list));
+        }
+      } catch (e) {}
+    },
+  });
 
   // Infinite Scroll Observer
   const observer = useRef<IntersectionObserver | null>(null);
@@ -230,6 +332,22 @@ const Inventory = () => {
   const [bulkCategoryValue, setBulkCategoryValue] = useState("General");
   const [isCreatingNewCategory, setIsCreatingNewCategory] = useState(false);
 
+  const [isAddingCustomCategory, setIsAddingCustomCategory] = useState(false);
+  const [customCategoryInput, setCustomCategoryInput] = useState("");
+
+  const handleSaveCustomCategory = () => {
+    const trimmed = customCategoryInput.trim();
+    if (!trimmed) {
+      setIsAddingCustomCategory(false);
+      return;
+    }
+    setFormData((prev) => ({ ...prev, category: trimmed }));
+    addCategoryMutation.mutate(trimmed);
+    showToast(`Category "${trimmed}" saved!`, "success");
+    setIsAddingCustomCategory(false);
+    setCustomCategoryInput("");
+  };
+
   const [printLabelData, setPrintLabelData] = useState<Product | null>(null);
   const [adjustmentType, setAdjustmentType] = useState<"add" | "reduce">("add");
   const [adjustmentValue, setAdjustmentValue] = useState("");
@@ -306,6 +424,8 @@ const Inventory = () => {
     });
     setAdjustmentType("add");
     setAdjustmentValue("");
+    setIsAddingCustomCategory(false);
+    setCustomCategoryInput("");
   };
 
   // ── 3-way price sync helpers ──────────────────────────────────────────────
@@ -396,6 +516,7 @@ const Inventory = () => {
     },
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-categories"] });
       if (editingId) {
         showToast(t("inventory.product_updated"), "success");
       } else {
@@ -440,6 +561,8 @@ const Inventory = () => {
       } else {
         setIsModalOpen(false);
         setEditingId(null);
+        setIsAddingCustomCategory(false);
+        setCustomCategoryInput("");
         setFormData({
           name: "",
           unit: "piece",
@@ -484,10 +607,12 @@ const Inventory = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-categories"] });
       showToast(t("inventory.updated_success") || "Categories updated successfully", "success");
       setIsBulkCategoryModalOpen(false);
+      setIsCreatingNewCategory(false);
       setSelectedProductIds([]);
-      setBulkCategoryValue("");
+      setBulkCategoryValue("General");
     },
     onError: (err: any) => {
       showToast(err.response?.data?.message || t("common.error"), "error");
@@ -535,7 +660,11 @@ const Inventory = () => {
       batchNumber: product.batchNumber || "",
       hsnCode: product.hsnCode || "",
       gstRate: (product.gstRate || 0).toString(),
-      category: product.category || "General",
+      category: (() => {
+        const raw = (product.category || "General").trim();
+        const matched = allCategories.find((c) => c.toLowerCase() === raw.toLowerCase());
+        return matched || raw;
+      })(),
       genericName: product.genericName || "",
       manufacturer: product.manufacturer || "",
       drugSchedule: product.drugSchedule || "",
@@ -551,6 +680,8 @@ const Inventory = () => {
       subUnitDiscount: product.subUnitDiscount ? product.subUnitDiscount.toString() : "",
       imageUrl: product.imageUrl || "",
     });
+    setIsAddingCustomCategory(false);
+    setCustomCategoryInput("");
     setIsModalOpen(true);
   };
 
@@ -587,6 +718,16 @@ const Inventory = () => {
         adjustmentType === "add" ? finalStock + adj : finalStock - adj;
     }
 
+    let finalCategory = formData.category || "General";
+    if (isAddingCustomCategory && customCategoryInput.trim()) {
+      finalCategory = customCategoryInput.trim();
+      addCategoryMutation.mutate(finalCategory);
+      setIsAddingCustomCategory(false);
+      setCustomCategoryInput("");
+    } else if (finalCategory && !DEFAULT_CATEGORIES.includes(finalCategory)) {
+      addCategoryMutation.mutate(finalCategory);
+    }
+
     const data = {
       ...formData,
       stock: finalStock,
@@ -598,7 +739,7 @@ const Inventory = () => {
       batchNumber: formData.batchNumber,
       hsnCode: formData.hsnCode,
       gstRate: Number(formData.gstRate),
-      category: formData.category,
+      category: finalCategory,
       genericName: formData.genericName,
       manufacturer: formData.manufacturer,
       drugSchedule: formData.drugSchedule,
@@ -1067,7 +1208,11 @@ const Inventory = () => {
           
           {selectedProductIds.length > 0 && (
             <button
-              onClick={() => setIsBulkCategoryModalOpen(true)}
+              onClick={() => {
+                setIsCreatingNewCategory(false);
+                setBulkCategoryValue("General");
+                setIsBulkCategoryModalOpen(true);
+              }}
               className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 bg-white border border-indigo-200 rounded-2xl text-sm font-bold text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 transition-all shadow-sm whitespace-nowrap animate-in fade-in zoom-in duration-200"
             >
               <Layers size={18} /> Assign Category ({selectedProductIds.length})
@@ -1486,18 +1631,93 @@ const Inventory = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
-                    Category
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold placeholder:font-medium"
-                    placeholder="e.g. Snacks, Electronics"
-                    value={formData.category}
-                    onChange={(e) =>
-                      setFormData({ ...formData, category: e.target.value })
-                    }
-                  />
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400">
+                      Category
+                    </label>
+                    {!isAddingCustomCategory && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAddingCustomCategory(true);
+                          setCustomCategoryInput("");
+                        }}
+                        className="text-xs font-bold text-primary-600 hover:text-primary-700 flex items-center gap-1 hover:underline"
+                      >
+                        <Plus size={13} /> Add Custom
+                      </button>
+                    )}
+                  </div>
+                  {!isAddingCustomCategory ? (
+                    <div className="relative">
+                      <select
+                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold appearance-none cursor-pointer pr-10"
+                        value={formData.category}
+                        onChange={(e) => {
+                          if (e.target.value === "__NEW__") {
+                            setIsAddingCustomCategory(true);
+                            setCustomCategoryInput("");
+                          } else {
+                            setFormData({ ...formData, category: e.target.value });
+                          }
+                        }}
+                      >
+                        {formData.category && !allCategories.some((c) => c.toLowerCase() === formData.category.toLowerCase()) && (
+                          <option value={formData.category}>{formData.category}</option>
+                        )}
+                        {allCategories.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                        <option value="__NEW__" className="font-bold text-primary-600">
+                          + Add Custom Category
+                        </option>
+                      </select>
+                      <ChevronDown
+                        size={18}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder="Enter category name..."
+                        className="w-full bg-slate-50 border-2 border-primary-400 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold placeholder:font-medium outline-none"
+                        value={customCategoryInput}
+                        onChange={(e) => setCustomCategoryInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleSaveCustomCategory();
+                          } else if (e.key === "Escape") {
+                            setIsAddingCustomCategory(false);
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveCustomCategory}
+                        className="p-4 bg-primary-600 text-white hover:bg-primary-700 rounded-2xl transition-all font-bold flex items-center justify-center shadow-md shadow-primary-200 shrink-0"
+                        title="Save Category"
+                      >
+                        <Check size={20} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAddingCustomCategory(false);
+                          setCustomCategoryInput("");
+                        }}
+                        className="p-4 bg-slate-100 text-slate-500 hover:text-rose-600 rounded-2xl transition-colors shrink-0"
+                        title="Cancel"
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2473,7 +2693,11 @@ const Inventory = () => {
                 </div>
               </div>
               <button
-                onClick={() => setIsBulkCategoryModalOpen(false)}
+                onClick={() => {
+                  setIsBulkCategoryModalOpen(false);
+                  setIsCreatingNewCategory(false);
+                  setBulkCategoryValue("General");
+                }}
                 className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
               >
                 <X size={20} />
@@ -2528,14 +2752,27 @@ const Inventory = () => {
 
               <div className="flex gap-3 pt-4">
                 <button
-                  onClick={() => setIsBulkCategoryModalOpen(false)}
+                  onClick={() => {
+                    setIsBulkCategoryModalOpen(false);
+                    setIsCreatingNewCategory(false);
+                    setBulkCategoryValue("General");
+                  }}
                   className="flex-1 px-6 py-4 rounded-2xl font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   disabled={!bulkCategoryValue.trim() || bulkUpdateCategoryMutation.isPending}
-                  onClick={() => bulkUpdateCategoryMutation.mutate({ productIds: selectedProductIds, updateData: { category: bulkCategoryValue.trim() } })}
+                  onClick={() => {
+                    const val = bulkCategoryValue.trim();
+                    if (val && !DEFAULT_CATEGORIES.includes(val)) {
+                      addCategoryMutation.mutate(val);
+                    }
+                    bulkUpdateCategoryMutation.mutate({
+                      productIds: selectedProductIds,
+                      updateData: { category: val },
+                    });
+                  }}
                   className="flex-1 px-6 py-4 rounded-2xl font-black uppercase tracking-widest text-xs text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                 >
                   {bulkUpdateCategoryMutation.isPending ? <Loader2 className="animate-spin" size={18} /> : "Update"}
