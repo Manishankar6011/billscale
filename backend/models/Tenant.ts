@@ -115,6 +115,10 @@ const tenantSchema: Schema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    customCategories: {
+        type: [String],
+        default: []
+    },
     createdAt: {
         type: Date,
         default: Date.now

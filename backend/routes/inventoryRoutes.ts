@@ -1,5 +1,15 @@
 import express from 'express';
-import { getProducts, getProductByBarcode, addProduct, updateProduct, deleteProduct, bulkAddProducts, bulkUpdateProducts } from '../controllers/inventoryController';
+import { 
+    getProducts, 
+    getProductByBarcode, 
+    addProduct, 
+    updateProduct, 
+    deleteProduct, 
+    bulkAddProducts, 
+    bulkUpdateProducts,
+    getCategories,
+    addCategory
+} from '../controllers/inventoryController';
 import { protect, checkSubscription } from '../middleware/auth';
 import tenant from '../middleware/tenant';
 
@@ -9,6 +19,8 @@ router.use(protect);
 router.use(tenant);
 
 router.get('/', getProducts);
+router.get('/categories', getCategories);
+router.post('/categories', checkSubscription, addCategory);
 router.get('/barcode/:barcode', getProductByBarcode);
 router.post('/', checkSubscription, addProduct);
 router.post('/bulk', checkSubscription, bulkAddProducts);

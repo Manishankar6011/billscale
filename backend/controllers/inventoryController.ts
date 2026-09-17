@@ -190,8 +190,21 @@ export const addProduct = async (req: AuthRequest, res: Response) => {
             }
         }
 
+        if (productData.category && typeof productData.category === 'string') {
+            const trimmed = productData.category.trim();
+            const canonical = DEFAULT_INVENTORY_CATEGORIES.find(c => c.toLowerCase() === trimmed.toLowerCase());
+            productData.category = canonical || trimmed;
+        }
+
         const product = new Product(productData);
         const savedProduct = await product.save();
+
+        if (productData.category && typeof productData.category === 'string' && productData.category.trim()) {
+            Tenant.findByIdAndUpdate(req.tenantId, {
+                $addToSet: { customCategories: productData.category.trim() }
+            }).exec().catch(() => {});
+        }
+
         res.status(201).json({ ...savedProduct.toObject(), message_type: 'created' });
     } catch (err: any) {
         res.status(400).json({ message: err.message });
@@ -381,6 +394,12 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
             }
         }
 
+        if (productData.category && typeof productData.category === 'string') {
+            const trimmed = productData.category.trim();
+            const canonical = DEFAULT_INVENTORY_CATEGORIES.find(c => c.toLowerCase() === trimmed.toLowerCase());
+            productData.category = canonical || trimmed;
+        }
+
         const product = await Product.findOneAndUpdate(
             { _id: req.params.id, tenantId: req.tenantId },
             { $set: productData },
@@ -389,6 +408,12 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
 
         if (!product) {
             return res.status(404).json({ message: 'Product not found' });
+        }
+
+        if (productData.category && typeof productData.category === 'string' && productData.category.trim()) {
+            Tenant.findByIdAndUpdate(req.tenantId, {
+                $addToSet: { customCategories: productData.category.trim() }
+            }).exec().catch(() => {});
         }
 
         res.status(200).json(product);
@@ -433,14 +458,130 @@ export const bulkUpdateProducts = async (req: AuthRequest, res: Response): Promi
             return res.status(400).json({ message: 'No products provided for update' });
         }
 
+        if (updateData?.category && typeof updateData.category === 'string') {
+            const trimmed = updateData.category.trim();
+            const canonical = DEFAULT_INVENTORY_CATEGORIES.find(c => c.toLowerCase() === trimmed.toLowerCase());
+            updateData.category = canonical || trimmed;
+        }
+
         await Product.updateMany(
             { _id: { $in: productIds }, tenantId: req.tenantId },
             { $set: updateData }
         );
 
+        if (updateData?.category && typeof updateData.category === 'string' && updateData.category.trim()) {
+            Tenant.findByIdAndUpdate(req.tenantId, {
+                $addToSet: { customCategories: updateData.category.trim() }
+            }).exec().catch(() => {});
+        }
+
         res.status(200).json({ message: 'Products updated successfully' });
     } catch (err: any) {
         console.error('Bulk update error:', err);
         res.status(500).json({ message: err.message || 'Failed to update products' });
+    }
+};
+
+export const DEFAULT_INVENTORY_CATEGORIES = [
+    'General',
+    'Pooja',
+    'Dry Fruits',
+    'Cosmetics',
+    'Home Care',
+    'Personal Care',
+    'Birthday',
+    'Grocery',
+    'Electric',
+    'Stationary',
+    'Ice-cream',
+    'Cold Drink',
+    'Chocolate',
+    'Gift',
+    'Faishon',
+    'Cake'
+];
+
+// @desc    Get all inventory categories for tenant
+// @route   GET /api/inventory/categories
+export const getCategories = async (req: AuthRequest, res: Response) => {
+    try {
+        const tenantId = new mongoose.Types.ObjectId(req.tenantId as string);
+
+        const [tenant, productCategories] = await Promise.all([
+            Tenant.findById(tenantId).select('customCategories').lean(),
+            Product.distinct('category', { tenantId })
+        ]);
+
+        const customCats: string[] = (tenant as any)?.customCategories || [];
+        const prodCats: string[] = (productCategories || []).filter(Boolean);
+
+        const combined = [...DEFAULT_INVENTORY_CATEGORIES, ...customCats, ...prodCats];
+        const seen = new Set<string>();
+        const uniqueCategories: string[] = [];
+
+        for (const cat of combined) {
+            if (!cat || typeof cat !== 'string') continue;
+            const trimmed = cat.trim();
+            if (!trimmed) continue;
+            const lower = trimmed.toLowerCase();
+            if (!seen.has(lower)) {
+                seen.add(lower);
+                const canonical = DEFAULT_INVENTORY_CATEGORIES.find(c => c.toLowerCase() === lower);
+                uniqueCategories.push(canonical || trimmed);
+            }
+        }
+
+        res.status(200).json(uniqueCategories);
+    } catch (err: any) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
+// @desc    Add a custom category for tenant
+// @route   POST /api/inventory/categories
+export const addCategory = async (req: AuthRequest, res: Response) => {
+    try {
+        const { category } = req.body;
+        if (!category || typeof category !== 'string' || !category.trim()) {
+            return res.status(400).json({ message: 'Category name is required' });
+        }
+
+        const trimmed = category.trim();
+        const canonical = DEFAULT_INVENTORY_CATEGORIES.find(c => c.toLowerCase() === trimmed.toLowerCase());
+        const finalCategory = canonical || trimmed;
+        const tenantId = new mongoose.Types.ObjectId(req.tenantId as string);
+
+        const tenant = await Tenant.findByIdAndUpdate(
+            tenantId,
+            { $addToSet: { customCategories: finalCategory } },
+            { new: true }
+        ).select('customCategories').lean();
+
+        const productCategories = await Product.distinct('category', { tenantId });
+        const customCats: string[] = (tenant as any)?.customCategories || [];
+        const prodCats: string[] = (productCategories || []).filter(Boolean);
+
+        const combined = [...DEFAULT_INVENTORY_CATEGORIES, ...customCats, ...prodCats];
+        const seen = new Set<string>();
+        const uniqueCategories: string[] = [];
+
+        for (const cat of combined) {
+            if (!cat || typeof cat !== 'string') continue;
+            const trimmedCat = cat.trim();
+            if (!trimmedCat) continue;
+            const lower = trimmedCat.toLowerCase();
+            if (!seen.has(lower)) {
+                seen.add(lower);
+                uniqueCategories.push(trimmedCat);
+            }
+        }
+
+        res.status(200).json({
+            message: 'Category added successfully',
+            category: trimmed,
+            categories: uniqueCategories
+        });
+    } catch (err: any) {
+        res.status(500).json({ message: err.message });
     }
 };
