@@ -49,7 +49,11 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
       try {
         let res;
         if (customDomainMode) {
-          res = await axios.get('/api/catalog/by-domain/lookup');
+          const currentHost = window.location.hostname;
+          res = await axios.get('/api/catalog/by-domain/lookup', {
+            params: { domain: currentHost },
+            headers: { 'x-custom-domain': currentHost }
+          });
         } else {
           res = await axios.get(`/api/catalog/${slug}`);
         }
