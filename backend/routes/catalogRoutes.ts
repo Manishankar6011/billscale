@@ -11,11 +11,11 @@ import { protect, checkSubscription, checkPlan } from '../middleware/auth';
 const router = express.Router();
 
 // ─── Public Routes ──────────────────────────────────────────────────────────
-// Get catalog by slug (existing)
-router.get('/:slug', getCatalogBySlug);
-
-// Get catalog by custom domain (Host header se domain read karta hai)
+// Get catalog by custom domain (placed before :slug so :slug never intercepts)
 router.get('/by-domain/lookup', getCatalogByDomain);
+
+// Get catalog by slug
+router.get('/:slug', getCatalogBySlug);
 
 // ─── Protected Routes (Paid Plans Only) ────────────────────────────────────
 router.post(
