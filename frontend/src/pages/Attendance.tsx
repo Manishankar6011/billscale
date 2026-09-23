@@ -67,7 +67,7 @@ const Attendance = () => {
   const getStatus = (staffId: string) => {
     const record = attendance.find(
       (r) =>
-        (typeof r.staffId !== "string" && r.staffId._id === staffId) ||
+        (typeof r.staffId !== "string" && r.staffId?._id === staffId) ||
         r.staffId === staffId,
     );
     return record?.status || null;
@@ -80,7 +80,7 @@ const Attendance = () => {
     const newAttendance = [...attendance];
     const index = newAttendance.findIndex(
       (r) =>
-        (typeof r.staffId !== "string" && r.staffId._id === staffId) ||
+        (typeof r.staffId !== "string" && r.staffId?._id === staffId) ||
         r.staffId === staffId,
     );
 
@@ -142,7 +142,7 @@ const Attendance = () => {
 
   const saveAttendance = async () => {
     const records = attendance.map((r) => ({
-      staffId: typeof r.staffId !== "string" ? r.staffId._id : r.staffId,
+      staffId: typeof r.staffId !== "string" ? r.staffId?._id : r.staffId,
       status: r.status,
     }));
     saveMutation.mutate(records);

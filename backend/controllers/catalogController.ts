@@ -7,6 +7,20 @@ import { promisify } from 'util';
 import axios from 'axios';
 
 const resolveCname = promisify(dns.resolveCname);
+const resolve4 = promisify(dns.resolve4);
+
+// Helper to extract apex domain (e.g. store.a2supermart.com -> a2supermart.com)
+const extractApexDomain = (hostname: string): string => {
+    const clean = hostname.replace(/^www\./, '');
+    const parts = clean.split('.');
+    if (parts.length <= 2) return clean;
+    const twoPartTlds = ['co.in', 'com.in', 'org.in', 'net.in', 'co.uk', 'gov.in'];
+    const lastTwo = parts.slice(-2).join('.');
+    if (twoPartTlds.includes(lastTwo)) {
+        return parts.slice(-3).join('.');
+    }
+    return parts.slice(-2).join('.');
+};
 
 // ─── Public: Get catalog by slug ───────────────────────────────────────────
 export const getCatalogBySlug = async (req: Request, res: Response) => {
@@ -36,24 +50,72 @@ export const getCatalogBySlug = async (req: Request, res: Response) => {
 
 // ─── Public: Get catalog by custom domain (used by custom domain routing) ──
 export const getCatalogByDomain = async (req: Request, res: Response) => {
-    // Host header se domain nikaalo (support for proxy/vercel rewrites)
-    const host = (req.headers['x-forwarded-host'] || req.headers.host)?.toString().split(':')[0]?.toLowerCase();
+    // Priority:
+    // 1. Explicit domain query param from client (?domain=store.example.com)
+    // 2. Custom header x-custom-domain
+    // 3. x-forwarded-host or host header
+    const rawHost = (
+        (req.query.domain as string) ||
+        (req.headers['x-custom-domain'] as string) ||
+        req.headers['x-forwarded-host'] ||
+        req.headers.host
+    )?.toString();
+
+    if (!rawHost) {
+        return res.status(400).json({ message: 'No host or domain parameter found' });
+    }
+
+    // Clean host: strip proxies (take first), remove protocol, paths, and ports
+    const host = rawHost
+        .split(',')[0]
+        .trim()
+        .replace(/^https?:\/\//, '')
+        .split('/')[0]
+        .split(':')[0]
+        .toLowerCase();
 
     if (!host) {
-        return res.status(400).json({ message: 'No host header found' });
+        return res.status(400).json({ message: 'Invalid host header' });
     }
 
     try {
-        const tenant = await Tenant.findOne({
-            customDomain: host,
-            $or: [
-                { customDomainStatus: 'active' },
-                { customDomainStatus: { $exists: false } }
-            ]
+        const hostWithoutWww = host.replace(/^www\./, '');
+        const apexDomain = extractApexDomain(host);
+
+        // Candidate domains to check
+        const candidates = Array.from(new Set([
+            host,
+            hostWithoutWww,
+            `www.${hostWithoutWww}`,
+            apexDomain,
+            `store.${apexDomain}`,
+            `shop.${apexDomain}`
+        ]));
+
+        // Match tenant by any of the candidate domains
+        let tenant = await Tenant.findOne({
+            customDomain: { $in: candidates }
         });
+
+        // Fallback: match by root domain pattern if tenant saved an apex or subdomain
+        if (!tenant && apexDomain && apexDomain.includes('.')) {
+            tenant = await Tenant.findOne({
+                customDomain: new RegExp(`(^|\\.)${apexDomain.replace('.', '\\.')}$`, 'i')
+            });
+        }
 
         if (!tenant) {
             return res.status(404).json({ message: 'No active store found for this domain' });
+        }
+
+        // Auto-activate store if the request successfully hit this endpoint
+        // Because if the user's traffic reached here on this domain, DNS is undeniably working!
+        if (tenant.customDomainStatus !== 'active') {
+            await Tenant.findByIdAndUpdate(tenant._id, {
+                customDomainStatus: 'active',
+                customDomainVerifiedAt: new Date()
+            });
+            tenant.customDomainStatus = 'active';
         }
 
         const products = await Product.find({ tenantId: tenant._id, stock: { $gt: 0 } })
@@ -158,6 +220,7 @@ export const verifyCustomDomain = async (req: AuthRequest, res: Response) => {
         if (process.env.VERCEL_API_TOKEN && process.env.VERCEL_PROJECT_ID) {
             // Use Vercel API for verification check
             try {
+                // Check direct domain
                 const response = await axios.get(
                     `https://api.vercel.com/v9/projects/${process.env.VERCEL_PROJECT_ID}/domains/${domain}`,
                     {
@@ -166,15 +229,39 @@ export const verifyCustomDomain = async (req: AuthRequest, res: Response) => {
                         },
                     }
                 );
-                isVerified = response.data.verified;
+                isVerified = !!response.data?.verified;
             } catch (vercelError: any) {
-                console.error("Vercel API Error verifying domain:", vercelError.response?.data || vercelError.message);
-                // Fallback to manual DNS if Vercel API fails for some reason
+                // If not found directly, check if store.domain or apex domain is verified on this project
+                try {
+                    const apex = extractApexDomain(domain);
+                    const candidatesToCheck = [`store.${apex}`, apex, `www.${apex}`].filter(d => d !== domain);
+                    for (const altDomain of candidatesToCheck) {
+                        try {
+                            const altRes = await axios.get(
+                                `https://api.vercel.com/v9/projects/${process.env.VERCEL_PROJECT_ID}/domains/${altDomain}`,
+                                {
+                                    headers: {
+                                        Authorization: `Bearer ${process.env.VERCEL_API_TOKEN}`,
+                                    },
+                                }
+                            );
+                            if (altRes.data?.verified) {
+                                isVerified = true;
+                                break;
+                            }
+                        } catch {
+                            // ignore alt domain 404
+                        }
+                    }
+                } catch (altErr) {
+                    console.error("Error checking alternative Vercel domains:", altErr);
+                }
             }
         }
 
-        // Manual DNS fallback if Vercel API isn't configured or failed
-        if (!isVerified && (!process.env.VERCEL_API_TOKEN || !process.env.VERCEL_PROJECT_ID)) {
+        // Manual DNS fallback if not verified yet
+        if (!isVerified) {
+            // 1. Try CNAME check
             try {
                 const cnameRecords = await resolveCname(domain);
                 isVerified = cnameRecords.some(record =>
@@ -183,9 +270,21 @@ export const verifyCustomDomain = async (req: AuthRequest, res: Response) => {
                     record.toLowerCase().endsWith('.vercel-dns.com') ||
                     record.toLowerCase().endsWith('.billscale.in')
                 );
-                if (!isVerified) foundRecord = cnameRecords[0];
+                if (!isVerified && cnameRecords.length > 0) foundRecord = cnameRecords[0];
             } catch (dnsErr: any) {
-                // DNS lookup failed
+                // CNAME might fail on apex domains, proceed to A record check
+            }
+
+            // 2. Try A record check (for apex domains pointing to Vercel IP: 76.76.21.61)
+            if (!isVerified) {
+                try {
+                    const aRecords = await resolve4(domain);
+                    const vercelIps = ['76.76.21.61', '76.76.21.21', '76.76.21.98', '76.76.21.142', '216.198.79.1'];
+                    isVerified = aRecords.some(ip => vercelIps.includes(ip));
+                    if (!isVerified && aRecords.length > 0) foundRecord = aRecords[0];
+                } catch (aErr) {
+                    // A record lookup failed
+                }
             }
         }
 
