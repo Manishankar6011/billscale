@@ -79,7 +79,7 @@ export const getSales = async (req: AuthRequest, res: Response) => {
     const [sales, totalCount, totals] = await Promise.all([
       Sale.find(query)
         .populate("items.productId", "name unit mrp purchasePrice hasSubUnit subUnitName subUnitValue subUnitMrp subUnitPurchasePrice subUnitSalePrice")
-        .populate("createdBy", "name")
+        .populate("createdBy", "name role")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),

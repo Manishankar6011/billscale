@@ -2033,10 +2033,16 @@ const Sales = () => {
                       </td>
                       <td className="px-6 py-4">
                         <p className="font-bold text-slate-600">
-                          {typeof sale.createdBy === 'object' ? (sale.createdBy as any).name : 'Owner'}
+                          {sale.createdBy && typeof sale.createdBy === 'object'
+                            ? (sale.createdBy as any).name || 'Owner'
+                            : (typeof sale.createdBy === 'string' && sale.createdBy ? sale.createdBy : 'Owner')}
                         </p>
                         <p className="text-[10px] text-slate-400 font-medium uppercase tracking-widest">
-                          Staff Member
+                          {sale.createdBy && typeof sale.createdBy === 'object' && (sale.createdBy as any).role === 'staff'
+                            ? 'Staff Member'
+                            : sale.createdBy
+                            ? 'Staff / User'
+                            : 'Store Owner'}
                         </p>
                       </td>
                       <td className="px-6 py-4 text-right">

@@ -191,7 +191,7 @@ const Purchases = () => {
     setBillNumber(purchase.billNumber || "");
     setDate(format(new Date(purchase.date), "yyyy-MM-dd"));
     setCart(purchase.items.map(item => ({
-      productId: typeof item.productId === 'string' ? item.productId : item.productId._id,
+      productId: typeof item.productId === 'string' ? item.productId : item.productId?._id,
       name: item.name,
       quantity: item.quantity,
       unit: item.unit,

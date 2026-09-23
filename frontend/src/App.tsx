@@ -8,6 +8,7 @@ import { ToastProvider } from "./context/ToastContext";
 import { ToastContainer } from "./components/Toast";
 import { useAuth } from "./context/AuthContext";
 import Layout from "./components/Layout";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { Loader2 } from "lucide-react";
 
 // Lazy Loaded Components
@@ -73,7 +74,8 @@ const App: React.FC = () => {
     <ToastProvider>
       <ToastContainer />
       <Suspense fallback={<PageLoader />}>
-        <Routes>
+        <ErrorBoundary>
+          <Routes>
           {/* Public Routes */}
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <Login />} />
@@ -115,6 +117,7 @@ const App: React.FC = () => {
           {/* Catch-all Redirect */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </ErrorBoundary>
       </Suspense>
     </ToastProvider>
   );

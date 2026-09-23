@@ -29,6 +29,7 @@ import { cn } from "../lib/utils";
 import AIAssistant from "./AIAssistant";
 
 import { canUseFeature, type PlanType } from "../utils/planLimits";
+import ErrorBoundary from "./ErrorBoundary";
 
 const Layout = () => {
   const { logout, user } = useAuth();
@@ -332,7 +333,9 @@ const Layout = () => {
           </button>
         </header>
 
-        <Outlet />
+        <ErrorBoundary>
+          <Outlet />
+        </ErrorBoundary>
         <div className="print:hidden">
           <AIAssistant />
         </div>

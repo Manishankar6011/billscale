@@ -187,7 +187,7 @@ export interface Sale {
   invoiceNumber: string;
   date: string;
   showQRCode?: boolean;
-  createdBy?: string | { _id: string; name: string };
+  createdBy?: string | { _id: string; name: string; role?: string };
 }
 
 export interface Purchase {

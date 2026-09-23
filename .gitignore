@@ -112,3 +112,7 @@ frontend/build/
 # Backend build output
 backend/dist/
 backend/build/
+
+# Local folders and backup files
+fps-manager/
+*.orig
