@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { X } from 'lucide-react';
+import { X, CheckCircle2 } from 'lucide-react';
 
 interface BarcodeScannerProps {
     onScan: (decodedText: string) => void;
@@ -10,10 +10,11 @@ interface BarcodeScannerProps {
 const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
     const scannerRef = useRef<Html5Qrcode | null>(null);
     const scannerContainerId = React.useMemo(() => `reader-${Math.random().toString(36).substr(2, 9)}`, []);
+    const [scannedSuccess, setScannedSuccess] = useState(false);
 
     useEffect(() => {
-        console.log("BarcodeScanner: Mounting component with container ID:", scannerContainerId);
         let isMounted = true;
+        let hasScanned = false;
 
         const startScanner = async () => {
             try {
@@ -24,42 +25,60 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
                     return;
                 }
 
-                const html5QrCode = new Html5Qrcode(scannerContainerId);
+                // Initialize Html5Qrcode with native BarcodeDetector acceleration if supported
+                const html5QrCode = new Html5Qrcode(scannerContainerId, {
+                    experimentalFeatures: {
+                        useBarCodeDetectorIfSupported: true,
+                    },
+                    verbose: false,
+                });
                 scannerRef.current = html5QrCode;
 
                 const config = {
-                    fps: 10,
-                    qrbox: { width: 250, height: 150 },
+                    fps: 25, // High FPS for rapid scanning
+                    qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+                        const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+                        const size = Math.max(220, Math.floor(minEdge * 0.75));
+                        return { width: size, height: size };
+                    },
+                    aspectRatio: 1.0,
                 };
 
-                console.log("BarcodeScanner: Starting camera...");
                 await html5QrCode.start(
                     { facingMode: "environment" },
                     config,
                     (decodedText) => {
-                        console.log("BarcodeScanner: Scan success:", decodedText);
-                        if (isMounted) {
-                            html5QrCode.stop().then(() => {
-                                onScan(decodedText);
-                            }).catch(err => console.error("Failed to stop scanner after success", err));
+                        if (!isMounted || hasScanned) return;
+                        hasScanned = true;
+                        setScannedSuccess(true);
+
+                        // Haptic feedback if available
+                        try {
+                            if ('vibrate' in navigator) navigator.vibrate(40);
+                        } catch {}
+
+                        // Immediately trigger scan without waiting for camera shutdown
+                        onScan(decodedText);
+
+                        // Stop scanner in background
+                        if (html5QrCode.isScanning) {
+                            html5QrCode.stop().catch(err => console.error("Failed to stop scanner after success", err));
                         }
                     },
-                    (errorMessage) => {
-                        // Scan failed but camera is still active (normal behavior while searching)
+                    () => {
+                        // Searching for code (normal behavior)
                     }
                 );
-                console.log("BarcodeScanner: Camera started successfully");
 
             } catch (err) {
                 console.error("BarcodeScanner: Failed to start camera", err);
             }
         };
 
-        // Delay start slightly to ensure DOM is ready
-        const timeoutId = setTimeout(startScanner, 300);
+        // Quick mount yield
+        const timeoutId = setTimeout(startScanner, 50);
 
         return () => {
-            console.log("BarcodeScanner: Unmounting component");
             isMounted = false;
             clearTimeout(timeoutId);
             if (scannerRef.current && scannerRef.current.isScanning) {
@@ -70,12 +89,12 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
 
     return (
         <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[200] flex items-center justify-center p-4 overflow-hidden">
-            <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden relative border border-white/20 animate-in fade-in zoom-in duration-300">
+            <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden relative border border-white/20 animate-in fade-in zoom-in duration-200">
                 {/* Header */}
                 <div className="px-8 pt-8 pb-4 flex justify-between items-center bg-gradient-to-b from-white to-slate-50">
                     <div>
-                        <h2 className="text-2xl font-black text-slate-800 tracking-tight">Scan Barcode</h2>
-                        <p className="text-slate-500 text-sm font-medium">Position the barcode within the box</p>
+                        <h2 className="text-2xl font-black text-slate-800 tracking-tight">Scan QR / Barcode</h2>
+                        <p className="text-slate-500 text-sm font-medium">Position the QR code or barcode inside the frame</p>
                     </div>
                     <button 
                         onClick={onClose}
@@ -87,20 +106,28 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
 
                 {/* Scanner Area */}
                 <div className="p-8">
-                    <div id={scannerContainerId} className="overflow-hidden rounded-3xl border-4 border-slate-100 shadow-inner bg-slate-900 min-h-[250px] relative">
+                    <div id={scannerContainerId} className="overflow-hidden rounded-3xl border-4 border-slate-100 shadow-inner bg-slate-900 min-h-[280px] relative">
                         {/* Overlay to guide user */}
-                        <div className="absolute inset-0 border-[40px] border-black/40 pointer-events-none"></div>
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-60 h-32 border-2 border-primary-500 rounded-xl pointer-events-none">
-                            <div className="absolute inset-0 animate-pulse bg-primary-500/10"></div>
+                        <div className="absolute inset-0 border-[36px] border-black/40 pointer-events-none"></div>
+                        <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-56 h-56 border-2 rounded-2xl pointer-events-none transition-all duration-200 ${scannedSuccess ? 'border-emerald-500 bg-emerald-500/20' : 'border-primary-500'}`}>
+                            {scannedSuccess ? (
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <CheckCircle2 size={48} className="text-emerald-400 animate-in zoom-in duration-200" />
+                                </div>
+                            ) : (
+                                <div className="absolute inset-0 animate-pulse bg-primary-500/10 rounded-2xl"></div>
+                            )}
                         </div>
                     </div>
                 </div>
 
                 {/* Footer Logic */}
                 <div className="px-8 pb-8 text-center">
-                    <div className="flex items-center justify-center gap-2 py-3 px-6 bg-primary-50 text-primary-700 rounded-2xl inline-flex mx-auto">
-                        <div className="w-2 h-2 bg-primary-500 rounded-full animate-pulse"></div>
-                        <span className="text-xs font-black uppercase tracking-widest">Scanner Active</span>
+                    <div className={`flex items-center justify-center gap-2 py-3 px-6 rounded-2xl inline-flex mx-auto transition-colors ${scannedSuccess ? 'bg-emerald-50 text-emerald-700' : 'bg-primary-50 text-primary-700'}`}>
+                        <div className={`w-2 h-2 rounded-full animate-pulse ${scannedSuccess ? 'bg-emerald-500' : 'bg-primary-500'}`}></div>
+                        <span className="text-xs font-black uppercase tracking-widest">
+                            {scannedSuccess ? "Product Scanned!" : "Scanner Active"}
+                        </span>
                     </div>
                 </div>
             </div>
