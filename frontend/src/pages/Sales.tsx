@@ -11,6 +11,7 @@ import {
   useMutation,
   useQueryClient,
   useQuery,
+  type InfiniteData,
 } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
@@ -499,6 +500,11 @@ const Sales = () => {
   const [newCustomMrp, setNewCustomMrp] = useState("");
   const [newCustomPurchasePrice, setNewCustomPurchasePrice] = useState("");
 
+  // Cart cost visibility toggle (default hidden as per user requirement)
+  const [showCartCost, setShowCartCost] = useState(false);
+  const [revealedCosts, setRevealedCosts] = useState<Record<number, boolean>>({});
+  const isCartCostVisible = (idx: number) => showCartCost || Boolean(revealedCosts[idx]);
+
   // UI Logic State
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isNewCustomerModalOpen, setIsNewCustomerModalOpen] = useState(false);
@@ -594,6 +600,10 @@ const Sales = () => {
     setNewCustomPrice("");
     setNewCustomQuantity("1");
     setNewCustomProfitPercent("0");
+    setNewCustomMrp("");
+    setNewCustomPurchasePrice("");
+    setShowCartCost(false);
+    setRevealedCosts({});
   };
 
   const closeModal = () => {
@@ -878,18 +888,53 @@ const Sales = () => {
       const trimmedCode = code.trim();
       if (!trimmedCode) return;
 
-      if (itemsModalMode !== null) {
-        setItemSearch(trimmedCode);
+      // Close scanner camera right away so it doesn't stay open while processing
+      setIsScannerOpen(false);
+
+      // Fast multi-tier local search:
+      // 1. Check already scanned products
+      let product = scannedProducts.find(
+        (p) => (p.barcode && p.barcode.trim() === trimmedCode) || (p.subUnitBarcode && p.subUnitBarcode.trim() === trimmedCode)
+      );
+
+      // 2. Check loaded pages in current inventory query
+      if (!product && productsData?.pages) {
+        for (const page of productsData.pages) {
+          const match = page.products.find(
+            (p) => (p.barcode && p.barcode.trim() === trimmedCode) || (p.subUnitBarcode && p.subUnitBarcode.trim() === trimmedCode)
+          );
+          if (match) {
+            product = match;
+            break;
+          }
+        }
       }
 
-      // Try local search first
-      let product = products.find((p) => p.barcode === trimmedCode || p.subUnitBarcode === trimmedCode);
+      // 3. Check any cached inventory queries in React Query cache
+      if (!product) {
+        const cachedQueries = queryClient.getQueriesData<InfiniteData<PaginatedResponse<Product>>>({ queryKey: ["inventory"] });
+        for (const [_, data] of cachedQueries) {
+          if (data?.pages) {
+            for (const page of data.pages) {
+              const match = page.products?.find(
+                (p: Product) => (p.barcode && p.barcode.trim() === trimmedCode) || (p.subUnitBarcode && p.subUnitBarcode.trim() === trimmedCode)
+              );
+              if (match) {
+                product = match;
+                break;
+              }
+            }
+          }
+          if (product) break;
+        }
+      }
 
       let isSubUnitScan = false;
 
+      // 4. Fallback to API if not in local cache
       if (!product) {
         try {
-          const res = await axios.get(`/api/inventory/barcode/${trimmedCode}`, {
+          const res = await axios.get(`/api/inventory/barcode/${encodeURIComponent(trimmedCode)}`, {
             headers: { Authorization: `Bearer ${user?.token}` },
           });
           product = res.data;
@@ -900,7 +945,6 @@ const Sales = () => {
       }
 
       if (product) {
-        setIsScannerOpen(false);
         setHwScannerInput("");
         const pid = product._id!;
         isSubUnitScan = Boolean(product.hasSubUnit && product.subUnitBarcode === trimmedCode);
@@ -928,7 +972,7 @@ const Sales = () => {
             [pid]: product!,
           }));
           setItemSearch("");
-          showToast(`${product.name} qty increased in list`, "success");
+          showToast(`${product.name} added to list`, "success");
         } else {
           setCart((prev) => {
             // we should try to match both product ID AND whether it's a subunit
@@ -972,7 +1016,9 @@ const Sales = () => {
       }
     },
     [
-      products,
+      scannedProducts,
+      productsData,
+      queryClient,
       user?.token,
       showToast,
       itemsModalMode,
@@ -2275,6 +2321,23 @@ const Sales = () => {
               {/* Cart List */}
               {(cart.length > 0 || additionalItems.length > 0 || customItems.length > 0) && (
                 <div className="space-y-2 border-y border-slate-100 py-4">
+                  <div className="flex items-center justify-between px-1 pb-1">
+                    <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+                      Items in Bill ({cart.length + additionalItems.length + customItems.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCartCost(!showCartCost);
+                        setRevealedCosts({});
+                      }}
+                      className="inline-flex items-center gap-1.5 text-[10px] font-bold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition-all cursor-pointer"
+                      title={showCartCost ? "Hide all item costs" : "Unhide all item costs"}
+                    >
+                      {showCartCost ? <EyeOff size={12} className="text-orange-500" /> : <Eye size={12} className="text-slate-400" />}
+                      <span>{showCartCost ? "Hide All Costs" : "Unhide All Costs"}</span>
+                    </button>
+                  </div>
                   {cart.map((item, idx) => (
                     <div
                       key={`cart-${idx}`}
@@ -2290,13 +2353,28 @@ const Sales = () => {
                           </p>
                           {/* Price info badges: Cost Price + MRP */}
                           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                            {item.purchasePrice > 0 && (
-                              <span className="text-[9px] font-black uppercase tracking-widest text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded">
-                                Cost: ₹{item.purchasePrice.toLocaleString()}
-                              </span>
+                            {item.purchasePrice !== undefined && item.purchasePrice > 0 && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setRevealedCosts((prev) => ({
+                                    ...prev,
+                                    [idx]: !isCartCostVisible(idx),
+                                  }))
+                                }
+                                className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-orange-600 bg-orange-50 hover:bg-orange-100 border border-orange-200/60 px-2 py-0.5 rounded transition-all cursor-pointer shadow-2xs select-none"
+                                title={isCartCostVisible(idx) ? "Click to hide cost" : "Click to view cost"}
+                              >
+                                <span>Cost: {isCartCostVisible(idx) ? `₹${item.purchasePrice.toLocaleString()}` : "••••"}</span>
+                                {isCartCostVisible(idx) ? (
+                                  <EyeOff size={11} className="text-orange-500" />
+                                ) : (
+                                  <Eye size={11} className="text-orange-400" />
+                                )}
+                              </button>
                             )}
                             {item.mrp > 0 && (
-                              <span className="text-[9px] font-black uppercase tracking-widest text-purple-500 bg-purple-50 px-1.5 py-0.5 rounded">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-purple-500 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
                                 MRP: ₹{item.mrp.toLocaleString()}
                               </span>
                             )}
@@ -2384,7 +2462,8 @@ const Sales = () => {
                                 value={item.discountPercent}
                                 onChange={(e) => {
                                   const disc = Math.min(100, Math.max(0, Number(e.target.value) || 0));
-                                  const base = item.originalSellingPrice;
+                                  // Base for discount is MRP. If MRP not set, fallback to original selling price
+                                  const base = (item.mrp && item.mrp > 0) ? item.mrp : item.originalSellingPrice;
                                   const newPrice = parseFloat((base * (1 - disc / 100)).toFixed(2));
                                   setCart((prev) =>
                                     prev.map((it, i) =>
@@ -2452,9 +2531,9 @@ const Sales = () => {
                                   value={item.sellingPrice}
                                   onChange={(e) => {
                                     const val = Number(e.target.value);
-                                    // When price edited manually, reset discount to 0
-                                    const base = item.originalSellingPrice || val;
-                                    const disc = base > 0 ? parseFloat(((1 - val / base) * 100).toFixed(1)) : 0;
+                                    // When price edited manually, recalculate discount % against MRP (or originalSellingPrice fallback)
+                                    const base = (item.mrp && item.mrp > 0) ? item.mrp : (item.originalSellingPrice || val);
+                                    const disc = (base > 0 && base >= val) ? parseFloat(((1 - val / base) * 100).toFixed(1)) : 0;
                                     setCart((prev) =>
                                       prev.map((it, i) =>
                                         i === idx
@@ -2690,30 +2769,40 @@ const Sales = () => {
 
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">Qty</label>
-                    <input
-                      type="number"
-                      placeholder="1"
-                      className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold shadow-sm focus:border-blue-500 focus:ring-0"
-                      value={newCustomQuantity}
-                      onChange={(e) => setNewCustomQuantity(e.target.value)}
-                      onWheel={(e) => e.currentTarget.blur()}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">MRP (₹)</label>
-                    <input
-                      type="number"
-                      placeholder="MRP"
-                      className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold shadow-sm focus:border-blue-500 focus:ring-0"
-                      value={newCustomMrp}
-                      onChange={(e) => {
-                        const mrpVal = e.target.value;
-                        setNewCustomMrp(mrpVal);
-                        if (!newCustomPrice) setNewCustomPrice(mrpVal);
-                      }}
-                      onWheel={(e) => e.currentTarget.blur()}
-                    />
+                    <div className="flex items-center bg-white border border-blue-200 rounded-xl shadow-sm focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 overflow-hidden h-[42px]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cur = Number(newCustomQuantity) || 1;
+                          setNewCustomQuantity(Math.max(1, cur - 1).toString());
+                        }}
+                        className="w-8 h-full flex items-center justify-center bg-blue-50/70 hover:bg-blue-100 text-blue-700 font-black text-base transition-colors shrink-0 active:scale-95 select-none"
+                        title="Decrease Quantity"
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        min={1}
+                        step="any"
+                        placeholder="1"
+                        className="w-full min-w-0 bg-transparent border-none text-center px-1 text-xs font-bold focus:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        value={newCustomQuantity}
+                        onChange={(e) => setNewCustomQuantity(e.target.value)}
+                        onWheel={(e) => e.currentTarget.blur()}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cur = Number(newCustomQuantity) || 0;
+                          setNewCustomQuantity((cur + 1).toString());
+                        }}
+                        className="w-8 h-full flex items-center justify-center bg-blue-50/70 hover:bg-blue-100 text-blue-700 font-black text-base transition-colors shrink-0 active:scale-95 select-none"
+                        title="Increase Quantity"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
 
                   <div className="space-y-1">
@@ -2749,6 +2838,22 @@ const Sales = () => {
                         if (Number(cost) > 0 && price > 0) {
                           setNewCustomProfitPercent((((price - Number(cost)) / Number(cost)) * 100).toFixed(1));
                         }
+                      }}
+                      onWheel={(e) => e.currentTarget.blur()}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">MRP (₹)</label>
+                    <input
+                      type="number"
+                      placeholder="MRP"
+                      className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold shadow-sm focus:border-blue-500 focus:ring-0"
+                      value={newCustomMrp}
+                      onChange={(e) => {
+                        const mrpVal = e.target.value;
+                        setNewCustomMrp(mrpVal);
+                        if (!newCustomPrice) setNewCustomPrice(mrpVal);
                       }}
                       onWheel={(e) => e.currentTarget.blur()}
                     />

@@ -88,14 +88,19 @@ export const getProductByBarcode = async (req: AuthRequest, res: Response) => {
     try {
         const { barcode } = req.params;
         const tenantId = new mongoose.Types.ObjectId(req.tenantId as string);
+        const trimmed = barcode ? barcode.trim() : '';
+
+        if (!trimmed) {
+            return res.status(400).json({ message: 'Barcode is required' });
+        }
         
         const product = await Product.findOne({
             tenantId,
             $or: [
-                { barcode: barcode.trim() },
-                { subUnitBarcode: barcode.trim() }
+                { barcode: trimmed },
+                { subUnitBarcode: trimmed }
             ]
-        });
+        }).lean();
         
         if (!product) {
             return res.status(404).json({ message: 'Product not found' });
