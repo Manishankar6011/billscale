@@ -30,9 +30,11 @@ import AIAssistant from "./AIAssistant";
 
 import { canUseFeature, type PlanType } from "../utils/planLimits";
 import ErrorBoundary from "./ErrorBoundary";
+import { usePermission } from "../hooks/usePermission";
 
 const Layout = () => {
   const { logout, user } = useAuth();
+  const { can, isOwner } = usePermission();
   const { t } = useTranslation();
   const navigate = useNavigate();
 
@@ -89,29 +91,31 @@ const Layout = () => {
   const isContractor = user?.businessType === 'Contractor';
 
   const navItems = [
-    { name: t("common.dashboard"), path: "/dashboard", icon: LayoutDashboard },
+    { name: t("common.dashboard"), path: "/dashboard", icon: LayoutDashboard, module: "dashboard" },
     // These items are hidden for Contractors (Thekedar)
-    { name: t("common.inventory"), path: "/dashboard/inventory", icon: Box, hideForContractor: true },
+    { name: t("common.inventory"), path: "/dashboard/inventory", icon: Box, hideForContractor: true, module: "inventory" },
     {
       name: t("common.purchases"),
       path: "/dashboard/purchases",
       icon: ShoppingCart,
       hideForContractor: true,
+      module: "purchases"
     },
-    { name: t("common.sales"), path: "/dashboard/sales", icon: Receipt, hideForContractor: true },
-    { name: "Customers", path: "/dashboard/customers", icon: UserRound, hideForContractor: true },
+    { name: t("common.sales"), path: "/dashboard/sales", icon: Receipt, hideForContractor: true, module: "sales" },
+    { name: "Customers", path: "/dashboard/customers", icon: UserRound, hideForContractor: true, module: "customers" },
     // Staff-related — primary for Contractors
-    { name: isContractor ? "Workers (श्रमिक)" : t("common.staff"), path: "/dashboard/staff", icon: Users, ownerOnly: true },
+    { name: isContractor ? "Workers (श्रमिक)" : t("common.staff"), path: "/dashboard/staff", icon: Users, module: "staff", ownerOnly: true },
     {
       name: isContractor ? "Attendance (हाजिरी)" : t("common.attendance"),
       path: "/dashboard/attendance",
       icon: CalendarCheck,
+      module: "attendance",
       ownerOnly: true
     },
-    { name: isContractor ? "Salary & Khata (वेतन / हिसाब)" : t("common.salary"), path: "/dashboard/salary", icon: Wallet, ownerOnly: true },
-    { name: t("common.ledger"), path: "/dashboard/ledger", icon: FileText, ownerOnly: true },
-    { name: "Reports", path: "/dashboard/reports", icon: BarChart3, ownerOnly: true, hideForContractor: true },
-    { name: "Product Sales", path: "/dashboard/item-sales", icon: PackageSearch, ownerOnly: true, hideForContractor: true },
+    { name: isContractor ? "Salary & Khata (वेतन / हिसाब)" : t("common.salary"), path: "/dashboard/salary", icon: Wallet, module: "salary", ownerOnly: true },
+    { name: t("common.ledger"), path: "/dashboard/ledger", icon: FileText, module: "ledger", ownerOnly: true },
+    { name: "Reports", path: "/dashboard/reports", icon: BarChart3, ownerOnly: true, hideForContractor: true, module: "reports" },
+    { name: "Product Sales", path: "/dashboard/item-sales", icon: PackageSearch, ownerOnly: true, hideForContractor: true, module: "reports" },
     { 
       name: "GST Reports", 
       path: "/dashboard/gst-reports", 
@@ -119,16 +123,28 @@ const Layout = () => {
       ownerOnly: true,
       planRestricted: 'hasGSTReports',
       hideForContractor: true,
+      module: "reports"
     },
-    { name: t("common.settings"), path: "/dashboard/settings", icon: Settings, ownerOnly: true },
+    { name: t("common.settings"), path: "/dashboard/settings", icon: Settings, ownerOnly: true, module: "settings" },
     { name: "Refer & Earn", path: "/dashboard/referral", icon: Gift },
   ].filter(item => {
-    const isOwner = (user?.role === 'owner' || user?.role === 'accountant' || user?.role === 'super-admin');
-    if (item.ownerOnly && !isOwner) return false;
+    // 1. Hide for contractors if configured
     if (item.hideForContractor && isContractor) return false;
     
+    // 2. Plan feature availability (e.g. GST reports)
     if (item.planRestricted) {
-      return canUseFeature((user?.planType as PlanType) || 'free', item.planRestricted as any);
+      if (!canUseFeature((user?.planType as PlanType) || 'free', item.planRestricted as any)) {
+        return false;
+      }
+    }
+    
+    // 3. Module & Action Permission Check
+    if (item.module) {
+      if (!can(item.module, 'view')) {
+        return false;
+      }
+    } else if (item.ownerOnly && !isOwner) {
+      return false;
     }
     
     return true;

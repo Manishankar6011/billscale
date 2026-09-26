@@ -41,6 +41,7 @@ export interface IUser extends Document {
   password: string;
   role: "super-admin" | "owner" | "accountant" | "staff";
   tenantId: Types.ObjectId | null;
+  permissions?: Record<string, Record<string, boolean>>;
   resetPasswordToken?: string;
   resetPasswordExpire?: Date;
   createdAt: Date;

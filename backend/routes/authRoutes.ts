@@ -11,7 +11,8 @@ import {
     deleteAccount,
     createStaffUser,
     getStaffUsers,
-    deleteStaffUser
+    deleteStaffUser,
+    updateStaffUser
 } from '../controllers/authController';
 import { protect, authorize } from '../middleware/auth';
 
@@ -27,6 +28,7 @@ router.delete('/account', protect as any, deleteAccount as any);
 // Staff Management
 router.post('/staff', protect as any, authorize('owner') as any, createStaffUser as any);
 router.get('/staff', protect as any, authorize('owner', 'accountant') as any, getStaffUsers as any);
+router.put('/staff/:id', protect as any, authorize('owner') as any, updateStaffUser as any);
 router.delete('/staff/:id', protect as any, authorize('owner') as any, deleteStaffUser as any);
 
 export default router;
