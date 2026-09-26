@@ -357,7 +357,7 @@ export const deleteAccount = async (req: AuthRequest, res: Response, next: NextF
 // @route   POST /api/auth/staff
 // @access  Private (Owner Only)
 export const createStaffUser = async (req: AuthRequest, res: Response) => {
-    const { name, email, password } = req.body;
+    const { name, email, password, permissions } = req.body;
     const tenantId = req.tenantId;
 
     try {
@@ -390,7 +390,8 @@ export const createStaffUser = async (req: AuthRequest, res: Response) => {
             email,
             password,
             role: 'staff',
-            tenantId
+            tenantId,
+            permissions: permissions || undefined
         });
 
         res.status(201).json({
@@ -398,8 +399,50 @@ export const createStaffUser = async (req: AuthRequest, res: Response) => {
             name: user.name,
             email: user.email,
             role: user.role,
-            tenantId: user.tenantId
+            tenantId: user.tenantId,
+            permissions: user.permissions
         });
+    } catch (error: any) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Update a staff user account (name, email, password, permissions)
+// @route   PUT /api/auth/staff/:id
+// @access  Private (Owner Only)
+export const updateStaffUser = async (req: AuthRequest, res: Response) => {
+    const { name, email, password, permissions } = req.body;
+    try {
+        const user = await User.findOne({ 
+            _id: req.params.id, 
+            tenantId: req.tenantId,
+            role: 'staff'
+        });
+
+        if (!user) {
+            return res.status(404).json({ message: 'Staff user not found' });
+        }
+
+        if (name) user.name = name;
+        if (email && email !== user.email) {
+            const emailExists = await User.findOne({ email, _id: { $ne: user._id } });
+            if (emailExists) {
+                return res.status(400).json({ message: 'Email is already taken by another account' });
+            }
+            user.email = email;
+        }
+        if (password) {
+            user.password = password; // Trigger mongoose pre-save hash
+        }
+        if (permissions !== undefined) {
+            user.permissions = permissions;
+            user.markModified('permissions');
+        }
+
+        await user.save();
+
+        const updatedUser = await User.findById(user._id).select('-password');
+        res.json(updatedUser);
     } catch (error: any) {
         res.status(500).json({ message: error.message });
     }
