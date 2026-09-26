@@ -60,6 +60,7 @@ import {
 import { format } from "date-fns";
 import { canUseFeature, PLAN_LIMITS } from "../utils/planLimits";
 import UpgradePrompt from "../components/UpgradePrompt";
+import { usePermission } from "../hooks/usePermission";
 
 const UNIT_GROUPS = {
   weight: ["kg", "gm", "quintal", "ton", "bag", "bundle", "pack"],
@@ -95,6 +96,7 @@ const Inventory = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { can } = usePermission();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
 
@@ -1218,38 +1220,42 @@ const Inventory = () => {
               <Layers size={18} /> Assign Category ({selectedProductIds.length})
             </button>
           )}
-          <button
-            onClick={() => {
-              if (user?.planType === "free" || user?.planType === "basic") {
-                showToast(
-                  "Bulk Upload is only available in Business Pro plan.",
-                  "error",
-                );
-                navigate("/dashboard/pricing");
-              } else {
-                setIsBulkModalOpen(true);
-              }
-            }}
-            className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-600 hover:bg-primary-50 hover:border-primary-200 hover:text-primary-600 transition-all shadow-sm whitespace-nowrap"
-          >
-            <FileSpreadsheet size={18} /> {t("inventory.bulk_upload")}
-          </button>
-          <button
-            onClick={() => {
-              const plan = user?.planType || 'free';
-              const maxProducts = PLAN_LIMITS[plan].maxProducts;
-              if (totalItems >= maxProducts) {
-                showToast(`Your current plan is limited to ${maxProducts} products. Please upgrade for more.`, 'error');
-                navigate('/dashboard/pricing');
-                return;
-              }
-              setIsModalOpen(true);
-            }}
-            className="btn-primary flex items-center justify-center gap-2 w-full sm:w-auto whitespace-nowrap"
-          >
-            <Plus size={20} />
-            {t("inventory.add_product")}
-          </button>
+          {can('inventory', 'create') && (
+            <button
+              onClick={() => {
+                if (user?.planType === "free" || user?.planType === "basic") {
+                  showToast(
+                    "Bulk Upload is only available in Business Pro plan.",
+                    "error",
+                  );
+                  navigate("/dashboard/pricing");
+                } else {
+                  setIsBulkModalOpen(true);
+                }
+              }}
+              className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-600 hover:bg-primary-50 hover:border-primary-200 hover:text-primary-600 transition-all shadow-sm whitespace-nowrap"
+            >
+              <FileSpreadsheet size={18} /> {t("inventory.bulk_upload")}
+            </button>
+          )}
+          {can('inventory', 'create') && (
+            <button
+              onClick={() => {
+                const plan = user?.planType || 'free';
+                const maxProducts = PLAN_LIMITS[plan].maxProducts;
+                if (totalItems >= maxProducts) {
+                  showToast(`Your current plan is limited to ${maxProducts} products. Please upgrade for more.`, 'error');
+                  navigate('/dashboard/pricing');
+                  return;
+                }
+                setIsModalOpen(true);
+              }}
+              className="btn-primary flex items-center justify-center gap-2 w-full sm:w-auto whitespace-nowrap"
+            >
+              <Plus size={20} />
+              {t("inventory.add_product")}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1422,13 +1428,15 @@ const Inventory = () => {
                   )}
                 </div>
                 <div className="flex items-center gap-2 transition-opacity">
-                  <button
-                    onClick={() => handleEdit(product)}
-                    className="p-2 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg"
-                    title="Edit Product"
-                  >
-                    <Edit2 size={16} />
-                  </button>
+                  {can('inventory', 'edit') && (
+                    <button
+                      onClick={() => handleEdit(product)}
+                      className="p-2 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg"
+                      title="Edit Product"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                  )}
                   {product.barcode && (
                     <button
                       onClick={() => {
@@ -1441,13 +1449,15 @@ const Inventory = () => {
                       <Barcode size={16} />
                     </button>
                   )}
-                  <button
-                    onClick={() => handleDelete(product._id!)}
-                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
-                    title="Delete Product"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  {can('inventory', 'delete') && (
+                    <button
+                      onClick={() => handleDelete(product._id!)}
+                      className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
+                      title="Delete Product"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
                 </div>
               </div>
 

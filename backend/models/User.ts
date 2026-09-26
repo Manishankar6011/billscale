@@ -28,6 +28,10 @@ const userSchema: Schema = new mongoose.Schema({
         ref: 'Tenant',
         default: null
     },
+    permissions: {
+        type: mongoose.Schema.Types.Mixed,
+        default: () => ({})
+    },
     resetPasswordToken: String,
     resetPasswordExpire: Date,
     createdAt: {

@@ -67,6 +67,7 @@ import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import { canUseFeature, PLAN_LIMITS } from "../utils/planLimits";
 import UpgradePrompt from "../components/UpgradePrompt";
+import { usePermission } from "../hooks/usePermission";
 
 const UNIT_GROUPS: Record<string, string[]> = {
   weight: ["kg", "gm", "quintal", "ton", "bag", "bundle", "pack"],
@@ -182,6 +183,7 @@ const getSubUnitPurchasePrice = (p: Product) => (p.subUnitPurchasePrice && p.sub
 const Sales = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const { can } = usePermission();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const location = useLocation();
@@ -1559,12 +1561,14 @@ const Sales = () => {
             >
               <FileSpreadsheet size={16} /> Excel
             </button>
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="btn-primary flex items-center gap-2"
-            >
-              <Plus size={20} /> {t("billing.new_sale")}
-            </button>
+            {can('sales', 'create') && (
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="btn-primary flex items-center gap-2"
+              >
+                <Plus size={20} /> {t("billing.new_sale")}
+              </button>
+            )}
           </div>
         </div>
 
@@ -1723,7 +1727,7 @@ const Sales = () => {
           </div>
         </div>
 
-        {user?.role !== 'staff' && (
+        {can('sales', 'viewProfit') && (
           <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-3xl p-5 flex flex-col lg:flex-row items-center justify-between gap-6 text-white shadow-xl group relative overflow-visible mb-6">
             <div className="flex flex-col sm:flex-row items-center gap-6 w-full lg:w-auto">
               <div className="flex items-center gap-4 w-full sm:w-auto">
@@ -1853,7 +1857,7 @@ const Sales = () => {
                   <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
                     {t("billing.balance_due")}
                   </th>
-                  {user?.role !== 'staff' && (
+                  {can('sales', 'viewProfit') && (
                     <>
                       <th className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-widest">
                         {t("billing.cost_price")}
@@ -2027,7 +2031,7 @@ const Sales = () => {
                           Dues
                         </p>
                       </td>
-                      {user?.role !== 'staff' && (
+                      {can('sales', 'viewProfit') && (
                         <>
                           <td className="px-6 py-4">
                             <p className="font-bold text-slate-600">
@@ -2093,26 +2097,30 @@ const Sales = () => {
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => handleEdit(sale)}
-                            className="group relative p-2.5 bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white rounded-xl transition-all shadow-sm active:scale-95"
-                            title="Edit Sale"
-                          >
-                            <Receipt size={16} />
-                            <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                              Edit Sale
-                            </span>
-                          </button>
-                          <button
-                            onClick={() => handleDelete(sale._id!)}
-                            className="group relative p-2.5 bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white rounded-xl transition-all shadow-sm active:scale-95"
-                            title="Delete Sale"
-                          >
-                            <Trash2 size={16} />
-                            <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                              Delete Sale
-                            </span>
-                          </button>
+                          {can('sales', 'edit') && (
+                            <button
+                              onClick={() => handleEdit(sale)}
+                              className="group relative p-2.5 bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white rounded-xl transition-all shadow-sm active:scale-95"
+                              title="Edit Sale"
+                            >
+                              <Receipt size={16} />
+                              <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                                Edit Sale
+                              </span>
+                            </button>
+                          )}
+                          {can('sales', 'delete') && (
+                            <button
+                              onClick={() => handleDelete(sale._id!)}
+                              className="group relative p-2.5 bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white rounded-xl transition-all shadow-sm active:scale-95"
+                              title="Delete Sale"
+                            >
+                              <Trash2 size={16} />
+                              <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                                Delete Sale
+                              </span>
+                            </button>
+                          )}
                           <button
                             onClick={() => setPrintData(sale)}
                             className="group relative p-2.5 bg-primary-50 text-primary-600 hover:bg-primary-600 hover:text-white rounded-xl transition-all shadow-sm active:scale-95"

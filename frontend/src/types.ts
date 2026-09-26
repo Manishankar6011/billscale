@@ -50,7 +50,37 @@ export interface User {
   stateCode?: string;
   invoiceFormat?: 'thermal' | 'modern' | 'gst';
   enableInventoryImageUpload?: boolean;
+  permissions?: Record<string, Record<string, boolean>>;
 }
+
+export interface StaffPermissions {
+  dashboard?: { view?: boolean };
+  inventory?: { view?: boolean; create?: boolean; edit?: boolean; delete?: boolean };
+  sales?: { view?: boolean; create?: boolean; edit?: boolean; delete?: boolean; viewProfit?: boolean };
+  purchases?: { view?: boolean; create?: boolean; edit?: boolean; delete?: boolean };
+  customers?: { view?: boolean; create?: boolean; edit?: boolean; delete?: boolean };
+  staff?: { view?: boolean; create?: boolean; edit?: boolean; delete?: boolean };
+  attendance?: { view?: boolean; edit?: boolean };
+  salary?: { view?: boolean; pay?: boolean };
+  ledger?: { view?: boolean };
+  reports?: { view?: boolean };
+  settings?: { view?: boolean };
+  [key: string]: Record<string, boolean | undefined> | undefined;
+}
+
+export const DEFAULT_STAFF_PERMISSIONS: StaffPermissions = {
+  dashboard: { view: true },
+  inventory: { view: true, create: true, edit: true, delete: false },
+  sales: { view: true, create: true, edit: false, delete: false, viewProfit: false },
+  purchases: { view: true, create: true, edit: false, delete: false },
+  customers: { view: true, create: true, edit: true, delete: false },
+  staff: { view: false, create: false, edit: false, delete: false },
+  attendance: { view: false, edit: false },
+  salary: { view: false, pay: false },
+  ledger: { view: false },
+  reports: { view: false },
+  settings: { view: false },
+};
 
 export interface Product {
   _id?: string;

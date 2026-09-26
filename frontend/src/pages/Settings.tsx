@@ -4,12 +4,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { User, Building2, Phone, MapPin, Save, ShieldCheck, Crown, ArrowRight, Upload, Image, Mail, Pen, X, AlertCircle, Loader2, MessageSquare, Bug, Lightbulb, Trash2, AlertTriangle, Users, Plus, Link, ExternalLink, Globe, Settings as SettingsIcon, ChevronRight } from 'lucide-react';
+import { User, Building2, Phone, MapPin, Save, ShieldCheck, Crown, ArrowRight, Upload, Image, Mail, Pen, X, AlertCircle, Loader2, MessageSquare, Bug, Lightbulb, Trash2, AlertTriangle, Users, Plus, Link, ExternalLink, Globe, Settings as SettingsIcon, ChevronRight, KeyRound, CheckSquare, Square, Box, Receipt, ShoppingCart, UserRound, Sparkles, BarChart3, Wallet, CalendarCheck, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { canUseFeature } from '../utils/planLimits';
 import { Lock } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { DEFAULT_STAFF_PERMISSIONS, type StaffPermissions } from '../types';
 
 const Settings = () => {
     const { t, i18n } = useTranslation();
@@ -55,7 +56,13 @@ const Settings = () => {
     
     // Staff Management State
     const [showStaffModal, setShowStaffModal] = useState(false);
-    const [staffFormData, setStaffFormData] = useState({ name: '', email: '', password: '' });
+    const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
+    const [staffFormData, setStaffFormData] = useState({
+        name: '',
+        email: '',
+        password: '',
+        permissions: JSON.parse(JSON.stringify(DEFAULT_STAFF_PERMISSIONS)) as StaffPermissions
+    });
     const [creatingStaff, setCreatingStaff] = useState(false);
 
     // Custom Domain State
@@ -224,17 +231,158 @@ const Settings = () => {
         deleteMutation.mutate();
     };
 
+    const handleOpenAddStaff = () => {
+        const currentCount = staffUsers.length;
+        const plan = user?.planType || 'free';
+        if (plan === 'free') { navigate('/dashboard/pricing'); return; }
+        if (plan === 'basic' && currentCount >= 1) { navigate('/dashboard/pricing'); return; }
+        if (plan === 'business' && currentCount >= 5) { return; }
+        setEditingStaffId(null);
+        setStaffFormData({
+            name: '',
+            email: '',
+            password: '',
+            permissions: JSON.parse(JSON.stringify(DEFAULT_STAFF_PERMISSIONS))
+        });
+        setShowStaffModal(true);
+    };
+
+    const handleOpenEditStaff = (staff: any) => {
+        setEditingStaffId(staff._id);
+        const basePerms: StaffPermissions = JSON.parse(JSON.stringify(DEFAULT_STAFF_PERMISSIONS));
+        if (staff.permissions && typeof staff.permissions === 'object') {
+            Object.keys(basePerms).forEach((mod) => {
+                if (staff.permissions[mod]) {
+                    basePerms[mod] = {
+                        ...(basePerms[mod] || {}),
+                        ...staff.permissions[mod]
+                    };
+                }
+            });
+        }
+        setStaffFormData({
+            name: staff.name || '',
+            email: staff.email || '',
+            password: '',
+            permissions: basePerms
+        });
+        setShowStaffModal(true);
+    };
+
+    const togglePermission = (module: string, action: string) => {
+        setStaffFormData(prev => {
+            const currentModule = prev.permissions[module] || {};
+            const currentValue = Boolean(currentModule[action]);
+            const updatedModule = { ...currentModule, [action]: !currentValue };
+            
+            // If turning on any sub-action, automatically turn on 'view'
+            if (!currentValue && action !== 'view') {
+                updatedModule.view = true;
+            }
+            
+            // If turning off 'view', also turn off all actions in this module
+            if (currentValue && action === 'view') {
+                Object.keys(updatedModule).forEach(k => {
+                    updatedModule[k] = false;
+                });
+            }
+
+            return {
+                ...prev,
+                permissions: {
+                    ...prev.permissions,
+                    [module]: updatedModule
+                }
+            };
+        });
+    };
+
+    const applyPreset = (preset: 'cashier' | 'inventory' | 'manager' | 'viewOnly') => {
+        let newPerms: StaffPermissions = JSON.parse(JSON.stringify(DEFAULT_STAFF_PERMISSIONS));
+        if (preset === 'cashier') {
+            newPerms = {
+                dashboard: { view: true },
+                inventory: { view: true, create: false, edit: false, delete: false },
+                sales: { view: true, create: true, edit: false, delete: false, viewProfit: false },
+                purchases: { view: false, create: false, edit: false, delete: false },
+                customers: { view: true, create: true, edit: false, delete: false },
+                staff: { view: false, create: false, edit: false, delete: false },
+                attendance: { view: false, edit: false },
+                salary: { view: false, pay: false },
+                ledger: { view: false },
+                reports: { view: false },
+                settings: { view: false },
+            };
+        } else if (preset === 'inventory') {
+            newPerms = {
+                dashboard: { view: true },
+                inventory: { view: true, create: true, edit: true, delete: false },
+                sales: { view: true, create: false, edit: false, delete: false, viewProfit: false },
+                purchases: { view: true, create: true, edit: true, delete: false },
+                customers: { view: false, create: false, edit: false, delete: false },
+                staff: { view: false, create: false, edit: false, delete: false },
+                attendance: { view: false, edit: false },
+                salary: { view: false, pay: false },
+                ledger: { view: false },
+                reports: { view: false },
+                settings: { view: false },
+            };
+        } else if (preset === 'manager') {
+            newPerms = {
+                dashboard: { view: true },
+                inventory: { view: true, create: true, edit: true, delete: true },
+                sales: { view: true, create: true, edit: true, delete: true, viewProfit: true },
+                purchases: { view: true, create: true, edit: true, delete: true },
+                customers: { view: true, create: true, edit: true, delete: true },
+                staff: { view: true, create: true, edit: true, delete: false },
+                attendance: { view: true, edit: true },
+                salary: { view: true, pay: true },
+                ledger: { view: true },
+                reports: { view: true },
+                settings: { view: false },
+            };
+        } else if (preset === 'viewOnly') {
+            newPerms = {
+                dashboard: { view: true },
+                inventory: { view: true, create: false, edit: false, delete: false },
+                sales: { view: true, create: false, edit: false, delete: false, viewProfit: false },
+                purchases: { view: true, create: false, edit: false, delete: false },
+                customers: { view: true, create: false, edit: false, delete: false },
+                staff: { view: false, create: false, edit: false, delete: false },
+                attendance: { view: false, edit: false },
+                salary: { view: false, pay: false },
+                ledger: { view: false },
+                reports: { view: false },
+                settings: { view: false },
+            };
+        }
+        setStaffFormData(prev => ({ ...prev, permissions: newPerms }));
+    };
+
     const handleCreateStaff = async (e: React.FormEvent) => {
         e.preventDefault();
         setCreatingStaff(true);
         try {
-            await axios.post('/api/auth/staff', staffFormData);
-            showToast('Staff account created successfully', 'success');
-            setStaffFormData({ name: '', email: '', password: '' });
+            if (editingStaffId) {
+                const payload: any = {
+                    name: staffFormData.name,
+                    email: staffFormData.email,
+                    permissions: staffFormData.permissions
+                };
+                if (staffFormData.password.trim()) {
+                    payload.password = staffFormData.password;
+                }
+                await axios.put(`/api/auth/staff/${editingStaffId}`, payload);
+                showToast('Staff permissions updated successfully', 'success');
+            } else {
+                await axios.post('/api/auth/staff', staffFormData);
+                showToast('Staff account created successfully', 'success');
+            }
             setShowStaffModal(false);
+            setEditingStaffId(null);
             refetchStaff();
         } catch (err: any) {
-            showToast(err.response?.data?.message || 'Failed to create staff account', 'error');
+            showToast(err.response?.data?.message || 'Failed to save staff account', 'error');
         } finally {
             setCreatingStaff(false);
         }
@@ -628,14 +776,7 @@ const Settings = () => {
                                         </div>
                                     </div>
                                     <button 
-                                        onClick={() => {
-                                            const currentCount = staffUsers.length;
-                                            const plan = user?.planType || 'free';
-                                            if (plan === 'free') { navigate('/dashboard/pricing'); return; }
-                                            if (plan === 'basic' && currentCount >= 1) { navigate('/dashboard/pricing'); return; }
-                                            if (plan === 'business' && currentCount >= 5) { return; }
-                                            setShowStaffModal(true);
-                                        }}
+                                        onClick={handleOpenAddStaff}
                                         className="px-6 py-3 bg-purple-600 text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-purple-700 transition-all flex items-center gap-2 shadow-lg shadow-purple-100 active:scale-95"
                                     >
                                         <Plus size={16} /> Add Staff
@@ -651,28 +792,79 @@ const Settings = () => {
                                             <p className="text-slate-400 font-black uppercase tracking-widest text-[10px]">No staff accounts created yet</p>
                                         </div>
                                     ) : (
-                                        staffUsers.map((s: any) => (
-                                            <div key={s._id} className="p-6 bg-slate-50/50 rounded-3xl flex items-center justify-between group/item hover:bg-white hover:shadow-xl hover:shadow-slate-100 transition-all border border-transparent hover:border-slate-100">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-purple-600 font-black shadow-sm ring-1 ring-slate-100">
-                                                        {s.name.charAt(0).toUpperCase()}
+                                        staffUsers.map((s: any) => {
+                                            const staffPerms = s.permissions && Object.keys(s.permissions).length > 0
+                                                ? s.permissions
+                                                : DEFAULT_STAFF_PERMISSIONS;
+                                            const hasProfit = Boolean(staffPerms.sales?.viewProfit);
+
+                                            return (
+                                                <div key={s._id} className="p-6 bg-slate-50/50 rounded-3xl flex flex-col justify-between group/item hover:bg-white hover:shadow-xl hover:shadow-slate-100 transition-all border border-transparent hover:border-slate-100 gap-4">
+                                                    <div className="flex items-start justify-between">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-purple-600 font-black shadow-sm ring-1 ring-slate-100">
+                                                                {s.name.charAt(0).toUpperCase()}
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-black text-slate-800 uppercase tracking-tight">{s.name}</p>
+                                                                <p className="text-[10px] text-slate-400 font-bold tracking-widest flex items-center gap-1">
+                                                                    <Mail size={10} /> {s.email}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-1">
+                                                            <button 
+                                                                onClick={() => handleOpenEditStaff(s)}
+                                                                className="p-2.5 text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-xl transition-all active:scale-90"
+                                                                title="Configure Permissions"
+                                                            >
+                                                                <KeyRound size={16} />
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => handleDeleteStaff(s._id)}
+                                                                className="p-2.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all active:scale-90"
+                                                                title="Delete Account"
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <p className="font-black text-slate-800 uppercase tracking-tight">{s.name}</p>
-                                                        <p className="text-[10px] text-slate-400 font-bold tracking-widest flex items-center gap-1">
-                                                            <Mail size={10} /> {s.email}
-                                                        </p>
+
+                                                    {/* Permissions Pills */}
+                                                    <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-1.5">
+                                                        {staffPerms.sales?.view && (
+                                                            <span className="px-2.5 py-1 bg-violet-50 text-violet-700 text-[9px] font-black uppercase tracking-wider rounded-lg border border-violet-100 flex items-center gap-1">
+                                                                <Receipt size={10} /> Sales {staffPerms.sales?.create ? '(Billing)' : ''}
+                                                            </span>
+                                                        )}
+                                                        {staffPerms.inventory?.view && (
+                                                            <span className="px-2.5 py-1 bg-blue-50 text-blue-700 text-[9px] font-black uppercase tracking-wider rounded-lg border border-blue-100 flex items-center gap-1">
+                                                                <Box size={10} /> Inventory {staffPerms.inventory?.edit ? '(Edit)' : ''}
+                                                            </span>
+                                                        )}
+                                                        {staffPerms.purchases?.view && (
+                                                            <span className="px-2.5 py-1 bg-amber-50 text-amber-700 text-[9px] font-black uppercase tracking-wider rounded-lg border border-amber-100 flex items-center gap-1">
+                                                                <ShoppingCart size={10} /> Purchases
+                                                            </span>
+                                                        )}
+                                                        {staffPerms.customers?.view && (
+                                                            <span className="px-2.5 py-1 bg-cyan-50 text-cyan-700 text-[9px] font-black uppercase tracking-wider rounded-lg border border-cyan-100 flex items-center gap-1">
+                                                                <UserRound size={10} /> Customers
+                                                            </span>
+                                                        )}
+                                                        {hasProfit ? (
+                                                            <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 text-[9px] font-black uppercase tracking-wider rounded-lg border border-emerald-100 flex items-center gap-1">
+                                                                ⭐ Profit View ON
+                                                            </span>
+                                                        ) : (
+                                                            <span className="px-2.5 py-1 bg-slate-100 text-slate-400 text-[9px] font-bold uppercase tracking-wider rounded-lg">
+                                                                Profit Hidden
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
-                                                <button 
-                                                    onClick={() => handleDeleteStaff(s._id)}
-                                                    className="p-3 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all active:scale-90"
-                                                    title="Delete Account"
-                                                >
-                                                    <Trash2 size={18} />
-                                                </button>
-                                            </div>
-                                        ))
+                                            );
+                                        })
                                     )}
                                 </div>
 
@@ -681,8 +873,8 @@ const Settings = () => {
                                         <ShieldCheck size={18} />
                                     </div>
                                     <p className="text-[11px] text-purple-900/60 font-bold leading-relaxed">
-                                        <span className="text-purple-900 block mb-1 uppercase tracking-widest text-[10px]">Security Note:</span>
-                                        Staff accounts can only create bills. They are restricted from viewing Profit/Loss, Reports, Analytics, or Settings.
+                                        <span className="text-purple-900 block mb-1 uppercase tracking-widest text-[10px]">Granular Access Control:</span>
+                                        You have full control over what each staff member sees and does. Click the key icon on any staff card to customize their tab visibility, editing permissions, or toggle the Net Profit card & margin metrics.
                                     </p>
                                 </div>
                             </div>
@@ -1089,60 +1281,434 @@ const Settings = () => {
             )}
 
             {showStaffModal && createPortal(
-                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
-                    <div className="bg-white rounded-[3rem] p-10 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-300 border border-slate-100">
-                        <div className="flex items-center justify-between mb-10">
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300 overflow-y-auto">
+                    <div className="bg-white rounded-[2.5rem] p-6 sm:p-8 max-w-2xl w-full shadow-2xl animate-in zoom-in-95 duration-300 border border-slate-100 max-h-[92vh] flex flex-col">
+                        <div className="flex items-center justify-between pb-6 border-b border-slate-100 shrink-0">
                             <div>
-                                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Add Staff Login</h3>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Employee Access Control</p>
+                                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">
+                                    {editingStaffId ? 'Edit Staff Permissions' : 'Add Staff Login'}
+                                </h3>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
+                                    Employee Access & Feature Permissions
+                                </p>
                             </div>
                             <button onClick={() => setShowStaffModal(false)} className="p-3 text-slate-400 hover:bg-slate-50 rounded-2xl transition-all active:scale-90">
                                 <X size={20} />
                             </button>
                         </div>
-                        <form onSubmit={handleCreateStaff} className="space-y-6">
-                            <div className="space-y-3">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Staff Name</label>
-                                <input 
-                                    type="text" 
-                                    required 
-                                    className="input py-4 font-bold bg-slate-50 border-none rounded-2xl w-full outline-none focus:ring-2 focus:ring-purple-500/20 transition-all" 
-                                    placeholder="Full Name"
-                                    value={staffFormData.name}
-                                    onChange={(e) => setStaffFormData({...staffFormData, name: e.target.value})}
-                                />
+
+                        <form onSubmit={handleCreateStaff} className="space-y-6 pt-6 overflow-y-auto pr-1 flex-1">
+                            {/* Basic Credentials */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Staff Name</label>
+                                    <input 
+                                        type="text" 
+                                        required 
+                                        className="input py-3 font-bold bg-slate-50 border-none rounded-2xl w-full outline-none focus:ring-2 focus:ring-purple-500/20 transition-all text-sm" 
+                                        placeholder="Full Name"
+                                        value={staffFormData.name}
+                                        onChange={(e) => setStaffFormData({...staffFormData, name: e.target.value})}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Email Address</label>
+                                    <input 
+                                        type="email" 
+                                        required 
+                                        className="input py-3 font-bold bg-slate-50 border-none rounded-2xl w-full outline-none focus:ring-2 focus:ring-purple-500/20 transition-all text-sm" 
+                                        placeholder="staff@buildmate.com"
+                                        value={staffFormData.email}
+                                        onChange={(e) => setStaffFormData({...staffFormData, email: e.target.value})}
+                                    />
+                                </div>
                             </div>
-                            <div className="space-y-3">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Email Address</label>
-                                <input 
-                                    type="email" 
-                                    required 
-                                    className="input py-4 font-bold bg-slate-50 border-none rounded-2xl w-full outline-none focus:ring-2 focus:ring-purple-500/20 transition-all" 
-                                    placeholder="staff@buildmate.com"
-                                    value={staffFormData.email}
-                                    onChange={(e) => setStaffFormData({...staffFormData, email: e.target.value})}
-                                />
-                            </div>
-                            <div className="space-y-3">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Password</label>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                                    {editingStaffId ? 'New Password (leave empty to keep current)' : 'Login Password'}
+                                </label>
                                 <input 
                                     type="password" 
-                                    required 
-                                    minLength={6}
-                                    className="input py-4 font-bold bg-slate-50 border-none rounded-2xl w-full outline-none focus:ring-2 focus:ring-purple-500/20 transition-all" 
-                                    placeholder="Min 6 characters"
+                                    required={!editingStaffId}
+                                    minLength={editingStaffId ? 0 : 6}
+                                    className="input py-3 font-bold bg-slate-50 border-none rounded-2xl w-full outline-none focus:ring-2 focus:ring-purple-500/20 transition-all text-sm" 
+                                    placeholder={editingStaffId ? '••••••••' : 'Min 6 characters'}
                                     value={staffFormData.password}
                                     onChange={(e) => setStaffFormData({...staffFormData, password: e.target.value})}
                                 />
                             </div>
-                            <div className="pt-4">
+
+                            {/* Quick Presets */}
+                            <div className="p-4 bg-purple-50/60 rounded-2xl border border-purple-100 space-y-2.5">
+                                <div className="flex items-center gap-2">
+                                    <Sparkles size={14} className="text-purple-600" />
+                                    <span className="text-[10px] font-black uppercase tracking-wider text-purple-900">1-Click Quick Presets</span>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    <button 
+                                        type="button" 
+                                        onClick={() => applyPreset('cashier')}
+                                        className="px-3 py-1.5 bg-white border border-purple-200 hover:bg-purple-100 rounded-xl text-[11px] font-bold text-purple-900 transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+                                    >
+                                        ⚡ Billing / Cashier
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        onClick={() => applyPreset('inventory')}
+                                        className="px-3 py-1.5 bg-white border border-purple-200 hover:bg-purple-100 rounded-xl text-[11px] font-bold text-purple-900 transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+                                    >
+                                        📦 Inventory Manager
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        onClick={() => applyPreset('manager')}
+                                        className="px-3 py-1.5 bg-white border border-purple-200 hover:bg-purple-100 rounded-xl text-[11px] font-bold text-purple-900 transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+                                    >
+                                        ⭐ Store Manager (All)
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        onClick={() => applyPreset('viewOnly')}
+                                        className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 rounded-xl text-[11px] font-bold text-slate-700 transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+                                    >
+                                        👁️ View Only
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Granular Permission Matrix */}
+                            <div className="space-y-4">
+                                <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">
+                                    Feature & Tab Permissions
+                                </h4>
+
+                                {/* 1. SALES & BILLING */}
+                                <div className="p-4 bg-slate-50/70 rounded-2xl border border-slate-200/60 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="p-2 bg-violet-100 text-violet-700 rounded-xl">
+                                                <Receipt size={16} />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-black text-slate-800 uppercase tracking-tight">Sales & Billing</p>
+                                                <p className="text-[10px] text-slate-400 font-medium">Invoices, POS & counter sales</p>
+                                            </div>
+                                        </div>
+                                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                                            <input 
+                                                type="checkbox"
+                                                checked={Boolean(staffFormData.permissions.sales?.view)}
+                                                onChange={() => togglePermission('sales', 'view')}
+                                                className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                                            />
+                                            <span className="text-xs font-bold text-slate-700">Show Tab</span>
+                                        </label>
+                                    </div>
+
+                                    {staffFormData.permissions.sales?.view && (
+                                        <div className="pl-4 border-l-2 border-purple-200 pt-1 space-y-2">
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 select-none">
+                                                    <input 
+                                                        type="checkbox"
+                                                        checked={Boolean(staffFormData.permissions.sales?.create)}
+                                                        onChange={() => togglePermission('sales', 'create')}
+                                                        className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                                                    />
+                                                    Create Bills
+                                                </label>
+                                                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 select-none">
+                                                    <input 
+                                                        type="checkbox"
+                                                        checked={Boolean(staffFormData.permissions.sales?.edit)}
+                                                        onChange={() => togglePermission('sales', 'edit')}
+                                                        className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                                                    />
+                                                    Edit Bills
+                                                </label>
+                                                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 select-none">
+                                                    <input 
+                                                        type="checkbox"
+                                                        checked={Boolean(staffFormData.permissions.sales?.delete)}
+                                                        onChange={() => togglePermission('sales', 'delete')}
+                                                        className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                                                    />
+                                                    Delete Bills
+                                                </label>
+                                            </div>
+
+                                            {/* Profit Card & Margins Toggle */}
+                                            <div className={`p-3 rounded-xl border transition-all ${
+                                                staffFormData.permissions.sales?.viewProfit 
+                                                    ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900' 
+                                                    : 'bg-slate-100/80 border-slate-200 text-slate-600'
+                                            }`}>
+                                                <label className="flex items-start gap-3 cursor-pointer select-none">
+                                                    <input 
+                                                        type="checkbox"
+                                                        checked={Boolean(staffFormData.permissions.sales?.viewProfit)}
+                                                        onChange={() => togglePermission('sales', 'viewProfit')}
+                                                        className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 mt-0.5"
+                                                    />
+                                                    <div>
+                                                        <span className="text-xs font-black uppercase tracking-tight block">
+                                                            ⭐ Show Profit Card & Margin Rates
+                                                        </span>
+                                                        <span className="text-[10px] text-slate-500 leading-tight block mt-0.5">
+                                                            Displays the Net Profit summary card and Cost Price / Profit / Margin % columns in the Sales list. (Hidden by default for staff)
+                                                        </span>
+                                                    </div>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* 2. INVENTORY */}
+                                <div className="p-4 bg-slate-50/70 rounded-2xl border border-slate-200/60 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="p-2 bg-blue-100 text-blue-700 rounded-xl">
+                                                <Box size={16} />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-black text-slate-800 uppercase tracking-tight">Inventory & Stock</p>
+                                                <p className="text-[10px] text-slate-400 font-medium">Product master, stock counts & barcodes</p>
+                                            </div>
+                                        </div>
+                                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                                            <input 
+                                                type="checkbox"
+                                                checked={Boolean(staffFormData.permissions.inventory?.view)}
+                                                onChange={() => togglePermission('inventory', 'view')}
+                                                className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                                            />
+                                            <span className="text-xs font-bold text-slate-700">Show Tab</span>
+                                        </label>
+                                    </div>
+
+                                    {staffFormData.permissions.inventory?.view && (
+                                        <div className="pl-4 border-l-2 border-blue-200 pt-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 select-none">
+                                                <input 
+                                                    type="checkbox"
+                                                    checked={Boolean(staffFormData.permissions.inventory?.create)}
+                                                    onChange={() => togglePermission('inventory', 'create')}
+                                                    className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                                                />
+                                                Add / Bulk Upload
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 select-none">
+                                                <input 
+                                                    type="checkbox"
+                                                    checked={Boolean(staffFormData.permissions.inventory?.edit)}
+                                                    onChange={() => togglePermission('inventory', 'edit')}
+                                                    className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                                                />
+                                                Edit Stock / Price
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 select-none">
+                                                <input 
+                                                    type="checkbox"
+                                                    checked={Boolean(staffFormData.permissions.inventory?.delete)}
+                                                    onChange={() => togglePermission('inventory', 'delete')}
+                                                    className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                                                />
+                                                Delete Product
+                                            </label>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* 3. PURCHASES */}
+                                <div className="p-4 bg-slate-50/70 rounded-2xl border border-slate-200/60 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="p-2 bg-amber-100 text-amber-700 rounded-xl">
+                                                <ShoppingCart size={16} />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-black text-slate-800 uppercase tracking-tight">Purchases</p>
+                                                <p className="text-[10px] text-slate-400 font-medium">Vendor bills and supplier records</p>
+                                            </div>
+                                        </div>
+                                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                                            <input 
+                                                type="checkbox"
+                                                checked={Boolean(staffFormData.permissions.purchases?.view)}
+                                                onChange={() => togglePermission('purchases', 'view')}
+                                                className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                                            />
+                                            <span className="text-xs font-bold text-slate-700">Show Tab</span>
+                                        </label>
+                                    </div>
+
+                                    {staffFormData.permissions.purchases?.view && (
+                                        <div className="pl-4 border-l-2 border-amber-200 pt-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 select-none">
+                                                <input 
+                                                    type="checkbox"
+                                                    checked={Boolean(staffFormData.permissions.purchases?.create)}
+                                                    onChange={() => togglePermission('purchases', 'create')}
+                                                    className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                                                />
+                                                Add Purchase
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 select-none">
+                                                <input 
+                                                    type="checkbox"
+                                                    checked={Boolean(staffFormData.permissions.purchases?.edit)}
+                                                    onChange={() => togglePermission('purchases', 'edit')}
+                                                    className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                                                />
+                                                Edit Purchase
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 select-none">
+                                                <input 
+                                                    type="checkbox"
+                                                    checked={Boolean(staffFormData.permissions.purchases?.delete)}
+                                                    onChange={() => togglePermission('purchases', 'delete')}
+                                                    className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                                                />
+                                                Delete Purchase
+                                            </label>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* 4. CUSTOMERS & KHATA */}
+                                <div className="p-4 bg-slate-50/70 rounded-2xl border border-slate-200/60 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="p-2 bg-cyan-100 text-cyan-700 rounded-xl">
+                                                <UserRound size={16} />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-black text-slate-800 uppercase tracking-tight">Customers & Khata</p>
+                                                <p className="text-[10px] text-slate-400 font-medium">Customer balance, ledger and payments</p>
+                                            </div>
+                                        </div>
+                                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                                            <input 
+                                                type="checkbox"
+                                                checked={Boolean(staffFormData.permissions.customers?.view)}
+                                                onChange={() => togglePermission('customers', 'view')}
+                                                className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                                            />
+                                            <span className="text-xs font-bold text-slate-700">Show Tab</span>
+                                        </label>
+                                    </div>
+
+                                    {staffFormData.permissions.customers?.view && (
+                                        <div className="pl-4 border-l-2 border-cyan-200 pt-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 select-none">
+                                                <input 
+                                                    type="checkbox"
+                                                    checked={Boolean(staffFormData.permissions.customers?.create)}
+                                                    onChange={() => togglePermission('customers', 'create')}
+                                                    className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                                                />
+                                                Add Customer
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 select-none">
+                                                <input 
+                                                    type="checkbox"
+                                                    checked={Boolean(staffFormData.permissions.customers?.edit)}
+                                                    onChange={() => togglePermission('customers', 'edit')}
+                                                    className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                                                />
+                                                Edit / Add Payments
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 select-none">
+                                                <input 
+                                                    type="checkbox"
+                                                    checked={Boolean(staffFormData.permissions.customers?.delete)}
+                                                    onChange={() => togglePermission('customers', 'delete')}
+                                                    className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                                                />
+                                                Delete Customer
+                                            </label>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* 5. ATTENDANCE & PAYROLL */}
+                                <div className="p-4 bg-slate-50/70 rounded-2xl border border-slate-200/60 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="p-2 bg-emerald-100 text-emerald-700 rounded-xl">
+                                                <CalendarCheck size={16} />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-black text-slate-800 uppercase tracking-tight">Staff & Attendance</p>
+                                                <p className="text-[10px] text-slate-400 font-medium">Workers list and daily attendance tracking</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-4">
+                                            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                                                <input 
+                                                    type="checkbox"
+                                                    checked={Boolean(staffFormData.permissions.attendance?.view)}
+                                                    onChange={() => togglePermission('attendance', 'view')}
+                                                    className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                                                />
+                                                <span className="text-xs font-bold text-slate-700">Attendance</span>
+                                            </label>
+                                            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                                                <input 
+                                                    type="checkbox"
+                                                    checked={Boolean(staffFormData.permissions.salary?.view)}
+                                                    onChange={() => togglePermission('salary', 'view')}
+                                                    className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                                                />
+                                                <span className="text-xs font-bold text-slate-700">Salary</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* 6. REPORTS & LEDGER */}
+                                <div className="p-4 bg-slate-50/70 rounded-2xl border border-slate-200/60 flex items-center justify-between">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="p-2 bg-rose-100 text-rose-700 rounded-xl">
+                                            <BarChart3 size={16} />
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-black text-slate-800 uppercase tracking-tight">Reports & Ledger</p>
+                                            <p className="text-[10px] text-slate-400 font-medium">Business analytics, GST and full accounts ledger</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-4">
+                                        <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                                            <input 
+                                                type="checkbox"
+                                                checked={Boolean(staffFormData.permissions.reports?.view)}
+                                                onChange={() => togglePermission('reports', 'view')}
+                                                className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                                            />
+                                            <span className="text-xs font-bold text-slate-700">Reports</span>
+                                        </label>
+                                        <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                                            <input 
+                                                type="checkbox"
+                                                checked={Boolean(staffFormData.permissions.ledger?.view)}
+                                                onChange={() => togglePermission('ledger', 'view')}
+                                                className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                                            />
+                                            <span className="text-xs font-bold text-slate-700">Ledger</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="pt-4 border-t border-slate-100 shrink-0">
                                 <button 
                                     type="submit" 
                                     disabled={creatingStaff}
-                                    className="w-full py-5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-xl shadow-slate-200 transition-all flex items-center justify-center gap-3 disabled:opacity-50 active:scale-95"
+                                    className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-xl shadow-slate-200 transition-all flex items-center justify-center gap-3 disabled:opacity-50 active:scale-95"
                                 >
-                                    {creatingStaff ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
-                                    {creatingStaff ? 'Creating...' : 'Create Account'}
+                                    {creatingStaff ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                                    {creatingStaff ? 'Saving...' : editingStaffId ? 'Update Staff Permissions' : 'Create Staff Account'}
                                 </button>
                             </div>
                         </form>

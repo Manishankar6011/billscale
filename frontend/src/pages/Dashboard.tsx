@@ -43,6 +43,7 @@ import { DashboardSkeleton } from "../components/Skeleton";
 import { useToast } from "../context/ToastContext";
 import { format } from "date-fns";
 import { canUseFeature } from "../utils/planLimits";
+import { usePermission } from "../hooks/usePermission";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -274,6 +275,7 @@ const Dashboard = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { can } = usePermission();
   const { showToast } = useToast();
   const [timeRange, setTimeRange] = useState("today");
   const [stockValueDisplay, setStockValueDisplay] = useState<
@@ -788,7 +790,7 @@ const Dashboard = () => {
                 </div>
 
                 {/* Legend */}
-                {user?.role !== "staff" &&
+                {can('sales', 'viewProfit') &&
                   canUseFeature(
                     user?.planType || "free",
                     "hasProfitAnalytics",
@@ -940,7 +942,7 @@ const Dashboard = () => {
                       dot={false}
                       animationDuration={2000}
                     />
-                    {user?.role !== "staff" &&
+                    {can('sales', 'viewProfit') &&
                       canUseFeature(
                         user?.planType || "free",
                         "hasProfitAnalytics",
@@ -987,7 +989,7 @@ const Dashboard = () => {
               trend={stats?.presentToday > 0 ? "Active" : "N/A"}
               color="slate"
             />
-            {user?.role !== "staff" && (
+            {can('sales', 'viewProfit') && (
               <>
                 {canUseFeature(
                   user?.planType || "free",

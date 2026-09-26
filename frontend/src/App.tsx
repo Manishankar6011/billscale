@@ -10,6 +10,15 @@ import { useAuth } from "./context/AuthContext";
 import Layout from "./components/Layout";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { Loader2 } from "lucide-react";
+import { usePermission } from "./hooks/usePermission";
+
+const PermissionRoute = ({ module, children }: { module: string; children: React.ReactNode }) => {
+  const { can } = usePermission();
+  if (!can(module, 'view')) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <>{children}</>;
+};
 
 // Lazy Loaded Components
 const Login = lazy(() => import("./pages/Login"));
@@ -94,18 +103,18 @@ const App: React.FC = () => {
             element={user ? <Layout /> : <Navigate to="/login" />}
           >
             <Route index element={<Dashboard />} />
-            <Route path="inventory" element={<Inventory />} />
-            <Route path="purchases" element={<Purchases />} />
-            <Route path="sales" element={<Sales />} />
-            <Route path="staff" element={<Staff />} />
-            <Route path="attendance" element={<Attendance />} />
-            <Route path="salary" element={<Salary />} />
-            <Route path="ledger" element={<Ledger />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="item-sales" element={<ItemSalesReport />} />
-            <Route path="gst-reports" element={<GSTReports />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="customers" element={<Customers />} />
+            <Route path="inventory" element={<PermissionRoute module="inventory"><Inventory /></PermissionRoute>} />
+            <Route path="purchases" element={<PermissionRoute module="purchases"><Purchases /></PermissionRoute>} />
+            <Route path="sales" element={<PermissionRoute module="sales"><Sales /></PermissionRoute>} />
+            <Route path="staff" element={<PermissionRoute module="staff"><Staff /></PermissionRoute>} />
+            <Route path="attendance" element={<PermissionRoute module="attendance"><Attendance /></PermissionRoute>} />
+            <Route path="salary" element={<PermissionRoute module="salary"><Salary /></PermissionRoute>} />
+            <Route path="ledger" element={<PermissionRoute module="ledger"><Ledger /></PermissionRoute>} />
+            <Route path="reports" element={<PermissionRoute module="reports"><Reports /></PermissionRoute>} />
+            <Route path="item-sales" element={<PermissionRoute module="reports"><ItemSalesReport /></PermissionRoute>} />
+            <Route path="gst-reports" element={<PermissionRoute module="reports"><GSTReports /></PermissionRoute>} />
+            <Route path="settings" element={<PermissionRoute module="settings"><Settings /></PermissionRoute>} />
+            <Route path="customers" element={<PermissionRoute module="customers"><Customers /></PermissionRoute>} />
             <Route path="referral" element={<ReferAndEarn />} />
             <Route path="pricing" element={<Pricing />} />
             <Route path="success" element={<Success />} />
