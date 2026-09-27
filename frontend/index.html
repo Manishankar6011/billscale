@@ -32,5 +32,33 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Disable right-click
+      document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+      // Disable common dev tools keyboard shortcuts for Windows and Mac
+      document.addEventListener('keydown', (e) => {
+        // F12
+        if (e.key === 'F12') {
+          e.preventDefault();
+        }
+        // Ctrl+Shift+I / Cmd+Option+I
+        if ((e.ctrlKey || e.metaKey) && (e.shiftKey || e.altKey) && e.key.toLowerCase() === 'i') {
+          e.preventDefault();
+        }
+        // Ctrl+Shift+J / Cmd+Option+J
+        if ((e.ctrlKey || e.metaKey) && (e.shiftKey || e.altKey) && e.key.toLowerCase() === 'j') {
+          e.preventDefault();
+        }
+        // Ctrl+Shift+C / Cmd+Option+C
+        if ((e.ctrlKey || e.metaKey) && (e.shiftKey || e.altKey) && e.key.toLowerCase() === 'c') {
+          e.preventDefault();
+        }
+        // Ctrl+U / Cmd+U / Cmd+Option+U (View Source)
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'u') {
+          e.preventDefault();
+        }
+      });
+    </script>
   </body>
 </html>
