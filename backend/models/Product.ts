@@ -117,6 +117,11 @@ const productSchema: Schema = new mongoose.Schema({
     subUnitDiscount: {
         type: Number
     },
+    description: {
+        type: String,
+        trim: true,
+        default: ''
+    },
     createdAt: {
         type: Date,
         default: Date.now

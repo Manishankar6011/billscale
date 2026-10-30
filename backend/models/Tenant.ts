@@ -115,6 +115,26 @@ const tenantSchema: Schema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    paymentGateway: {
+        provider: {
+            type: String,
+            enum: ['razorpay', 'none'],
+            default: 'none'
+        },
+        keyId: {
+            type: String,
+            default: ''
+        },
+        keySecret: {
+            type: String,
+            default: '',
+            select: false
+        },
+        isActive: {
+            type: Boolean,
+            default: false
+        }
+    },
     customCategories: {
         type: [String],
         default: []
