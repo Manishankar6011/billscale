@@ -237,6 +237,18 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                 })()}
 
                 {(() => {
+                    const sDiscount = Number((sale as any).specialDiscount || 0);
+                    if (sDiscount <= 0) return null;
+                    const label = (sale as any).specialDiscountLabel || 'Special Discount';
+                    const pct = (sale as any).specialDiscountPercent;
+                    return (
+                        <div className="flex justify-between items-center text-[11px] font-bold text-rose-600 py-0.5">
+                            <span>🎉 {label}{pct ? ` (-${pct}%)` : ''}:</span>
+                            <span>-₹{sDiscount.toFixed(2)}</span>
+                        </div>
+                    );
+                })()}
+                {(() => {
                     const rOff = Number(sale.roundOffAmount || (sale as any).roundoffAmount || 0);
                     if (rOff === 0) return null;
                     return (

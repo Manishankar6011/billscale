@@ -22,6 +22,11 @@ export interface Tenant {
   invoiceFormat?: 'thermal' | 'modern' | 'gst';
   businessType?: string;
   enableInventoryImageUpload?: boolean;
+  paymentGateway?: {
+    provider: 'razorpay' | 'none';
+    keyId?: string;
+    isActive: boolean;
+  };
 }
 
 export interface User {
@@ -97,6 +102,7 @@ export interface Product {
   hsnCode?: string | undefined;
   gstRate?: number | undefined;
   category?: string;
+  description?: string;
   // Medical fields
   genericName?: string;
   manufacturer?: string;
@@ -157,9 +163,6 @@ export interface PaginatedPurchasesResponse {
   };
 }
 
-
-
-
 export interface Customer {
   _id?: string;
   name: string;
@@ -210,6 +213,9 @@ export interface Sale {
   amountPaid: number;
   balanceDue: number;
   roundOffAmount: number;
+  specialDiscount?: number;
+  specialDiscountPercent?: number;
+  specialDiscountLabel?: string;
   paymentMode: "cash" | "credit";
   status: "paid" | "pending" | "partial";
   additionalItems?: { name: string; price: number; profitPercent?: number; mrp?: number; purchasePrice?: number; profitAmount?: number }[];
@@ -267,4 +273,31 @@ export interface StaffSummary {
   totalEarned: number;
   totalPaid: number;
   balance: number;
+}
+
+export interface CatalogOrderItem {
+  productId: string;
+  name: string;
+  quantity: number;
+  price: number;
+  unit?: string;
+  mrp?: number;
+  imageUrl?: string;
+}
+
+export interface CatalogOrder {
+  _id: string;
+  orderNumber: string;
+  customerName: string;
+  customerPhone?: string;
+  customerAddress?: string;
+  items: CatalogOrderItem[];
+  totalAmount: number;
+  status: 'pending' | 'billed' | 'cancelled';
+  paymentStatus: 'unpaid' | 'paid';
+  paymentMethod?: 'cod' | 'online';
+  paymentGatewayOrderId?: string;
+  paymentGatewayPaymentId?: string;
+  notes?: string;
+  createdAt: string;
 }
