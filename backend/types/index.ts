@@ -31,6 +31,12 @@ export interface ITenant extends Document {
   customDomainStatus?: 'pending' | 'active' | 'failed';
   customDomainVerifiedAt?: Date;
   enableInventoryImageUpload?: boolean;
+  paymentGateway?: {
+    provider: 'razorpay' | 'none';
+    keyId?: string;
+    keySecret?: string;
+    isActive: boolean;
+  };
   customCategories?: string[];
   createdAt: Date;
 }
@@ -62,6 +68,7 @@ export interface IProduct extends Document {
   batchNumber?: string;
   imageUrl?: string;
   hsnCode?: string;
+  description?: string;
   gstRate?: number;
   // Medical specific fields
   genericName?: string;
@@ -155,6 +162,9 @@ export interface ISale extends Document {
   roundOffAmount: number;
   taxAmount?: number;
   discount?: number;
+  specialDiscount?: number;
+  specialDiscountPercent?: number;
+  specialDiscountLabel?: string;
   paymentMode: "cash" | "credit" | "upi" | "card" | "bank_transfer";
   status: "paid" | "pending" | "partial";
   additionalItems?: { name: string, price: number, profitPercent?: number, mrp?: number, purchasePrice?: number, profitAmount?: number }[];
@@ -212,4 +222,30 @@ export interface ICustomerPayment extends Document {
   paymentMode: 'cash' | 'upi' | 'bank_transfer' | 'card';
   notes?: string;
   createdAt: Date;
+}
+
+export interface IOrder extends Document {
+  tenantId: Types.ObjectId;
+  orderNumber: string;
+  customerName: string;
+  customerPhone?: string;
+  customerAddress?: string;
+  items: {
+    productId: Types.ObjectId;
+    name: string;
+    quantity: number;
+    price: number;
+    unit?: string;
+    mrp?: number;
+    imageUrl?: string;
+  }[];
+  totalAmount: number;
+  status: 'pending' | 'billed' | 'cancelled';
+  paymentStatus: 'unpaid' | 'paid';
+  paymentMethod?: 'cod' | 'online';
+  paymentGatewayOrderId?: string;
+  paymentGatewayPaymentId?: string;
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
 }

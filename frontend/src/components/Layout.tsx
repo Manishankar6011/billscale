@@ -27,6 +27,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/utils";
 import AIAssistant from "./AIAssistant";
+import OrderNotifications from "./OrderNotifications";
 
 import { canUseFeature, type PlanType } from "../utils/planLimits";
 import ErrorBoundary from "./ErrorBoundary";
@@ -333,6 +334,11 @@ const Layout = () => {
           </div>
         )}
 
+        {/* Top actions bar on desktop */}
+        <div className="hidden lg:flex items-center justify-end mb-4 print:hidden">
+          <OrderNotifications />
+        </div>
+
         {/* Mobile Header */}
         <header className="lg:hidden flex items-center justify-between mb-6 print:hidden">
           <div 
@@ -344,9 +350,12 @@ const Layout = () => {
             </div>
             <span className="font-bold text-slate-800">BuildMate ERP</span>
           </div>
-          <button onClick={logout} className="p-2 text-slate-400">
-            <LogOut className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <OrderNotifications />
+            <button onClick={logout} className="p-2 text-slate-400">
+              <LogOut className="w-5 h-5" />
+            </button>
+          </div>
         </header>
 
         <ErrorBoundary>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import axios from "axios";
-import { ShoppingCart, MessageCircle, Phone, MapPin, Search, Package, IndianRupee, Loader2, Plus, Minus, Trash2, X, Share2, Check } from "lucide-react";
+import { ShoppingCart, MessageCircle, Phone, MapPin, Search, Package, IndianRupee, Loader2, Plus, Minus, Trash2, X, Share2, Check, CreditCard, CheckCircle2, Sparkles, Truck } from "lucide-react";
 import { createPortal } from "react-dom";
 import { Helmet } from "react-helmet-async";
 
@@ -14,6 +14,7 @@ interface CatalogProduct {
   imageUrl?: string;
   category?: string;
   stock: number;
+  description?: string;
 }
 
 interface CartItem extends CatalogProduct {
@@ -21,11 +22,18 @@ interface CartItem extends CatalogProduct {
 }
 
 interface CatalogData {
+  tenantId?: string;
+  slug?: string;
   shopName: string;
   address?: string;
   phone?: string;
   logoUrl?: string;
   products: CatalogProduct[];
+  paymentGateway?: {
+    provider: string;
+    keyId: string;
+    isActive: boolean;
+  };
 }
 
 interface CatalogProps {
@@ -43,6 +51,26 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
   const [isCopied, setIsCopied] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerAddress, setCustomerAddress] = useState("");
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [orderSuccess, setOrderSuccess] = useState<{ orderNumber: string; totalAmount: number; isPaid: boolean; paymentMethod: 'online' | 'cod'; paymentId?: string } | null>(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'online' | 'cod'>('online');
+
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      if ((window as any).Razorpay) {
+        resolve(true);
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
 
   useEffect(() => {
     const fetchCatalog = async () => {
@@ -58,6 +86,11 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
           res = await axios.get(`/api/catalog/${slug}`);
         }
         setData(res.data);
+        if (res.data?.paymentGateway?.isActive) {
+          setSelectedPaymentMethod('online');
+        } else {
+          setSelectedPaymentMethod('cod');
+        }
       } catch (err: any) {
         setError(err.response?.data?.message || "Catalog not found");
       } finally {
@@ -148,12 +181,48 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
   const cartTotal = cart.reduce((sum, item) => sum + (item.pricePerUnit * item.quantity), 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  const handlePlaceOrder = () => {
+  const handlePlaceOrderWhatsApp = async () => {
     if (cart.length === 0) return;
+    if (!customerName.trim()) {
+      alert("Please enter your name");
+      return;
+    }
+    if (!customerPhone.trim()) {
+      alert("Please enter your phone number");
+      return;
+    }
+
+    setIsPlacingOrder(true);
+    let createdOrder: any = null;
+    try {
+      const orderPayload = {
+        tenantId: data?.tenantId,
+        slug: slug || data?.slug,
+        domain: customDomainMode ? window.location.hostname : undefined,
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        customerAddress: customerAddress.trim(),
+        items: cart.map(i => ({ productId: i._id, quantity: i.quantity, name: i.name })),
+        paymentMethod: 'online'
+      };
+      const res = await axios.post('/api/catalog/orders', orderPayload);
+      createdOrder = res.data?.order;
+    } catch (e) {
+      console.error('Order creation in backend failed, continuing to WhatsApp:', e);
+    } finally {
+      setIsPlacingOrder(false);
+    }
 
     let message = `*NEW ORDER FROM CATALOG*\n`;
     message += `--------------------------\n`;
-    message += `*Shop:* ${data.shopName}\n\n`;
+    if (createdOrder?.orderNumber) {
+      message += `*Order #:* ${createdOrder.orderNumber}\n`;
+    }
+    message += `*Customer:* ${customerName.trim()} (${customerPhone.trim()})\n`;
+    if (customerAddress.trim()) {
+      message += `*Address:* ${customerAddress.trim()}\n`;
+    }
+    message += `*Shop:* ${data?.shopName}\n\n`;
     
     cart.forEach((item, index) => {
       message += `${index + 1}. *${item.name}*\n`;
@@ -166,9 +235,7 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
     message += `--------------------------\n\n`;
     message += `Please confirm my order. Thank you!`;
 
-    let targetNumber = (data.phone || "").replace(/\D/g, "");
-    
-    // Auto-fix Indian numbers: if 10 digits, add 91. If 11 digits starting with 0, replace 0 with 91.
+    let targetNumber = (data?.phone || "").replace(/\D/g, "");
     if (targetNumber.length === 10) {
       targetNumber = "91" + targetNumber;
     } else if (targetNumber.length === 11 && targetNumber.startsWith("0")) {
@@ -177,6 +244,144 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
 
     const whatsappUrl = `https://wa.me/${targetNumber}?text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, "_blank");
+
+    if (createdOrder) {
+      setOrderSuccess({
+        orderNumber: createdOrder.orderNumber,
+        totalAmount: cartTotal,
+        isPaid: false,
+        paymentMethod: 'cod'
+      });
+      setCart([]);
+      setIsCartOpen(false);
+    }
+  };
+
+  const handlePlaceOrderCOD = async () => {
+    if (cart.length === 0) return;
+    if (!customerName.trim()) {
+      alert("Please enter your name");
+      return;
+    }
+    if (!customerPhone.trim()) {
+      alert("Please enter your phone number");
+      return;
+    }
+
+    setIsPlacingOrder(true);
+    try {
+      const orderPayload = {
+        tenantId: data?.tenantId,
+        slug: slug || data?.slug,
+        domain: customDomainMode ? window.location.hostname : undefined,
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        customerAddress: customerAddress.trim(),
+        items: cart.map(i => ({ productId: i._id, quantity: i.quantity, name: i.name })),
+        paymentMethod: 'cod'
+      };
+      const res = await axios.post('/api/catalog/orders', orderPayload);
+      const createdOrder = res.data?.order;
+
+      setOrderSuccess({
+        orderNumber: createdOrder?.orderNumber || 'ORD',
+        totalAmount: cartTotal,
+        isPaid: false,
+        paymentMethod: 'cod'
+      });
+      setCart([]);
+      setIsCartOpen(false);
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to place order. Please try again.");
+    } finally {
+      setIsPlacingOrder(false);
+    }
+  };
+
+  const handlePayOnline = async () => {
+    if (cart.length === 0) return;
+    if (!customerName.trim()) {
+      alert("Please enter your name");
+      return;
+    }
+    if (!customerPhone.trim()) {
+      alert("Please enter your phone number");
+      return;
+    }
+
+    setIsPlacingOrder(true);
+    try {
+      const orderPayload = {
+        tenantId: data?.tenantId,
+        slug: slug || data?.slug,
+        domain: customDomainMode ? window.location.hostname : undefined,
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        customerAddress: customerAddress.trim(),
+        items: cart.map(i => ({ productId: i._id, quantity: i.quantity, name: i.name }))
+      };
+      const orderRes = await axios.post('/api/catalog/orders', orderPayload);
+      const newOrder = orderRes.data.order;
+
+      const isLoaded = await loadRazorpayScript();
+      if (!isLoaded) {
+        alert("Failed to load Razorpay SDK. Please check your internet connection.");
+        setIsPlacingOrder(false);
+        return;
+      }
+
+      const payRes = await axios.post(`/api/catalog/payment/orders/${newOrder._id}/create`);
+      const { razorpayOrderId, amount, keyId } = payRes.data;
+
+      const options = {
+        key: keyId,
+        amount: amount,
+        currency: "INR",
+        name: data?.shopName || "Digital Catalog",
+        description: `Order #${newOrder.orderNumber}`,
+        order_id: razorpayOrderId,
+        prefill: {
+          name: customerName,
+          contact: customerPhone,
+        },
+        theme: {
+          color: "#4f46e5",
+        },
+        handler: async (response: any) => {
+          try {
+            await axios.post(`/api/catalog/payment/orders/${newOrder._id}/verify`, {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            });
+
+            setOrderSuccess({
+              orderNumber: newOrder.orderNumber,
+              totalAmount: cartTotal,
+              isPaid: true,
+              paymentMethod: 'online',
+              paymentId: response.razorpay_payment_id
+            });
+            setCart([]);
+            setIsCartOpen(false);
+          } catch (verErr: any) {
+            alert("Payment verification failed. Please contact the store.");
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setIsPlacingOrder(false);
+          }
+        }
+      };
+
+      const rzpInstance = new (window as any).Razorpay(options);
+      rzpInstance.open();
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to initiate online payment");
+    } finally {
+      setIsPlacingOrder(false);
+    }
   };
 
   return (
@@ -339,6 +544,9 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
                 <div className="p-6 flex flex-col flex-grow">
                   <div className="mb-4 flex-grow">
                     <h3 className="text-lg font-black text-slate-800 leading-snug mb-1 group-hover:text-primary-600 transition-colors">{product.name}</h3>
+                    {product.description && (
+                      <p className="text-slate-500 text-xs font-medium line-clamp-2 mb-2 leading-relaxed">{product.description}</p>
+                    )}
                     <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Available in {product.unit}</p>
                   </div>
                                <div className="flex items-center justify-between mb-6">
@@ -417,6 +625,77 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
            <span className="text-slate-800 font-black tracking-tight">BuildMate ERP</span>
         </div>
       </footer>
+
+      {/* Order Success Modal */}
+      {orderSuccess && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl text-center space-y-4 animate-in zoom-in-95 duration-300">
+            <div className={`w-16 h-16 rounded-3xl flex items-center justify-center mx-auto shadow-lg ${
+              orderSuccess.isPaid
+                ? 'bg-emerald-100 text-emerald-600 shadow-emerald-100'
+                : 'bg-blue-100 text-blue-600 shadow-blue-100'
+            }`}>
+              {orderSuccess.isPaid ? <CheckCircle2 size={36} /> : <Truck size={36} />}
+            </div>
+            <div>
+              <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest inline-block mb-2 ${
+                orderSuccess.isPaid
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                  : 'bg-amber-100 text-amber-800 border border-amber-200'
+              }`}>
+                {orderSuccess.isPaid ? '💳 Paid Online (Confirmed)' : '🚚 Cash on Delivery'}
+              </span>
+              <h3 className="text-2xl font-black text-slate-800">
+                {orderSuccess.isPaid ? 'Payment Confirmed!' : 'Order Placed!'}
+              </h3>
+              <p className="text-slate-500 text-xs font-medium mt-1">
+                Your order <span className="font-bold text-slate-800">#{orderSuccess.orderNumber}</span> for ₹{orderSuccess.totalAmount} has been received by <span className="font-bold text-slate-800">{data?.shopName}</span>.
+              </p>
+            </div>
+            <div className="p-4 bg-slate-50 rounded-2xl text-xs font-bold text-slate-700 space-y-1 border border-slate-100 text-left">
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-medium">Payment Mode:</span>
+                <span className="text-slate-900">{orderSuccess.isPaid ? 'Online via Razorpay' : 'Cash on Delivery (COD)'}</span>
+              </div>
+              {orderSuccess.paymentId && (
+                <div className="flex justify-between">
+                  <span className="text-slate-400 font-medium">Txn ID:</span>
+                  <span className="text-slate-900 font-mono text-[11px]">{orderSuccess.paymentId}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-medium">Total Amount:</span>
+                <span className="text-emerald-700 font-black">₹{orderSuccess.totalAmount}</span>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  let targetNumber = (data?.phone || "").replace(/\D/g, "");
+                  if (targetNumber.length === 10) targetNumber = "91" + targetNumber;
+                  else if (targetNumber.length === 11 && targetNumber.startsWith("0")) targetNumber = "91" + targetNumber.substring(1);
+                  const msg = `Hello ${data?.shopName}, I have placed order #${orderSuccess.orderNumber} for ₹${orderSuccess.totalAmount} (${orderSuccess.isPaid ? 'Paid Online' : 'Cash on Delivery'}). Please confirm delivery.`;
+                  window.open(`https://wa.me/${targetNumber}?text=${encodeURIComponent(msg)}`, '_blank');
+                }}
+                className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-100 transition-all flex items-center justify-center gap-2 active:scale-95"
+              >
+                <MessageCircle size={16} />
+                Send Receipt on WhatsApp
+              </button>
+
+              <button
+                onClick={() => setOrderSuccess(null)}
+                className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95"
+              >
+                Continue Browsing
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Cart Drawer / Modal */}
       {isCartOpen && createPortal(
@@ -497,21 +776,125 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
 
             {/* Cart Footer */}
             {cart.length > 0 && (
-              <div className="p-6 bg-slate-50 border-t border-slate-100 space-y-4">
-                <div className="flex items-center justify-between">
+              <div className="p-6 bg-slate-50 border-t border-slate-100 space-y-4 max-h-[50vh] overflow-y-auto">
+                {/* Customer Details Form */}
+                <div className="space-y-2.5 bg-white p-4 rounded-2xl border border-slate-200">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Your Contact Details</p>
+                  <input
+                    type="text"
+                    placeholder="Your Name *"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-primary-500 outline-none"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                  />
+                  <input
+                    type="tel"
+                    placeholder="Phone Number (10 digits) *"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-primary-500 outline-none"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Delivery Address / Note (Optional)"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-primary-500 outline-none"
+                    value={customerAddress}
+                    onChange={(e) => setCustomerAddress(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
                   <span className="text-slate-400 font-black uppercase tracking-widest text-[10px]">Total Amount</span>
                   <span className="text-2xl font-black text-slate-800">₹{cartTotal}</span>
                 </div>
+
+                {/* Payment Option Selection */}
+                <div className="space-y-2 pt-1">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Choose Payment Method</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {/* Pay Online Option */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (data?.paymentGateway?.isActive) {
+                          setSelectedPaymentMethod('online');
+                        } else {
+                          alert("Online payment is currently not enabled by the store.");
+                        }
+                      }}
+                      className={`p-3 rounded-2xl border-2 text-left transition-all flex items-start gap-2.5 cursor-pointer ${
+                        selectedPaymentMethod === 'online'
+                          ? 'border-indigo-600 bg-indigo-50/60 shadow-xs'
+                          : 'border-slate-200 bg-white hover:border-slate-300 opacity-90'
+                      }`}
+                    >
+                      <div className={`p-1.5 rounded-xl shrink-0 ${selectedPaymentMethod === 'online' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                        <CreditCard size={16} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-xs font-black text-slate-800">Pay Online</p>
+                          {data?.paymentGateway?.isActive && (
+                            <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-100 text-indigo-700 rounded-full">Instant</span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-500 leading-tight mt-0.5">UPI, QR, Cards, NetBanking</p>
+                      </div>
+                    </button>
+
+                    {/* Cash on Delivery Option */}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPaymentMethod('cod')}
+                      className={`p-3 rounded-2xl border-2 text-left transition-all flex items-start gap-2.5 cursor-pointer ${
+                        selectedPaymentMethod === 'cod'
+                          ? 'border-emerald-600 bg-emerald-50/60 shadow-xs'
+                          : 'border-slate-200 bg-white hover:border-slate-300 opacity-90'
+                      }`}
+                    >
+                      <div className={`p-1.5 rounded-xl shrink-0 ${selectedPaymentMethod === 'cod' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                        <Truck size={16} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-slate-800">Cash on Delivery</p>
+                        <p className="text-[10px] text-slate-500 leading-tight mt-0.5">Pay when order arrives</p>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Primary Action Button */}
+                {selectedPaymentMethod === 'online' ? (
+                  <button 
+                    type="button"
+                    onClick={handlePayOnline}
+                    disabled={isPlacingOrder}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl flex items-center justify-center gap-2 font-black text-xs uppercase tracking-wider shadow-lg shadow-indigo-200 transition-all active:scale-[0.98] cursor-pointer"
+                  >
+                    <CreditCard size={18} />
+                    {isPlacingOrder ? 'Processing Payment...' : `Pay Online (₹${cartTotal})`}
+                  </button>
+                ) : (
+                  <button 
+                    type="button"
+                    onClick={handlePlaceOrderCOD}
+                    disabled={isPlacingOrder}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-2xl flex items-center justify-center gap-2 font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-100 transition-all active:scale-[0.98] cursor-pointer"
+                  >
+                    <Truck size={18} />
+                    {isPlacingOrder ? 'Placing Order...' : `Place Order (COD - ₹${cartTotal})`}
+                  </button>
+                )}
+
                 <button 
-                  onClick={handlePlaceOrder}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-5 rounded-[2rem] flex items-center justify-center gap-3 font-black text-sm uppercase tracking-widest shadow-xl shadow-emerald-100 transition-all active:scale-[0.98]"
+                  type="button"
+                  onClick={handlePlaceOrderWhatsApp}
+                  disabled={isPlacingOrder}
+                  className="w-full py-2.5 text-slate-500 hover:text-emerald-700 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
                 >
-                  <MessageCircle size={20} />
-                  Order on WhatsApp
+                  <MessageCircle size={14} />
+                  Or order directly via WhatsApp
                 </button>
-                <p className="text-center text-[10px] text-slate-400 font-medium">
-                  We will send your order summary to WhatsApp for confirmation.
-                </p>
               </div>
             )}
           </div>

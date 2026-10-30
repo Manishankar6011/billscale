@@ -33,15 +33,25 @@ export const getCatalogBySlug = async (req: Request, res: Response) => {
         }
 
         const products = await Product.find({ tenantId: tenant._id, stock: { $gt: 0 } })
-            .select('name pricePerUnit mrp unit imageUrl category stock')
+            .select('name pricePerUnit mrp unit imageUrl category stock description')
             .sort({ category: 1, name: 1 });
 
+        const gw = (tenant as any).paymentGateway;
+        const isGwActive = Boolean((gw?.isActive && gw?.keyId) || process.env.RAZORPAY_KEY_ID);
+        const activeKey = (gw?.isActive && gw?.keyId) ? gw.keyId : (process.env.RAZORPAY_KEY_ID || '');
         res.json({
+            tenantId: tenant._id,
+            slug: tenant.slug,
             shopName: tenant.companyName,
             address: tenant.address,
             phone: tenant.phone,
             logoUrl: tenant.logoUrl,
-            products
+            products,
+            paymentGateway: {
+                provider: 'razorpay',
+                keyId: activeKey,
+                isActive: isGwActive
+            }
         });
     } catch (error: any) {
         res.status(500).json({ message: error.message });
@@ -119,16 +129,23 @@ export const getCatalogByDomain = async (req: Request, res: Response) => {
         }
 
         const products = await Product.find({ tenantId: tenant._id, stock: { $gt: 0 } })
-            .select('name pricePerUnit mrp unit imageUrl category stock')
+            .select('name pricePerUnit mrp unit imageUrl category stock description')
             .sort({ category: 1, name: 1 });
 
+        const gw = (tenant as any).paymentGateway;
         res.json({
+            tenantId: tenant._id,
             shopName: tenant.companyName,
             address: tenant.address,
             phone: tenant.phone,
             logoUrl: tenant.logoUrl,
             products,
-            slug: tenant.slug
+            slug: tenant.slug,
+            paymentGateway: {
+                provider: gw?.provider || 'none',
+                keyId: gw?.keyId || '',
+                isActive: Boolean(gw?.isActive && gw?.keyId)
+            }
         });
     } catch (error: any) {
         res.status(500).json({ message: error.message });
