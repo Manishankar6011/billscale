@@ -275,6 +275,18 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                         </div>
                     )}
                     {(() => {
+                        const sDiscount = Number((sale as any).specialDiscount || 0);
+                        if (sDiscount <= 0) return null;
+                        const label = (sale as any).specialDiscountLabel || 'Special Discount';
+                        const pct = (sale as any).specialDiscountPercent;
+                        return (
+                            <div className="flex justify-between text-rose-700 font-bold text-base">
+                                <span>🎉 {label}{pct ? ` (-${pct}%)` : ''}</span>
+                                <span>-₹{sDiscount.toFixed(2)}</span>
+                            </div>
+                        );
+                    })()}
+                    {(() => {
                         const rOff = Number(sale.roundOffAmount || (sale as any).roundoffAmount || 0);
                         return (
                             <div className="flex justify-between text-black font-bold italic">

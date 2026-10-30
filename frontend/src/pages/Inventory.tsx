@@ -293,6 +293,7 @@ const Inventory = () => {
     subUnitBarcode: string;
     subUnitDiscount: string;
     imageUrl: string;
+    description: string;
   }>({
     name: "",
     unit: "piece",
@@ -321,6 +322,7 @@ const Inventory = () => {
     subUnitBarcode: "",
     subUnitDiscount: "",
     imageUrl: "",
+    description: "",
   });
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [imageInputMode, setImageInputMode] = useState<"upload" | "url">("upload");
@@ -423,6 +425,7 @@ const Inventory = () => {
       subUnitBarcode: "",
       subUnitDiscount: "",
       imageUrl: "",
+      description: "",
     });
     setAdjustmentType("add");
     setAdjustmentValue("");
@@ -558,6 +561,7 @@ const Inventory = () => {
           subUnitBarcode: "",
           subUnitDiscount: "",
           imageUrl: "",
+          description: "",
         });
         setTimeout(() => nameInputRef.current?.focus(), 100);
       } else {
@@ -593,6 +597,7 @@ const Inventory = () => {
           subUnitBarcode: "",
           subUnitDiscount: "",
           imageUrl: "",
+          description: "",
         });
       }
     },
@@ -681,6 +686,7 @@ const Inventory = () => {
       subUnitBarcode: product.subUnitBarcode || "",
       subUnitDiscount: product.subUnitDiscount ? product.subUnitDiscount.toString() : "",
       imageUrl: product.imageUrl || "",
+      description: product.description || "",
     });
     setIsAddingCustomCategory(false);
     setCustomCategoryInput("");
@@ -756,6 +762,7 @@ const Inventory = () => {
       subUnitBarcode: formData.subUnitBarcode,
       subUnitDiscount: Number(formData.subUnitDiscount),
       imageUrl: formData.imageUrl,
+      description: formData.description,
     };
     saveMutation.mutate(data);
   };
@@ -1764,6 +1771,21 @@ const Inventory = () => {
                     <option value="28">GST 28%</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
+                  Product Description (Optional)
+                </label>
+                <textarea
+                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold placeholder:font-medium resize-none"
+                  placeholder="e.g. 100% pure cold-pressed groundnut oil, 1L bottle. High quality organic product."
+                  rows={3}
+                  value={formData.description}
+                  onChange={(e) =>
+                    setFormData({ ...formData, description: e.target.value })
+                  }
+                />
               </div>
 
               {user?.enableInventoryImageUpload && (

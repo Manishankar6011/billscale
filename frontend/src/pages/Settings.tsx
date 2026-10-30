@@ -8,7 +8,7 @@ import { User, Building2, Phone, MapPin, Save, ShieldCheck, Crown, ArrowRight, U
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { canUseFeature } from '../utils/planLimits';
-import { Lock } from 'lucide-react';
+import { Lock, CreditCard, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { DEFAULT_STAFF_PERMISSIONS, type StaffPermissions } from '../types';
 
@@ -73,6 +73,17 @@ const Settings = () => {
     const [domainVerifying, setDomainVerifying] = useState(false);
     const [domainRemoving, setDomainRemoving] = useState(false);
 
+    // Payment Gateway State (Razorpay)
+    const [razorpayKeyId, setRazorpayKeyId] = useState('');
+    const [razorpayKeySecret, setRazorpayKeySecret] = useState('');
+    const [showKeySecret, setShowKeySecret] = useState(false);
+    const [gatewaySaving, setGatewaySaving] = useState(false);
+    const [gatewayStatus, setGatewayStatus] = useState<{ provider: string; keyId: string; isActive: boolean }>({
+        provider: 'none',
+        keyId: '',
+        isActive: false
+    });
+
     const { data: staffUsers = [], refetch: refetchStaff } = useQuery({
         queryKey: ['staff-users'],
         queryFn: async () => {
@@ -106,8 +117,64 @@ const Settings = () => {
             setSavedCustomDomain(profile.tenantId?.customDomain || '');
             setCustomDomainInput(profile.tenantId?.customDomain || '');
             setCustomDomainStatus(profile.tenantId?.customDomainStatus || '');
+
+            // Load saved payment gateway info
+            if (profile.tenantId?.paymentGateway) {
+                const gw = profile.tenantId.paymentGateway;
+                setGatewayStatus({
+                    provider: gw.provider || 'none',
+                    keyId: gw.keyId || '',
+                    isActive: Boolean(gw.isActive && gw.keyId)
+                });
+                if (gw.keyId) setRazorpayKeyId(gw.keyId);
+            }
         }
     }, [profile]);
+
+    const handleSaveGateway = async () => {
+        if (!razorpayKeyId.trim()) {
+            showToast('Razorpay Key ID is required', 'error');
+            return;
+        }
+        if (!gatewayStatus.isActive && !razorpayKeySecret.trim()) {
+            showToast('Razorpay Key Secret is required', 'error');
+            return;
+        }
+        setGatewaySaving(true);
+        try {
+            const res = await axios.post('/api/settings/payment-gateway', {
+                provider: 'razorpay',
+                keyId: razorpayKeyId.trim(),
+                keySecret: razorpayKeySecret.trim()
+            }, {
+                headers: { Authorization: `Bearer ${user?.token}` }
+            });
+            setGatewayStatus(res.data.gateway);
+            setRazorpayKeySecret('');
+            showToast(res.data.message || 'Payment gateway connected!', 'success');
+        } catch (err: any) {
+            showToast(err.response?.data?.message || 'Failed to connect payment gateway', 'error');
+        } finally {
+            setGatewaySaving(false);
+        }
+    };
+
+    const handleDisconnectGateway = async () => {
+        if (!window.confirm('Are you sure you want to disconnect Razorpay? Customers will not be able to pay online.')) return;
+        setGatewaySaving(true);
+        try {
+            await axios.post('/api/settings/payment-gateway/disconnect', {}, {
+                headers: { Authorization: `Bearer ${user?.token}` }
+            });
+            setGatewayStatus({ provider: 'none', keyId: '', isActive: false });
+            setRazorpayKeySecret('');
+            showToast('Payment gateway disconnected', 'info');
+        } catch (err: any) {
+            showToast(err.response?.data?.message || 'Failed to disconnect gateway', 'error');
+        } finally {
+            setGatewaySaving(false);
+        }
+    };
 
     const handleSaveCustomDomain = async () => {
         if (!customDomainInput.trim()) return;
@@ -1105,6 +1172,100 @@ const Settings = () => {
                                         </div>
                                     </div>
                                 )}
+
+                                {/* Payment Gateway (Razorpay) Settings */}
+                                <div className="p-8 bg-slate-50/50 rounded-[2.5rem] border border-slate-100 space-y-6">
+                                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200/60 pb-6">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center shadow-sm">
+                                                <CreditCard size={24} />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-black text-slate-800 uppercase tracking-tight text-base">Payment Gateway (Razorpay)</h4>
+                                                <p className="text-xs text-slate-500 font-medium">Allow customers to pay online directly from your catalog website</p>
+                                            </div>
+                                        </div>
+                                        {gatewayStatus.isActive ? (
+                                            <span className="px-3.5 py-1.5 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 border border-emerald-200">
+                                                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                                                Connected & Active
+                                            </span>
+                                        ) : (
+                                            <span className="px-3.5 py-1.5 bg-slate-200 text-slate-600 rounded-full text-[10px] font-black uppercase tracking-widest">
+                                                Not Connected
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                                                    Razorpay Key ID
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="rzp_live_... or rzp_test_..."
+                                                    className="w-full bg-white border border-slate-200 rounded-2xl py-3.5 px-4 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                                                    value={razorpayKeyId}
+                                                    onChange={(e) => setRazorpayKeyId(e.target.value.trim())}
+                                                    disabled={gatewaySaving}
+                                                />
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                                                    Razorpay Key Secret
+                                                </label>
+                                                <div className="relative">
+                                                    <input
+                                                        type={showKeySecret ? "text" : "password"}
+                                                        placeholder={gatewayStatus.isActive ? "•••••••••••••••• (configured)" : "Enter key secret from Razorpay"}
+                                                        className="w-full bg-white border border-slate-200 rounded-2xl py-3.5 pl-4 pr-10 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                                                        value={razorpayKeySecret}
+                                                        onChange={(e) => setRazorpayKeySecret(e.target.value.trim())}
+                                                        disabled={gatewaySaving}
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowKeySecret(!showKeySecret)}
+                                                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                                    >
+                                                        {showKeySecret ? <EyeOff size={15} /> : <Eye size={15} />}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
+                                            <p className="text-xs text-slate-500 font-medium">
+                                                Find your API Keys in <a href="https://dashboard.razorpay.com/#/app/keys" target="_blank" rel="noreferrer" className="text-indigo-600 font-bold underline inline-flex items-center gap-0.5">Razorpay Dashboard <ExternalLink size={11} /></a>
+                                            </p>
+
+                                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                                                {gatewayStatus.isActive && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleDisconnectGateway}
+                                                        disabled={gatewaySaving}
+                                                        className="px-5 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all"
+                                                    >
+                                                        Disconnect
+                                                    </button>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={handleSaveGateway}
+                                                    disabled={gatewaySaving || !razorpayKeyId.trim()}
+                                                    className="flex-1 sm:flex-none px-7 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-md shadow-indigo-200 transition-all flex items-center justify-center gap-2 active:scale-95"
+                                                >
+                                                    {gatewaySaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                                                    {gatewaySaving ? 'Connecting...' : gatewayStatus.isActive ? 'Update Gateway' : 'Connect Gateway'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         )}
 

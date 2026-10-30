@@ -82,6 +82,22 @@ export const getProducts = async (req: AuthRequest, res: Response) => {
     }
 };
 
+// Barcode In-Memory Cache (TTL: 60s)
+const scanCache = new Map<string, { product: any; expiresAt: number }>();
+
+export const invalidateScanCache = (tenantId?: string) => {
+    if (!tenantId) {
+        scanCache.clear();
+        return;
+    }
+    const prefix = tenantId + ':';
+    for (const key of scanCache.keys()) {
+        if (key.startsWith(prefix)) {
+            scanCache.delete(key);
+        }
+    }
+};
+
 // @desc    Get product by barcode
 // @route   GET /api/inventory/barcode/:barcode
 export const getProductByBarcode = async (req: AuthRequest, res: Response) => {
@@ -92,6 +108,12 @@ export const getProductByBarcode = async (req: AuthRequest, res: Response) => {
 
         if (!trimmed) {
             return res.status(400).json({ message: 'Barcode is required' });
+        }
+
+        const cacheKey = req.tenantId + ':' + trimmed;
+        const cached = scanCache.get(cacheKey);
+        if (cached && cached.expiresAt > Date.now()) {
+            return res.status(200).json(cached.product);
         }
         
         const product = await Product.findOne({
@@ -105,6 +127,8 @@ export const getProductByBarcode = async (req: AuthRequest, res: Response) => {
         if (!product) {
             return res.status(404).json({ message: 'Product not found' });
         }
+
+        scanCache.set(cacheKey, { product, expiresAt: Date.now() + 60000 });
         
         res.status(200).json(product);
     } catch (err: any) {

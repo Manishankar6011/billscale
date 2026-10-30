@@ -151,6 +151,9 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     customerGSTIN,
     customerState,
     customerStateCode,
+    specialDiscount,
+    specialDiscountPercent,
+    specialDiscountLabel,
   } = req.body;
 
   let session: any;
@@ -330,6 +333,10 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     const finalRoundOff = Number(roundOffAmount) || 0;
     totalAmount += finalRoundOff;
 
+    // Apply Special Discount if provided
+    const finalSpecialDiscount = Number(specialDiscount) || 0;
+    totalAmount -= finalSpecialDiscount;
+
     const finalAmountPaid = Number(amountPaid) || 0;
     const balanceDue = totalAmount - finalAmountPaid;
 
@@ -370,6 +377,9 @@ export const processSale = async (req: AuthRequest, res: Response) => {
       status: calculatedStatus,
       date: date ? new Date(date) : new Date(),
       showQRCode: !!showQRCode,
+      specialDiscount: finalSpecialDiscount,
+      specialDiscountPercent: Number(specialDiscountPercent) || 0,
+      specialDiscountLabel: specialDiscountLabel || '',
       createdBy: req.user?._id,
     });
 
@@ -409,6 +419,9 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
     customerGSTIN,
     customerState,
     customerStateCode,
+    specialDiscount,
+    specialDiscountPercent,
+    specialDiscountLabel,
   } = req.body;
 
   const session = await mongoose.startSession();
@@ -580,6 +593,11 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
 
     const finalRoundOff = Number(roundOffAmount) || 0;
     totalAmount += finalRoundOff;
+
+    // Apply Special Discount if provided
+    const finalSpecialDiscount = Number(specialDiscount) || 0;
+    totalAmount -= finalSpecialDiscount;
+
     const finalAmountPaid = Number(amountPaid) || 0;
     const balanceDue = totalAmount - finalAmountPaid;
 
@@ -610,6 +628,9 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
     oldSale.status = calculatedStatus;
     oldSale.date = date ? new Date(date) : oldSale.date;
     oldSale.showQRCode = !!showQRCode;
+    (oldSale as any).specialDiscount = finalSpecialDiscount;
+    (oldSale as any).specialDiscountPercent = Number(specialDiscountPercent) || 0;
+    (oldSale as any).specialDiscountLabel = specialDiscountLabel || '';
     if (!oldSale.createdBy) oldSale.createdBy = req.user?._id;
 
     await oldSale.save({ session });

@@ -43,6 +43,7 @@ import {
   Eye,
   EyeOff,
   Zap,
+  ChevronDown,
 } from "lucide-react";
 import BarcodeScanner from "../components/BarcodeScanner";
 import CustomerSearch from "../components/CustomerSearch";
@@ -95,6 +96,8 @@ type CartItem = {
   sellingPrice: number;
   originalSellingPrice: number; // base price before discount
   discountPercent: number;       // 0–100 discount applied on this item
+  savedDiscountPercent?: number; // saved when user toggles discounts off
+  savedSellingPrice?: number;    // saved when user toggles discounts off
   purchasePrice: number;
   mrp: number;
   unit: string;
@@ -513,6 +516,13 @@ const Sales = () => {
   const [matchingProducts, setMatchingProducts] = useState<Product[]>([]);
   const [hwScannerInput, setHwScannerInput] = useState("");
   const [autoPrint, setAutoPrint] = useState(true);
+  const [specialDiscountLabel, setSpecialDiscountLabel] = useState("");
+  const [specialDiscountAmount, setSpecialDiscountAmount] = useState("");
+  const [specialDiscountPercent, setSpecialDiscountPercent] = useState("");
+  const [removeItemDiscounts, setRemoveItemDiscounts] = useState(false);
+  const [isAdditionalChargesOpen, setIsAdditionalChargesOpen] = useState(false);
+  const [isDirectSaleOpen, setIsDirectSaleOpen] = useState(false);
+  const barcodeLocalMap = useRef<Map<string, Product>>(new Map());
   const [showQRCode, setShowQRCode] = useState(false);
   const [printData, setPrintData] = useState<any>(null);
   const [selectedSaleForEdit, setSelectedSaleForEdit] = useState<Sale | null>(
@@ -606,6 +616,12 @@ const Sales = () => {
     setNewCustomPurchasePrice("");
     setShowCartCost(false);
     setRevealedCosts({});
+    setSpecialDiscountLabel("");
+    setSpecialDiscountAmount("");
+    setSpecialDiscountPercent("");
+    setRemoveItemDiscounts(false);
+    setIsAdditionalChargesOpen(false);
+    setIsDirectSaleOpen(false);
   };
 
   const closeModal = () => {
@@ -614,15 +630,94 @@ const Sales = () => {
     resetForm();
   };
 
+  // Toggle per-item discount: removes discount and fills 0 in discount box, or restores original discount
+  const toggleItemDiscounts = () => {
+    if (!removeItemDiscounts) {
+      // Remove discounts: set discount box to 0, restore selling price to undiscounted base
+      setCart((prev) =>
+        prev.map((item) => {
+          const fullBasePrice =
+            item.mrp && item.mrp > 0
+              ? item.mrp
+              : item.originalSellingPrice || item.sellingPrice;
+          return {
+            ...item,
+            savedDiscountPercent:
+              item.savedDiscountPercent !== undefined && item.savedDiscountPercent > 0
+                ? item.savedDiscountPercent
+                : item.discountPercent,
+            savedSellingPrice:
+              item.savedSellingPrice !== undefined && item.savedSellingPrice > 0
+                ? item.savedSellingPrice
+                : item.sellingPrice,
+            discountPercent: 0,
+            sellingPrice: fullBasePrice,
+          };
+        })
+      );
+      setRemoveItemDiscounts(true);
+    } else {
+      // Keep/Restore discounts: fill back each item's original discount % in the discount box
+      setCart((prev) =>
+        prev.map((item) => {
+          const restoredDisc =
+            item.savedDiscountPercent !== undefined
+              ? item.savedDiscountPercent
+              : item.discountPercent;
+          let restoredPrice = item.savedSellingPrice;
+          if (restoredPrice === undefined || restoredPrice === item.sellingPrice) {
+            const base =
+              item.mrp && item.mrp > 0
+                ? item.mrp
+                : item.originalSellingPrice || item.sellingPrice;
+            restoredPrice = parseFloat((base * (1 - restoredDisc / 100)).toFixed(2));
+          }
+          return {
+            ...item,
+            discountPercent: restoredDisc,
+            sellingPrice: restoredPrice,
+          };
+        })
+      );
+      setRemoveItemDiscounts(false);
+    }
+  };
+
+  // Cart is directly synchronized with discount state
+  const effectiveCart = cart;
+
   // Grand total calculations
   const rawTotal =
-    cart.reduce((acc, item) => acc + item.quantity * item.sellingPrice, 0) +
+    effectiveCart.reduce((acc, item) => acc + item.quantity * item.sellingPrice, 0) +
     additionalItems.reduce((acc, item) => acc + (Number(item.price) || 0), 0) +
     customItems.reduce((acc, item) => acc + (Number(item.price) || 0) * (Number(item.quantity) || 1), 0) +
     (newChargeName && newChargePrice ? (Number(newChargePrice) || 0) : 0) +
     (newCustomName && newCustomPrice ? (Number(newCustomPrice) || 0) * (Number(newCustomQuantity) || 1) : 0);
   const roundOffAmount = roundOff ? Math.round(rawTotal) - rawTotal : 0;
-  const grandTotal = rawTotal + roundOffAmount;
+  const specialDiscAmt = Number(specialDiscountAmount) || 0;
+  const grandTotal = Math.max(0, rawTotal + roundOffAmount - specialDiscAmt);
+
+  const handleSpecialDiscountPercentChange = (valStr: string) => {
+    setSpecialDiscountPercent(valStr);
+    const val = Number(valStr);
+    if (!valStr || isNaN(val) || val <= 0 || rawTotal <= 0) {
+      setSpecialDiscountAmount("");
+      return;
+    }
+    const amt = ((rawTotal * val) / 100).toFixed(2);
+    setSpecialDiscountAmount(amt);
+  };
+
+  const handleSpecialDiscountAmountChange = (valStr: string) => {
+    setSpecialDiscountAmount(valStr);
+    const val = Number(valStr);
+    if (!valStr || isNaN(val) || val <= 0 || rawTotal <= 0) {
+      setSpecialDiscountPercent("");
+      return;
+    }
+    const pct = ((val / rawTotal) * 100).toFixed(2);
+    setSpecialDiscountPercent(pct);
+  };
   const changeAmount =
     amountReceived !== "" ? Number(amountReceived) - grandTotal : null;
 
@@ -784,7 +879,7 @@ const Sales = () => {
       customerGSTIN,
       customerState,
       customerStateCode,
-      items: cart.map((i) => ({
+      items: effectiveCart.map((i) => ({
         productId: i.productId,
         quantity: i.quantity,
         unit: i.unit,
@@ -875,6 +970,9 @@ const Sales = () => {
       status: Number(amountReceived) >= grandTotal && grandTotal > 0 ? "paid" : Number(amountReceived) > 0 ? "partial" : "pending",
       amountPaid: Number(amountReceived) || 0,
       roundOffAmount: roundOffAmount,
+      specialDiscount: specialDiscAmt,
+      specialDiscountPercent: Number(specialDiscountPercent) || 0,
+      specialDiscountLabel: specialDiscountLabel.trim(),
       showQRCode,
     };
 
@@ -894,10 +992,15 @@ const Sales = () => {
       setIsScannerOpen(false);
 
       // Fast multi-tier local search:
+      // 0. Check in-memory fast map
+      let product = barcodeLocalMap.current.get(trimmedCode);
+
       // 1. Check already scanned products
-      let product = scannedProducts.find(
-        (p) => (p.barcode && p.barcode.trim() === trimmedCode) || (p.subUnitBarcode && p.subUnitBarcode.trim() === trimmedCode)
-      );
+      if (!product) {
+        product = scannedProducts.find(
+          (p) => (p.barcode && p.barcode.trim() === trimmedCode) || (p.subUnitBarcode && p.subUnitBarcode.trim() === trimmedCode)
+        );
+      }
 
       // 2. Check loaded pages in current inventory query
       if (!product && productsData?.pages) {
@@ -947,6 +1050,7 @@ const Sales = () => {
       }
 
       if (product) {
+        barcodeLocalMap.current.set(trimmedCode, product);
         setHwScannerInput("");
         const pid = product._id!;
         isSubUnitScan = Boolean(product.hasSubUnit && product.subUnitBarcode === trimmedCode);
@@ -1454,6 +1558,16 @@ const Sales = () => {
         };
       }),
     );
+    if ((sale as any).specialDiscount) {
+      setSpecialDiscountAmount(((sale as any).specialDiscount).toString());
+      setSpecialDiscountPercent((sale as any).specialDiscountPercent ? ((sale as any).specialDiscountPercent).toString() : "");
+      setSpecialDiscountLabel((sale as any).specialDiscountLabel || "");
+    } else {
+      setSpecialDiscountAmount("");
+      setSpecialDiscountPercent("");
+      setSpecialDiscountLabel("");
+    }
+    setRemoveItemDiscounts(false);
     setAdditionalItems(
       (sale.additionalItems || []).map((i) => ({
         name: i.name,
@@ -1477,6 +1591,54 @@ const Sales = () => {
     );
     setIsModalOpen(true);
   };
+
+  const openBillFromOrder = useCallback((order: any) => {
+    resetForm();
+    setCustomerName(order.customerName || "");
+    setCustomerPhone(order.customerPhone || "");
+    setCustomerAddress(order.customerAddress || "");
+
+    if (order.items && order.items.length > 0) {
+      const newCart = order.items.map((i: any) => {
+        const price = Number(i.price) || 0;
+        const mrp = Number(i.mrp) || price;
+        const discountPct = mrp > 0 && price > 0 && mrp > price
+          ? parseFloat(((1 - price / mrp) * 100).toFixed(2))
+          : 0;
+        return {
+          productId: i.productId?._id || i.productId,
+          name: i.name,
+          quantity: Number(i.quantity) || 1,
+          sellingPrice: price,
+          originalSellingPrice: price,
+          discountPercent: discountPct,
+          purchasePrice: 0,
+          mrp: mrp,
+          unit: i.unit || "piece",
+          conversionFactor: 1,
+        };
+      });
+      setCart(newCart);
+    }
+
+    if (order.paymentStatus === "paid") {
+      setPaymentMode("cash");
+      setAmountReceived((order.totalAmount || 0).toString());
+    }
+
+    setIsModalOpen(true);
+    showToast(`Order #${order.orderNumber} loaded into bill`, "success");
+  }, []);
+
+  useEffect(() => {
+    const handleOpenBillEvent = (e: any) => {
+      if (e.detail?.order) {
+        openBillFromOrder(e.detail.order);
+      }
+    };
+    window.addEventListener("open-bill-order", handleOpenBillEvent as EventListener);
+    return () => window.removeEventListener("open-bill-order", handleOpenBillEvent as EventListener);
+  }, [openBillFromOrder]);
 
   const handleDelete = (id: string) => {
     if (
@@ -2317,10 +2479,13 @@ const Sales = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    const el = document.getElementById("direct-sale-section");
-                    if (el) el.scrollIntoView({ behavior: "smooth" });
+                    setIsDirectSaleOpen(true);
+                    setTimeout(() => {
+                      const el = document.getElementById("direct-sale-section");
+                      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                    }, 50);
                   }}
-                  className="flex-1 flex items-center justify-center gap-2 p-4 rounded-2xl bg-blue-50 border-2 border-blue-200 text-blue-700 font-black uppercase tracking-widest text-xs sm:text-sm hover:bg-blue-100 transition-all shadow-sm active:scale-[0.98]"
+                  className="flex-1 flex items-center justify-center gap-2 p-4 rounded-2xl bg-blue-50 border-2 border-blue-200 text-blue-700 font-black uppercase tracking-widest text-xs sm:text-sm hover:bg-blue-100 transition-all shadow-sm active:scale-[0.98] cursor-pointer"
                 >
                   <Zap size={18} /> Direct Sale
                 </button>
@@ -2330,9 +2495,39 @@ const Sales = () => {
               {(cart.length > 0 || additionalItems.length > 0 || customItems.length > 0) && (
                 <div className="space-y-2 border-y border-slate-100 py-4">
                   <div className="flex items-center justify-between px-1 pb-1">
-                    <span className="text-xs font-black uppercase tracking-wider text-slate-500">
-                      Items in Bill ({cart.length + additionalItems.length + customItems.length})
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+                        Items in Bill ({cart.length + additionalItems.length + customItems.length})
+                      </span>
+                      {cart.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={toggleItemDiscounts}
+                          className={`inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl transition-all border shadow-xs cursor-pointer active:scale-95 ${
+                            removeItemDiscounts
+                              ? "bg-rose-50 text-rose-700 border-rose-300 hover:bg-rose-100"
+                              : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                          }`}
+                          title={
+                            removeItemDiscounts
+                              ? "Item discounts removed (0%). Click to restore item discounts."
+                              : "Click to remove all item discounts (sets 0% in discount box)."
+                          }
+                        >
+                          {removeItemDiscounts ? (
+                            <>
+                              <span>❌ Discounts Removed (0%)</span>
+                              <span className="text-[9px] font-bold text-rose-500 underline ml-0.5">(Click to Restore)</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>🏷️ Keep Item Discounts</span>
+                              <span className="text-[9px] font-bold text-emerald-600 ml-0.5">(Click to Remove)</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
                     <button
                       type="button"
                       onClick={() => {
@@ -2665,76 +2860,155 @@ const Sales = () => {
                   ))}
                 </div>
               )}
-              {/* Additional Charges Section (New) */}
-              <div className="p-5 bg-amber-50 rounded-[2rem] border border-amber-100 space-y-3">
-                <p className="text-[10px] font-black uppercase tracking-widest text-amber-600">
-                  {t("billing.additional_charges")}
-                </p>
-                <div className="flex flex-col sm:flex-row gap-3 items-end">
-                  <div className="flex-1 w-full space-y-1">
-                    <label className="text-[9px] font-black text-amber-700 ml-1 uppercase tracking-widest">Charge Name</label>
-                    <input
-                      type="text"
-                      placeholder={t("billing.charge_name_placeholder")}
-                      className="w-full bg-white border border-amber-200 rounded-xl p-3 text-xs font-bold min-w-0 shadow-sm focus:border-amber-500 focus:ring-0"
-                      value={newChargeName}
-                      onChange={(e) => setNewChargeName(e.target.value)}
+              {/* Additional Charges Section (Collapsible Accordion) */}
+              <div className="bg-amber-50/70 rounded-2xl border border-amber-200/80 overflow-hidden transition-all shadow-xs">
+                <button
+                  type="button"
+                  onClick={() => setIsAdditionalChargesOpen((prev) => !prev)}
+                  className="w-full p-3.5 sm:p-4 flex items-center justify-between text-left hover:bg-amber-100/60 transition-colors cursor-pointer select-none"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-7 h-7 rounded-lg bg-amber-500/15 text-amber-800 flex items-center justify-center text-xs font-black shrink-0">
+                      +
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs font-black uppercase tracking-wider text-amber-900">
+                          {t("billing.additional_charges")}
+                        </p>
+                        {additionalItems.length > 0 && (
+                          <span className="text-[10px] font-black px-2 py-0.5 bg-amber-200 text-amber-900 rounded-full">
+                            {additionalItems.length} Added
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-amber-700 font-medium">
+                        Delivery, labour, packaging or other extra charges
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-amber-800">
+                    <span className="text-[11px] font-black uppercase tracking-widest hidden sm:inline">
+                      {isAdditionalChargesOpen ? "Collapse" : "Add Charges"}
+                    </span>
+                    <ChevronDown
+                      size={18}
+                      className={`transition-transform duration-200 ${
+                        isAdditionalChargesOpen ? "rotate-180" : ""
+                      }`}
                     />
                   </div>
-                  <div className="flex gap-2 sm:w-auto w-full items-end">
-                    <div className="flex-1 sm:w-24 space-y-1">
-                      <label className="text-[9px] font-black text-amber-700 ml-1 uppercase tracking-widest">Amount</label>
-                      <input
-                        type="number"
-                        placeholder="₹"
-                        className="w-full bg-white border border-amber-200 rounded-xl p-3 text-xs font-bold shadow-sm focus:border-amber-500 focus:ring-0"
-                        value={newChargePrice}
-                        onChange={(e) => setNewChargePrice(e.target.value)}
-                        onWheel={(e) => e.currentTarget.blur()}
-                      />
-                    </div>
-                    <div className="flex-1 sm:w-28 space-y-1">
-                      <label className="text-[9px] font-black text-amber-700 ml-1 uppercase tracking-widest">Add to Profit</label>
-                      <div className="relative">
+                </button>
+
+                {isAdditionalChargesOpen && (
+                  <div className="p-4 sm:p-5 pt-1 border-t border-amber-200/60 space-y-3">
+                    <div className="flex flex-col sm:flex-row gap-3 items-end">
+                      <div className="flex-1 w-full space-y-1">
+                        <label className="text-[9px] font-black text-amber-700 ml-1 uppercase tracking-widest">Charge Name</label>
                         <input
-                          type="number"
-                          placeholder="%"
-                          className="w-full bg-white border border-amber-200 rounded-xl p-3 text-xs font-bold pr-7 shadow-sm focus:border-amber-500 focus:ring-0"
-                          value={newChargeProfitPercent}
-                          onChange={(e) => setNewChargeProfitPercent(e.target.value)}
-                          onWheel={(e) => e.currentTarget.blur()}
+                          type="text"
+                          placeholder={t("billing.charge_name_placeholder")}
+                          className="w-full bg-white border border-amber-200 rounded-xl p-3 text-xs font-bold min-w-0 shadow-sm focus:border-amber-500 focus:ring-0"
+                          value={newChargeName}
+                          onChange={(e) => setNewChargeName(e.target.value)}
                         />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-amber-400">%</span>
+                      </div>
+                      <div className="flex gap-2 sm:w-auto w-full items-end">
+                        <div className="flex-1 sm:w-24 space-y-1">
+                          <label className="text-[9px] font-black text-amber-700 ml-1 uppercase tracking-widest">Amount</label>
+                          <input
+                            type="number"
+                            placeholder="₹"
+                            className="w-full bg-white border border-amber-200 rounded-xl p-3 text-xs font-bold shadow-sm focus:border-amber-500 focus:ring-0"
+                            value={newChargePrice}
+                            onChange={(e) => setNewChargePrice(e.target.value)}
+                            onWheel={(e) => e.currentTarget.blur()}
+                          />
+                        </div>
+                        <div className="flex-1 sm:w-28 space-y-1">
+                          <label className="text-[9px] font-black text-amber-700 ml-1 uppercase tracking-widest">Add to Profit</label>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              placeholder="%"
+                              className="w-full bg-white border border-amber-200 rounded-xl p-3 text-xs font-bold pr-7 shadow-sm focus:border-amber-500 focus:ring-0"
+                              value={newChargeProfitPercent}
+                              onChange={(e) => setNewChargeProfitPercent(e.target.value)}
+                              onWheel={(e) => e.currentTarget.blur()}
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-amber-400">%</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (newChargeName && newChargePrice) {
+                              setAdditionalItems((prev) => [
+                                ...prev,
+                                {
+                                  name: newChargeName,
+                                  price: newChargePrice,
+                                  profitPercent: newChargeProfitPercent || "0",
+                                },
+                              ]);
+                              setNewChargeName("");
+                              setNewChargePrice("");
+                              setNewChargeProfitPercent("0");
+                            }
+                          }}
+                          className="p-3 bg-amber-500 text-white rounded-xl hover:bg-amber-600 shadow-md hover:shadow-lg transition-all mb-0.5 cursor-pointer"
+                        >
+                          <Plus size={18} />
+                        </button>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (newChargeName && newChargePrice) {
-                          setAdditionalItems((prev) => [
-                            ...prev,
-                            {
-                              name: newChargeName,
-                              price: newChargePrice,
-                              profitPercent: newChargeProfitPercent || "0",
-                            },
-                          ]);
-                          setNewChargeName("");
-                          setNewChargePrice("");
-                          setNewChargeProfitPercent("0");
-                        }
-                      }}
-                      className="p-3 bg-amber-500 text-white rounded-xl hover:bg-amber-600 shadow-md hover:shadow-lg transition-all mb-0.5"
-                    >
-                      <Plus size={18} />
-                    </button>
                   </div>
-                </div>
+                )}
               </div>
 
-              {/* Direct Sale (Custom Items) Section */}
-              <div id="direct-sale-section" className="p-5 bg-blue-50/70 rounded-[2rem] border border-blue-100 space-y-3">
-                <div className="flex justify-between items-center">
+              {/* Direct Sale (Custom Items) Section (Collapsible Accordion) */}
+              <div id="direct-sale-section" className="bg-blue-50/70 rounded-2xl border border-blue-200/80 overflow-hidden transition-all shadow-xs">
+                <button
+                  type="button"
+                  onClick={() => setIsDirectSaleOpen((prev) => !prev)}
+                  className="w-full p-3.5 sm:p-4 flex items-center justify-between text-left hover:bg-blue-100/60 transition-colors cursor-pointer select-none"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-7 h-7 rounded-lg bg-blue-600/15 text-blue-700 flex items-center justify-center text-xs font-black shrink-0">
+                      ⚡
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs font-black uppercase tracking-wider text-blue-900">
+                          ⚡ Direct Sale / Custom Item
+                        </p>
+                        {customItems.length > 0 && (
+                          <span className="text-[10px] font-black px-2 py-0.5 bg-blue-200 text-blue-900 rounded-full">
+                            {customItems.length} Added
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-blue-700 font-medium">
+                        One-time items, custom work or materials without inventory entry
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-blue-700">
+                    <span className="text-[11px] font-black uppercase tracking-widest hidden sm:inline">
+                      {isDirectSaleOpen ? "Collapse" : "Add Direct Item"}
+                    </span>
+                    <ChevronDown
+                      size={18}
+                      className={`transition-transform duration-200 ${
+                        isDirectSaleOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </div>
+                </button>
+
+                {isDirectSaleOpen && (
+                  <div className="p-4 sm:p-5 pt-1 border-t border-blue-200/60 space-y-3">
+<div className="flex justify-between items-center">
                   <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">
                     ⚡ Direct Sale / Custom Item
                   </p>
@@ -2931,6 +3205,8 @@ const Sales = () => {
                     </button>
                   </div>
                 </div>
+                  </div>
+                )}
               </div>
               {/* Payment & totals Section */}
               <div className="space-y-4 p-5 bg-slate-50 rounded-3xl">
@@ -3001,6 +3277,57 @@ const Sales = () => {
                       {t("billing.show_qr_code")}
                     </span>
                   </label>
+                </div>
+
+                {/* Special Offer / Festival Discount */}
+                <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200/60 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🎉</span>
+                      <label className="text-xs font-black uppercase tracking-widest text-amber-900">
+                        Special Offer / Festival Discount
+                      </label>
+                    </div>
+                    {specialDiscAmt > 0 && (
+                      <span className="text-xs font-black text-rose-600 bg-white/90 px-2 py-0.5 rounded-lg border border-rose-200">
+                        -₹{specialDiscAmt.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div>
+                      <input
+                        type="text"
+                        placeholder="e.g. Diwali Offer"
+                        className="w-full bg-white border border-amber-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-amber-500 outline-none"
+                        value={specialDiscountLabel}
+                        onChange={(e) => setSpecialDiscountLabel(e.target.value)}
+                      />
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        placeholder="Discount %"
+                        className="w-full bg-white border border-amber-200 rounded-xl pl-3 pr-7 py-2 text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-amber-500 outline-none"
+                        value={specialDiscountPercent}
+                        onChange={(e) => handleSpecialDiscountPercentChange(e.target.value)}
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-amber-600">%</span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="Amount ₹"
+                        className="w-full bg-white border border-amber-200 rounded-xl pl-6 pr-3 py-2 text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-amber-500 outline-none"
+                        value={specialDiscountAmount}
+                        onChange={(e) => handleSpecialDiscountAmountChange(e.target.value)}
+                      />
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-black text-amber-600">₹</span>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Grand Total */}
@@ -3132,6 +3459,9 @@ const Sales = () => {
                       amountPaid: Number(amountReceived) || 0,
                       balanceDue: grandTotal - (Number(amountReceived) || 0),
                       roundOffAmount: roundOffAmount,
+                      specialDiscount: specialDiscAmt,
+                      specialDiscountPercent: Number(specialDiscountPercent) || 0,
+                      specialDiscountLabel: specialDiscountLabel.trim(),
                       paymentMode,
                       date: date || new Date().toISOString(),
                       invoiceNumber: "PREVIEW",
@@ -3167,6 +3497,9 @@ const Sales = () => {
                       amountPaid: Number(amountReceived) || 0,
                       balanceDue: grandTotal - (Number(amountReceived) || 0),
                       roundOffAmount: roundOffAmount,
+                      specialDiscount: specialDiscAmt,
+                      specialDiscountPercent: Number(specialDiscountPercent) || 0,
+                      specialDiscountLabel: specialDiscountLabel.trim(),
                       paymentMode,
                       date: date || new Date().toISOString(),
                       invoiceNumber: "PREVIEW",
@@ -3204,6 +3537,9 @@ const Sales = () => {
                       amountPaid: Number(amountReceived) || 0,
                       balanceDue: grandTotal - (Number(amountReceived) || 0),
                       roundOffAmount: roundOffAmount,
+                      specialDiscount: specialDiscAmt,
+                      specialDiscountPercent: Number(specialDiscountPercent) || 0,
+                      specialDiscountLabel: specialDiscountLabel.trim(),
                       paymentMode,
                       date: date || new Date().toISOString(),
                       invoiceNumber: "PREVIEW",

@@ -117,8 +117,9 @@ const GSTInvoice: React.FC<GSTInvoiceProps> = ({
 
   // The true subtotal before rounding off
   const subTotal = totalTaxable + totalCGST + totalSGST;
-  // Calculate dynamic round off to reach sale.totalAmount
-  const dynamicRoundOff = sale.totalAmount - subTotal;
+  // Calculate dynamic round off to reach sale.totalAmount (accounting for specialDiscount)
+  const specialDiscAmt = Number((sale as any).specialDiscount || 0);
+  const dynamicRoundOff = (sale.totalAmount + specialDiscAmt) - subTotal;
   const grandTotalTax = totalCGST + totalSGST;
 
   return (
@@ -453,6 +454,28 @@ const GSTInvoice: React.FC<GSTInvoiceProps> = ({
                   })}
                 </td>
               </tr>
+              {(() => {
+                const sDiscount = Number((sale as any).specialDiscount || 0);
+                if (sDiscount <= 0) return null;
+                const label = (sale as any).specialDiscountLabel || 'Special Discount';
+                const pct = (sale as any).specialDiscountPercent;
+                return (
+                  <tr className="text-rose-700">
+                    <td className="border-r border-black text-[11px] px-1 py-0.5 italic">
+                      Less:
+                    </td>
+                    <td className="border-r border-black text-right px-2 py-0.5 font-bold">
+                      🎉 {label}{pct ? ` (-${pct}%)` : ''}
+                    </td>
+                    <td className="border-r border-black"></td>
+                    <td className="border-r border-black"></td>
+                    <td className="border-r border-black"></td>
+                    <td className="text-right px-1 py-0.5 font-bold">
+                      (-){sDiscount.toFixed(2)}
+                    </td>
+                  </tr>
+                );
+              })()}
               {(() => {
                 const rOff = dynamicRoundOff;
                 return (

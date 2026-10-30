@@ -168,6 +168,19 @@ const saleSchema: Schema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    specialDiscount: {
+        type: Number,
+        default: 0
+    },
+    specialDiscountPercent: {
+        type: Number,
+        default: 0
+    },
+    specialDiscountLabel: {
+        type: String,
+        trim: true,
+        default: ''
+    },
     createdAt: {
         type: Date,
         default: Date.now
