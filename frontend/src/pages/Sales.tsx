@@ -693,9 +693,9 @@ const Sales = () => {
     customItems.reduce((acc, item) => acc + (Number(item.price) || 0) * (Number(item.quantity) || 1), 0) +
     (newChargeName && newChargePrice ? (Number(newChargePrice) || 0) : 0) +
     (newCustomName && newCustomPrice ? (Number(newCustomPrice) || 0) * (Number(newCustomQuantity) || 1) : 0);
-  const roundOffAmount = roundOff ? Math.round(rawTotal) - rawTotal : 0;
   const specialDiscAmt = Number(specialDiscountAmount) || 0;
-  const grandTotal = Math.max(0, rawTotal + roundOffAmount - specialDiscAmt);
+  const roundOffAmount = roundOff ? Math.round((Math.round(rawTotal - specialDiscAmt) - (rawTotal - specialDiscAmt)) * 100) / 100 : 0;
+  const grandTotal = Math.max(0, Math.round((rawTotal + roundOffAmount - specialDiscAmt) * 100) / 100);
 
   const handleSpecialDiscountPercentChange = (valStr: string) => {
     setSpecialDiscountPercent(valStr);
@@ -3309,7 +3309,7 @@ const Sales = () => {
                         type="number"
                         min="0"
                         max="100"
-                        placeholder="Discount %"
+                        placeholder="Discount %" step="any"
                         className="w-full bg-white border border-amber-200 rounded-xl pl-3 pr-7 py-2 text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-amber-500 outline-none"
                         value={specialDiscountPercent}
                         onChange={(e) => handleSpecialDiscountPercentChange(e.target.value)}
@@ -3320,7 +3320,7 @@ const Sales = () => {
                       <input
                         type="number"
                         min="0"
-                        placeholder="Amount ₹"
+                        placeholder="Amount ₹" step="any"
                         className="w-full bg-white border border-amber-200 rounded-xl pl-6 pr-3 py-2 text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-amber-500 outline-none"
                         value={specialDiscountAmount}
                         onChange={(e) => handleSpecialDiscountAmountChange(e.target.value)}
@@ -3348,7 +3348,7 @@ const Sales = () => {
                   <div className="flex flex-col sm:flex-row gap-2">
                     <input
                       type="number"
-                      placeholder="e.g. 500"
+                      placeholder="e.g. 500" step="any"
                       className="flex-1 bg-white border border-slate-200 rounded-2xl p-3 text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all min-w-0"
                       value={amountReceived}
                       onChange={(e) => setAmountReceived(e.target.value)}

@@ -336,9 +336,10 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     // Apply Special Discount if provided
     const finalSpecialDiscount = Number(specialDiscount) || 0;
     totalAmount -= finalSpecialDiscount;
+    totalAmount = Math.max(0, Math.round(totalAmount * 100) / 100);
 
     const finalAmountPaid = Number(amountPaid) || 0;
-    const balanceDue = totalAmount - finalAmountPaid;
+    const balanceDue = Math.max(0, Math.round((totalAmount - finalAmountPaid) * 100) / 100);
 
     // Auto-calculate status based on balance
     let calculatedStatus = status;
@@ -597,9 +598,10 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
     // Apply Special Discount if provided
     const finalSpecialDiscount = Number(specialDiscount) || 0;
     totalAmount -= finalSpecialDiscount;
+    totalAmount = Math.max(0, Math.round(totalAmount * 100) / 100);
 
     const finalAmountPaid = Number(amountPaid) || 0;
-    const balanceDue = totalAmount - finalAmountPaid;
+    const balanceDue = Math.max(0, Math.round((totalAmount - finalAmountPaid) * 100) / 100);
 
     let calculatedStatus = status;
     if (balanceDue <= 0) calculatedStatus = "paid";
