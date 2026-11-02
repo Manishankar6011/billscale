@@ -185,18 +185,25 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                                 <td className="py-5 px-2 text-right font-black text-black text-base">₹{((item.quantity || 0) * (item.sellingPrice || 0) * (100 / (100 + (item.taxRate || 0)))).toFixed(2)}</td>
                             </tr>
                         ))}
-                        {(sale.customItems || []).map((item: any, i: number) => (
+                        {(sale.customItems || []).map((item: any, i: number) => {
+                            const itemGst = Number(item.taxRate !== undefined ? item.taxRate : item.gstRate) || 0;
+                            const lineTotal = Number(item.quantity || 1) * Number(item.price || 0);
+                            const taxableVal = itemGst > 0 ? (lineTotal * (100 / (100 + itemGst))) : lineTotal;
+                            return (
                             <tr key={`custom-${i}`} className="border-b border-black/5 hover:bg-slate-50 transition-colors">
                                 <td className="py-5 px-2 text-center text-slate-500 font-medium">{(sale.items?.length || 0) + i + 1}</td>
                                 <td className="py-5 px-2">
                                     <p className="font-bold text-black text-base">{item.name}</p>
+                                    {itemGst > 0 && (
+                                        <p className="text-[11px] text-slate-500 font-semibold">GST: {itemGst}% {item.hsnCode ? `| HSN: ${item.hsnCode}` : ''}</p>
+                                    )}
                                 </td>
                                 <td className="py-5 px-2 text-right font-bold text-black">₹{Number(item.price || 0).toFixed(0)}</td>
                                 <td className="py-5 px-2 text-center font-black text-black text-base">{item.quantity}</td>
                                 <td className="py-5 px-2 text-right font-bold text-black">₹{Number(item.price || 0).toFixed(0)}</td>
-                                <td className="py-5 px-2 text-right font-black text-black text-base">₹{(Number(item.quantity || 1) * Number(item.price || 0)).toFixed(2)}</td>
+                                <td className="py-5 px-2 text-right font-black text-black text-base">₹{taxableVal.toFixed(2)}</td>
                             </tr>
-                        ))}
+                        );})}
                         {(sale.additionalItems || []).length > 0 && (
                             <tr className="bg-slate-50">
                                 <td colSpan={6} className="py-2 px-2 text-[10px] font-black uppercase tracking-widest border-y border-black/10">
@@ -225,7 +232,11 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                 <div className="w-full max-w-sm space-y-3">
                     <div className="flex justify-between text-black font-bold text-base">
                         <span>Total Taxable Amount</span>
-                        <span>₹{(((sale.items || []).reduce((acc: number, item: any) => acc + ((item.quantity || 0) * (item.sellingPrice || 0) * (100 / (100 + (item.taxRate || 0)))), 0)) + ((sale.customItems || []).reduce((acc: number, item: any) => acc + (Number(item.quantity) || 1) * Number(item.price), 0))).toFixed(2)}</span>
+                        <span>₹{(((sale.items || []).reduce((acc: number, item: any) => acc + ((item.quantity || 0) * (item.sellingPrice || 0) * (100 / (100 + (item.taxRate || 0)))), 0)) + ((sale.customItems || []).reduce((acc: number, item: any) => {
+                            const itemGst = Number(item.taxRate !== undefined ? item.taxRate : item.gstRate) || 0;
+                            const lineTotal = (Number(item.quantity) || 1) * Number(item.price || 0);
+                            return acc + (itemGst > 0 ? (lineTotal * (100 / (100 + itemGst))) : lineTotal);
+                        }, 0))).toFixed(2)}</span>
                     </div>
 
                     {/* Tax Breakdown */}
@@ -239,6 +250,22 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                             const taxAmount = itemTotal - taxableValue;
 
                             if (taxRate > 0) {
+                                if (!hsnSummary[hsn]) {
+                                    hsnSummary[hsn] = { taxable: 0, rate: taxRate, tax: 0 };
+                                }
+                                hsnSummary[hsn].taxable += taxableValue;
+                                hsnSummary[hsn].tax += taxAmount;
+                            }
+                        });
+
+                        (sale.customItems || []).forEach((item: any) => {
+                            const taxRate = Number(item.taxRate !== undefined ? item.taxRate : item.gstRate) || 0;
+                            if (taxRate > 0) {
+                                const hsn = item.hsnCode || `GST ${taxRate}%`;
+                                const itemTotal = (Number(item.quantity) || 1) * Number(item.price || 0);
+                                const taxableValue = itemTotal * (100 / (100 + taxRate));
+                                const taxAmount = itemTotal - taxableValue;
+
                                 if (!hsnSummary[hsn]) {
                                     hsnSummary[hsn] = { taxable: 0, rate: taxRate, tax: 0 };
                                 }

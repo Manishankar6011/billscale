@@ -164,15 +164,22 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                         </tr>
                         );
                     })}
-                    {(sale.customItems || []).map((item: any, i: number) => (
+                    {(sale.customItems || []).map((item: any, i: number) => {
+                        const itemGst = Number(item.taxRate !== undefined ? item.taxRate : item.gstRate) || 0;
+                        const lineTotal = (Number(item.quantity) || 1) * (Number(item.price) || 0);
+                        const taxableVal = itemGst > 0 ? (lineTotal * (100 / (100 + itemGst))) : lineTotal;
+                        return (
                         <tr key={`custom-${i}`} className="border-b border-black border-dashed">
-                            <td className="py-2 pr-1 font-black text-[12px]">{(sale.items?.length || 0) + i + 1}. {item.name}</td>
+                            <td className="py-2 pr-1 font-black text-[12px]">
+                                {(sale.items?.length || 0) + i + 1}. {item.name}
+                                {itemGst > 0 && <span className="block text-[9px] font-normal text-slate-600">GST: {itemGst}% {item.hsnCode ? `(HSN: ${item.hsnCode})` : ''}</span>}
+                            </td>
                             <td className="py-2 text-center font-bold">{item.quantity}</td>
-                            <td className="py-2 text-right">{(item.price || 0).toFixed(2).replace(/\.00$/, '')}</td>
+                            <td className="py-2 text-right">{(Number(item.price) || 0).toFixed(2).replace(/\.00$/, '')}</td>
                             {totalDiscount > 0 && <td className="py-2 text-right">-</td>}
-                            <td className="py-2 text-right font-black">{((item.quantity || 1) * (item.price || 0)).toFixed(2).replace(/\.00$/, '')}</td>
+                            <td className="py-2 text-right font-black">{taxableVal.toFixed(2).replace(/\.00$/, '')}</td>
                         </tr>
-                    ))}
+                    );})}
                     {(sale.additionalItems || []).length > 0 && (
                         <tr className="bg-slate-100/50">
                             <td colSpan={totalDiscount > 0 ? 5 : 4} className="py-1 px-1 text-[10px] font-black uppercase tracking-widest border-y border-black border-dashed">
@@ -196,7 +203,11 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
             <div className="border-t-2 border-black pt-2 space-y-1">
                 <div className="flex justify-between items-center text-[12px] font-bold">
                     <span>Total Taxable Amount:</span>
-                    <span className="font-black">₹{((sale.items || []).reduce((acc: number, item: any) => acc + ((item.quantity || 0) * (item.sellingPrice || 0) * (100 / (100 + (item.taxRate || 0)))), 0)).toFixed(2)}</span>
+                    <span className="font-black">₹{(((sale.items || []).reduce((acc: number, item: any) => acc + ((item.quantity || 0) * (item.sellingPrice || 0) * (100 / (100 + (item.taxRate || 0)))), 0)) + ((sale.customItems || []).reduce((acc: number, item: any) => {
+                        const itemGst = Number(item.taxRate !== undefined ? item.taxRate : item.gstRate) || 0;
+                        const lineTotal = (Number(item.quantity) || 1) * (Number(item.price) || 0);
+                        return acc + (itemGst > 0 ? (lineTotal * (100 / (100 + itemGst))) : lineTotal);
+                    }, 0))).toFixed(2)}</span>
                 </div>
 
                 {/* Tax Breakdown */}
@@ -210,6 +221,19 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
 
                         if (taxRate > 0) {
                             const key = `${taxRate}`;
+                            if (!hsnSummary[key]) hsnSummary[key] = { rate: taxRate, tax: 0 };
+                            hsnSummary[key].tax += taxAmount;
+                        }
+                    });
+
+                    (sale.customItems || []).forEach((item: any) => {
+                        const taxRate = Number(item.taxRate !== undefined ? item.taxRate : item.gstRate) || 0;
+                        if (taxRate > 0) {
+                            const key = `${taxRate}`;
+                            const itemTotal = (Number(item.quantity) || 1) * Number(item.price || 0);
+                            const taxableValue = itemTotal * (100 / (100 + taxRate));
+                            const taxAmount = itemTotal - taxableValue;
+
                             if (!hsnSummary[key]) hsnSummary[key] = { rate: taxRate, tax: 0 };
                             hsnSummary[key].tax += taxAmount;
                         }

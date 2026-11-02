@@ -485,7 +485,7 @@ const Sales = () => {
     { name: string; price: string; profitPercent: string; mrp?: string; purchasePrice?: string; profitAmount?: string }[]
   >([]);
   const [customItems, setCustomItems] = useState<
-    { name: string; price: string; quantity: string; profitPercent: string; mrp?: string; purchasePrice?: string; profitAmount?: string }[]
+    { name: string; price: string; quantity: string; profitPercent: string; mrp?: string; purchasePrice?: string; profitAmount?: string; gstRate?: string; taxRate?: string; taxAmount?: string; hsnCode?: string }[]
   >([]);
 
   // Item-Add modal (removed itemsModalMode from here)
@@ -504,6 +504,9 @@ const Sales = () => {
   const [newCustomProfitPercent, setNewCustomProfitPercent] = useState("0");
   const [newCustomMrp, setNewCustomMrp] = useState("");
   const [newCustomPurchasePrice, setNewCustomPurchasePrice] = useState("");
+  const [newCustomGstRate, setNewCustomGstRate] = useState("0");
+  const [isCustomGst, setIsCustomGst] = useState(false);
+  const [newCustomHsnCode, setNewCustomHsnCode] = useState("");
 
   // Cart cost visibility toggle (default hidden as per user requirement)
   const [showCartCost, setShowCartCost] = useState(false);
@@ -614,6 +617,9 @@ const Sales = () => {
     setNewCustomProfitPercent("0");
     setNewCustomMrp("");
     setNewCustomPurchasePrice("");
+    setNewCustomGstRate("0");
+    setIsCustomGst(false);
+    setNewCustomHsnCode("");
     setShowCartCost(false);
     setRevealedCosts({});
     setSpecialDiscountLabel("");
@@ -916,21 +922,33 @@ const Sales = () => {
           : []),
       ],
       customItems: [
-        ...customItems.map((i) => ({
-          name: i.name,
-          price: Number(i.price) || 0,
-          quantity: Number(i.quantity) || 1,
-          profitPercent: Number(i.profitPercent) || 0,
-          mrp: Number(i.mrp) || Number(i.price) || 0,
-          purchasePrice: Number(i.purchasePrice) || 0,
-          profitAmount: Number(i.profitAmount) || 0,
-        })),
+        ...customItems.map((i) => {
+          const gst = Number(i.gstRate !== undefined ? i.gstRate : i.taxRate) || 0;
+          const lineTotal = (Number(i.quantity) || 1) * (Number(i.price) || 0);
+          const taxAmt = gst > 0 ? (lineTotal * gst) / (100 + gst) : 0;
+          return {
+            name: i.name,
+            price: Number(i.price) || 0,
+            quantity: Number(i.quantity) || 1,
+            profitPercent: Number(i.profitPercent) || 0,
+            mrp: Number(i.mrp) || Number(i.price) || 0,
+            purchasePrice: Number(i.purchasePrice) || 0,
+            profitAmount: Number(i.profitAmount) || 0,
+            gstRate: gst,
+            taxRate: gst,
+            taxAmount: taxAmt,
+            hsnCode: i.hsnCode || "",
+          };
+        }),
         ...(newCustomName && (newCustomPrice || newCustomMrp)
           ? [
               (() => {
                 const price = Number(newCustomPrice || newCustomMrp) || 0;
                 const cost = Number(newCustomPurchasePrice) || 0;
                 const qty = Number(newCustomQuantity) || 1;
+                const gst = Number(newCustomGstRate) || 0;
+                const lineTotal = price * qty;
+                const taxAmt = gst > 0 ? (lineTotal * gst) / (100 + gst) : 0;
                 let pAmt = 0;
                 let pPct = Number(newCustomProfitPercent) || 0;
                 if (cost > 0) {
@@ -947,6 +965,10 @@ const Sales = () => {
                   mrp: Number(newCustomMrp) || price,
                   purchasePrice: cost,
                   profitAmount: Number((pAmt / qty).toFixed(2)),
+                  gstRate: gst,
+                  taxRate: gst,
+                  taxAmount: taxAmt,
+                  hsnCode: newCustomHsnCode.trim(),
                 };
               })(),
             ]
@@ -1140,19 +1162,20 @@ const Sales = () => {
   // Item modal handlers
   // Item modal handlers optimized with useMemo
   const filteredItems = useMemo(() => {
+    const term = (itemSearch || "").toLowerCase().trim();
     return (
       itemsModalMode === "scan"
         ? products.filter(
             (p) =>
               Number(itemQtyMap[p._id!]) > 0 ||
-              (itemSearch &&
-                (p.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
-                  (p.barcode && p.barcode.includes(itemSearch)))),
+              (term &&
+                ((p.name || "").toLowerCase().includes(term) ||
+                  ((p.barcode || "").includes(itemSearch)))),
           )
         : products.filter(
             (p) =>
-              p.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
-              (p.barcode && p.barcode.includes(itemSearch)),
+              (p.name || "").toLowerCase().includes(term) ||
+              ((p.barcode || "").includes(itemSearch)),
           )
     ).sort((a, b) => {
       const qtyA = Number(itemQtyMap[a._id!] || 0);
@@ -1587,6 +1610,10 @@ const Sales = () => {
         mrp: i.mrp ? i.mrp.toString() : i.price.toString(),
         purchasePrice: (i.purchasePrice || 0).toString(),
         profitAmount: (i.profitAmount || 0).toString(),
+        gstRate: (i.taxRate !== undefined ? i.taxRate : (i as any).gstRate !== undefined ? (i as any).gstRate : 0).toString(),
+        taxRate: (i.taxRate !== undefined ? i.taxRate : (i as any).gstRate !== undefined ? (i as any).gstRate : 0).toString(),
+        taxAmount: (i.taxAmount || 0).toString(),
+        hsnCode: (i as any).hsnCode || "",
       })),
     );
     setIsModalOpen(true);
@@ -2824,9 +2851,16 @@ const Sales = () => {
                           <p className="font-bold text-slate-800">
                             {item.name}
                           </p>
-                          <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest">
-                            Custom Item / Direct Sale
-                          </p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest">
+                              Custom Item / Direct Sale
+                            </p>
+                            {Number(item.gstRate) > 0 && (
+                              <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                                GST: {item.gstRate}% {item.hsnCode ? `(HSN: ${item.hsnCode})` : ""}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <div className="flex flex-1 mx-4 justify-end items-center gap-2">
@@ -3008,203 +3042,299 @@ const Sales = () => {
 
                 {isDirectSaleOpen && (
                   <div className="p-4 sm:p-5 pt-1 border-t border-blue-200/60 space-y-3">
-<div className="flex justify-between items-center">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">
-                    ⚡ Direct Sale / Custom Item
-                  </p>
-                  {(newCustomPrice || newCustomMrp) && (
-                    <span className="text-[10px] font-black px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full">
-                      Live Profit: ₹
-                      {(() => {
-                        const price = Number(newCustomPrice || newCustomMrp) || 0;
-                        const cost = Number(newCustomPurchasePrice) || 0;
-                        const qty = Number(newCustomQuantity) || 1;
-                        if (cost > 0) {
-                          return ((price - cost) * qty).toFixed(1);
-                        }
-                        const pPct = Number(newCustomProfitPercent) || 0;
-                        return (((price * qty) * pPct) / 100).toFixed(1);
-                      })()}{" "}
-                      ({(() => {
-                        const price = Number(newCustomPrice || newCustomMrp) || 0;
-                        const cost = Number(newCustomPurchasePrice) || 0;
-                        if (cost > 0) {
-                          return (((price - cost) / cost) * 100).toFixed(1);
-                        }
-                        return Number(newCustomProfitPercent) || 0;
-                      })()}%)
-                    </span>
-                  )}
-                </div>
+                    <div className="flex flex-wrap justify-between items-center gap-2">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">
+                        ⚡ Direct Sale / Custom Item
+                      </p>
+                      {(newCustomPrice || newCustomMrp) && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {Number(newCustomGstRate) > 0 && (
+                            <span className="text-[10px] font-black px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full">
+                              GST ({newCustomGstRate}%): ₹
+                              {(() => {
+                                const price = Number(newCustomPrice || newCustomMrp) || 0;
+                                const qty = Number(newCustomQuantity) || 1;
+                                const gst = Number(newCustomGstRate) || 0;
+                                return ((price * qty * gst) / (100 + gst)).toFixed(1);
+                              })()}
+                            </span>
+                          )}
+                          <span className="text-[10px] font-black px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full">
+                            Live Profit: ₹
+                            {(() => {
+                              const price = Number(newCustomPrice || newCustomMrp) || 0;
+                              const cost = Number(newCustomPurchasePrice) || 0;
+                              const qty = Number(newCustomQuantity) || 1;
+                              if (cost > 0) {
+                                return ((price - cost) * qty).toFixed(1);
+                              }
+                              const pPct = Number(newCustomProfitPercent) || 0;
+                              return (((price * qty) * pPct) / 100).toFixed(1);
+                            })()}{" "}
+                            ({(() => {
+                              const price = Number(newCustomPrice || newCustomMrp) || 0;
+                              const cost = Number(newCustomPurchasePrice) || 0;
+                              if (cost > 0) {
+                                return (((price - cost) / cost) * 100).toFixed(1);
+                              }
+                              return Number(newCustomProfitPercent) || 0;
+                            })()}%)
+                          </span>
+                        </div>
+                      )}
+                    </div>
                 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-2 items-end">
-                  <div className="md:col-span-2 space-y-1">
-                    <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">Item Name</label>
-                    <input
-                      type="text"
-                      placeholder="E.g. Custom Pipe / Sand Bag"
-                      className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold min-w-0 shadow-sm focus:border-blue-500 focus:ring-0"
-                      value={newCustomName}
-                      onChange={(e) => setNewCustomName(e.target.value)}
-                    />
-                  </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-2 items-end">
+                      {/* Item Name */}
+                      <div className="md:col-span-3 space-y-1">
+                        <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">Item Name</label>
+                        <input
+                          type="text"
+                          placeholder="E.g. Custom Pipe / Sand Bag"
+                          className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold min-w-0 shadow-sm focus:border-blue-500 focus:ring-0"
+                          value={newCustomName}
+                          onChange={(e) => setNewCustomName(e.target.value)}
+                        />
+                      </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">Qty</label>
-                    <div className="flex items-center bg-white border border-blue-200 rounded-xl shadow-sm focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 overflow-hidden h-[42px]">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const cur = Number(newCustomQuantity) || 1;
-                          setNewCustomQuantity(Math.max(1, cur - 1).toString());
-                        }}
-                        className="w-8 h-full flex items-center justify-center bg-blue-50/70 hover:bg-blue-100 text-blue-700 font-black text-base transition-colors shrink-0 active:scale-95 select-none"
-                        title="Decrease Quantity"
-                      >
-                        -
-                      </button>
-                      <input
-                        type="number"
-                        min={1}
-                        step="any"
-                        placeholder="1"
-                        className="w-full min-w-0 bg-transparent border-none text-center px-1 text-xs font-bold focus:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        value={newCustomQuantity}
-                        onChange={(e) => setNewCustomQuantity(e.target.value)}
-                        onWheel={(e) => e.currentTarget.blur()}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const cur = Number(newCustomQuantity) || 0;
-                          setNewCustomQuantity((cur + 1).toString());
-                        }}
-                        className="w-8 h-full flex items-center justify-center bg-blue-50/70 hover:bg-blue-100 text-blue-700 font-black text-base transition-colors shrink-0 active:scale-95 select-none"
-                        title="Increase Quantity"
-                      >
-                        +
-                      </button>
+                      {/* Quantity */}
+                      <div className="md:col-span-1 space-y-1">
+                        <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">Qty</label>
+                        <div className="flex items-center bg-white border border-blue-200 rounded-xl shadow-sm focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 overflow-hidden h-[42px]">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const cur = Number(newCustomQuantity) || 1;
+                              setNewCustomQuantity(Math.max(1, cur - 1).toString());
+                            }}
+                            className="w-7 h-full flex items-center justify-center bg-blue-50/70 hover:bg-blue-100 text-blue-700 font-black text-base transition-colors shrink-0 active:scale-95 select-none"
+                            title="Decrease Quantity"
+                          >
+                            -
+                          </button>
+                          <input
+                            type="number"
+                            min={1}
+                            step="any"
+                            placeholder="1"
+                            className="w-full min-w-0 bg-transparent border-none text-center px-0.5 text-xs font-bold focus:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            value={newCustomQuantity}
+                            onChange={(e) => setNewCustomQuantity(e.target.value)}
+                            onWheel={(e) => e.currentTarget.blur()}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const cur = Number(newCustomQuantity) || 0;
+                              setNewCustomQuantity((cur + 1).toString());
+                            }}
+                            className="w-7 h-full flex items-center justify-center bg-blue-50/70 hover:bg-blue-100 text-blue-700 font-black text-base transition-colors shrink-0 active:scale-95 select-none"
+                            title="Increase Quantity"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Sale Price */}
+                      <div className="md:col-span-2 space-y-1">
+                        <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">Sale Price (₹)</label>
+                        <input
+                          type="number"
+                          placeholder="Rate"
+                          className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold shadow-sm focus:border-blue-500 focus:ring-0"
+                          value={newCustomPrice}
+                          onChange={(e) => {
+                            const price = e.target.value;
+                            setNewCustomPrice(price);
+                            const cost = Number(newCustomPurchasePrice) || 0;
+                            if (cost > 0 && Number(price) > 0) {
+                              setNewCustomProfitPercent((((Number(price) - cost) / cost) * 100).toFixed(1));
+                            }
+                          }}
+                          onWheel={(e) => e.currentTarget.blur()}
+                        />
+                      </div>
+
+                      {/* GST Rate (%) Option */}
+                      <div className="md:col-span-2 space-y-1">
+                        <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest flex items-center justify-between">
+                          <span>GST Option</span>
+                          {Number(newCustomGstRate) > 0 && (
+                            <span className="text-[9px] font-bold text-blue-600 lowercase">(incl.)</span>
+                          )}
+                        </label>
+                        {isCustomGst ? (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              placeholder="GST %"
+                              min="0"
+                              step="any"
+                              className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold shadow-sm focus:border-blue-500 focus:ring-0"
+                              value={newCustomGstRate}
+                              onChange={(e) => setNewCustomGstRate(e.target.value)}
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsCustomGst(false);
+                                setNewCustomGstRate("0");
+                              }}
+                              className="px-2 py-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-blue-100 text-xs font-bold shrink-0"
+                              title="Back to GST slabs"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <select
+                            className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold shadow-sm focus:border-blue-500 focus:ring-0 cursor-pointer"
+                            value={newCustomGstRate}
+                            onChange={(e) => {
+                              if (e.target.value === "custom") {
+                                setIsCustomGst(true);
+                                setNewCustomGstRate("");
+                              } else {
+                                setNewCustomGstRate(e.target.value);
+                              }
+                            }}
+                          >
+                            <option value="0">0% (No GST)</option>
+                            <option value="5">5% GST</option>
+                            <option value="12">12% GST</option>
+                            <option value="18">18% GST</option>
+                            <option value="28">28% GST</option>
+                            <option value="custom">Custom %</option>
+                          </select>
+                        )}
+                      </div>
+
+                      {/* Cost Price */}
+                      <div className="md:col-span-2 space-y-1">
+                        <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">Cost Price (₹)</label>
+                        <input
+                          type="number"
+                          placeholder="Cost"
+                          className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold shadow-sm focus:border-blue-500 focus:ring-0"
+                          value={newCustomPurchasePrice}
+                          onChange={(e) => {
+                            const cost = e.target.value;
+                            setNewCustomPurchasePrice(cost);
+                            const price = Number(newCustomPrice || newCustomMrp) || 0;
+                            if (Number(cost) > 0 && price > 0) {
+                              setNewCustomProfitPercent((((price - Number(cost)) / Number(cost)) * 100).toFixed(1));
+                            }
+                          }}
+                          onWheel={(e) => e.currentTarget.blur()}
+                        />
+                      </div>
+
+                      {/* MRP */}
+                      <div className="md:col-span-2 space-y-1">
+                        <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">MRP (₹)</label>
+                        <input
+                          type="number"
+                          placeholder="MRP"
+                          className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold shadow-sm focus:border-blue-500 focus:ring-0"
+                          value={newCustomMrp}
+                          onChange={(e) => {
+                            const mrpVal = e.target.value;
+                            setNewCustomMrp(mrpVal);
+                            if (!newCustomPrice) setNewCustomPrice(mrpVal);
+                          }}
+                          onWheel={(e) => e.currentTarget.blur()}
+                        />
+                      </div>
+
+                      {/* Second row: HSN/SAC code, Profit %, Add button */}
+                      <div className="md:col-span-12 flex flex-wrap justify-between items-center gap-2 pt-2 border-t border-blue-100/60 mt-1">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold text-slate-500">HSN/SAC:</span>
+                            <input
+                              type="text"
+                              placeholder="Optional"
+                              className="w-24 bg-white border border-blue-200 rounded-xl p-2 text-xs font-bold shadow-sm focus:border-blue-500 focus:ring-0"
+                              value={newCustomHsnCode}
+                              onChange={(e) => setNewCustomHsnCode(e.target.value)}
+                            />
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold text-slate-500">Or Profit %:</span>
+                            <input
+                              type="number"
+                              placeholder="%"
+                              className="w-20 bg-white border border-blue-200 rounded-xl p-2 text-xs font-bold text-center shadow-sm focus:border-blue-500 focus:ring-0"
+                              value={newCustomProfitPercent}
+                              onChange={(e) => {
+                                const pct = e.target.value;
+                                setNewCustomProfitPercent(pct);
+                                const price = Number(newCustomPrice || newCustomMrp) || 0;
+                                if (price > 0 && Number(pct) >= 0) {
+                                  const cost = price / (1 + Number(pct) / 100);
+                                  setNewCustomPurchasePrice(cost.toFixed(1));
+                                }
+                              }}
+                              onWheel={(e) => e.currentTarget.blur()}
+                            />
+                          </div>
+                        </div>
+                        
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const price = newCustomPrice || newCustomMrp;
+                            if (newCustomName && price) {
+                              const cost = Number(newCustomPurchasePrice) || 0;
+                              const rate = Number(price) || 0;
+                              const qty = Number(newCustomQuantity) || 1;
+                              const gst = Number(newCustomGstRate) || 0;
+                              const lineTotal = rate * qty;
+                              const taxAmt = gst > 0 ? (lineTotal * gst) / (100 + gst) : 0;
+                              let pAmt = 0;
+                              let pPct = Number(newCustomProfitPercent) || 0;
+                              if (cost > 0) {
+                                pAmt = (rate - cost) * qty;
+                                pPct = ((rate - cost) / cost) * 100;
+                              } else {
+                                pAmt = ((rate * qty) * pPct) / 100;
+                              }
+
+                              setCustomItems((prev) => [
+                                ...prev,
+                                {
+                                  name: newCustomName,
+                                  price: price,
+                                  quantity: newCustomQuantity || "1",
+                                  profitPercent: pPct.toFixed(1),
+                                  mrp: newCustomMrp || price,
+                                  purchasePrice: newCustomPurchasePrice || "0",
+                                  profitAmount: (pAmt / qty).toFixed(2),
+                                  gstRate: gst.toString(),
+                                  taxRate: gst.toString(),
+                                  taxAmount: taxAmt.toFixed(2),
+                                  hsnCode: newCustomHsnCode.trim(),
+                                },
+                              ]);
+                              setNewCustomName("");
+                              setNewCustomPrice("");
+                              setNewCustomMrp("");
+                              setNewCustomPurchasePrice("");
+                              setNewCustomQuantity("1");
+                              setNewCustomProfitPercent("0");
+                              setNewCustomGstRate("0");
+                              setIsCustomGst(false);
+                              setNewCustomHsnCode("");
+                            }
+                          }}
+                          className="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                        >
+                          <Plus size={16} /> Add Direct Item
+                        </button>
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">Sale Price (₹)</label>
-                    <input
-                      type="number"
-                      placeholder="Rate"
-                      className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold shadow-sm focus:border-blue-500 focus:ring-0"
-                      value={newCustomPrice}
-                      onChange={(e) => {
-                        const price = e.target.value;
-                        setNewCustomPrice(price);
-                        const cost = Number(newCustomPurchasePrice) || 0;
-                        if (cost > 0 && Number(price) > 0) {
-                          setNewCustomProfitPercent((((Number(price) - cost) / cost) * 100).toFixed(1));
-                        }
-                      }}
-                      onWheel={(e) => e.currentTarget.blur()}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">Cost Price (₹)</label>
-                    <input
-                      type="number"
-                      placeholder="Cost"
-                      className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold shadow-sm focus:border-blue-500 focus:ring-0"
-                      value={newCustomPurchasePrice}
-                      onChange={(e) => {
-                        const cost = e.target.value;
-                        setNewCustomPurchasePrice(cost);
-                        const price = Number(newCustomPrice || newCustomMrp) || 0;
-                        if (Number(cost) > 0 && price > 0) {
-                          setNewCustomProfitPercent((((price - Number(cost)) / Number(cost)) * 100).toFixed(1));
-                        }
-                      }}
-                      onWheel={(e) => e.currentTarget.blur()}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">MRP (₹)</label>
-                    <input
-                      type="number"
-                      placeholder="MRP"
-                      className="w-full bg-white border border-blue-200 rounded-xl p-3 text-xs font-bold shadow-sm focus:border-blue-500 focus:ring-0"
-                      value={newCustomMrp}
-                      onChange={(e) => {
-                        const mrpVal = e.target.value;
-                        setNewCustomMrp(mrpVal);
-                        if (!newCustomPrice) setNewCustomPrice(mrpVal);
-                      }}
-                      onWheel={(e) => e.currentTarget.blur()}
-                    />
-                  </div>
-
-                  <div className="md:col-span-6 flex justify-between items-center pt-2 border-t border-blue-100/60 mt-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-slate-500">Or Profit %:</span>
-                      <input
-                        type="number"
-                        placeholder="%"
-                        className="w-20 bg-white border border-blue-200 rounded-xl p-2 text-xs font-bold text-center shadow-sm"
-                        value={newCustomProfitPercent}
-                        onChange={(e) => {
-                          const pct = e.target.value;
-                          setNewCustomProfitPercent(pct);
-                          const price = Number(newCustomPrice || newCustomMrp) || 0;
-                          if (price > 0 && Number(pct) >= 0) {
-                            const cost = price / (1 + Number(pct) / 100);
-                            setNewCustomPurchasePrice(cost.toFixed(1));
-                          }
-                        }}
-                        onWheel={(e) => e.currentTarget.blur()}
-                      />
-                    </div>
-                    
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const price = newCustomPrice || newCustomMrp;
-                        if (newCustomName && price) {
-                          const cost = Number(newCustomPurchasePrice) || 0;
-                          const rate = Number(price) || 0;
-                          const qty = Number(newCustomQuantity) || 1;
-                          let pAmt = 0;
-                          let pPct = Number(newCustomProfitPercent) || 0;
-                          if (cost > 0) {
-                            pAmt = (rate - cost) * qty;
-                            pPct = ((rate - cost) / cost) * 100;
-                          } else {
-                            pAmt = ((rate * qty) * pPct) / 100;
-                          }
-
-                          setCustomItems((prev) => [
-                            ...prev,
-                            {
-                              name: newCustomName,
-                              price: price,
-                              quantity: newCustomQuantity || "1",
-                              profitPercent: pPct.toFixed(1),
-                              mrp: newCustomMrp || price,
-                              purchasePrice: newCustomPurchasePrice || "0",
-                              profitAmount: (pAmt / qty).toFixed(2),
-                            },
-                          ]);
-                          setNewCustomName("");
-                          setNewCustomPrice("");
-                          setNewCustomMrp("");
-                          setNewCustomPurchasePrice("");
-                          setNewCustomQuantity("1");
-                          setNewCustomProfitPercent("0");
-                        }
-                      }}
-                      className="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
-                    >
-                      <Plus size={16} /> Add Direct Item
-                    </button>
-                  </div>
-                </div>
                   </div>
                 )}
               </div>
@@ -3455,6 +3585,19 @@ const Sales = () => {
                         taxAmount: i.gstRate ? (i.quantity * i.sellingPrice * i.gstRate) / (100 + i.gstRate) : 0
                       })),
                       additionalItems,
+                      customItems: customItems.map(i => {
+                        const gst = Number(i.gstRate !== undefined ? i.gstRate : i.taxRate) || 0;
+                        const lineTotal = (Number(i.quantity) || 1) * (Number(i.price) || 0);
+                        return {
+                          ...i,
+                          price: Number(i.price) || 0,
+                          quantity: Number(i.quantity) || 1,
+                          taxRate: gst,
+                          gstRate: gst,
+                          taxAmount: gst > 0 ? (lineTotal * gst) / (100 + gst) : 0,
+                          hsnCode: i.hsnCode || ""
+                        };
+                      }),
                       totalAmount: grandTotal,
                       amountPaid: Number(amountReceived) || 0,
                       balanceDue: grandTotal - (Number(amountReceived) || 0),
@@ -3493,6 +3636,19 @@ const Sales = () => {
                         taxAmount: i.gstRate ? (i.quantity * i.sellingPrice * i.gstRate) / (100 + i.gstRate) : 0
                       })),
                       additionalItems,
+                      customItems: customItems.map(i => {
+                        const gst = Number(i.gstRate !== undefined ? i.gstRate : i.taxRate) || 0;
+                        const lineTotal = (Number(i.quantity) || 1) * (Number(i.price) || 0);
+                        return {
+                          ...i,
+                          price: Number(i.price) || 0,
+                          quantity: Number(i.quantity) || 1,
+                          taxRate: gst,
+                          gstRate: gst,
+                          taxAmount: gst > 0 ? (lineTotal * gst) / (100 + gst) : 0,
+                          hsnCode: i.hsnCode || ""
+                        };
+                      }),
                       totalAmount: grandTotal,
                       amountPaid: Number(amountReceived) || 0,
                       balanceDue: grandTotal - (Number(amountReceived) || 0),
@@ -3533,6 +3689,19 @@ const Sales = () => {
                         taxAmount: i.gstRate ? (i.quantity * i.sellingPrice * i.gstRate) / (100 + i.gstRate) : 0
                       })),
                       additionalItems,
+                      customItems: customItems.map(i => {
+                        const gst = Number(i.gstRate !== undefined ? i.gstRate : i.taxRate) || 0;
+                        const lineTotal = (Number(i.quantity) || 1) * (Number(i.price) || 0);
+                        return {
+                          ...i,
+                          price: Number(i.price) || 0,
+                          quantity: Number(i.quantity) || 1,
+                          taxRate: gst,
+                          gstRate: gst,
+                          taxAmount: gst > 0 ? (lineTotal * gst) / (100 + gst) : 0,
+                          hsnCode: i.hsnCode || ""
+                        };
+                      }),
                       totalAmount: grandTotal,
                       amountPaid: Number(amountReceived) || 0,
                       balanceDue: grandTotal - (Number(amountReceived) || 0),

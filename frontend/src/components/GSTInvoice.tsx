@@ -90,16 +90,20 @@ const GSTInvoice: React.FC<GSTInvoiceProps> = ({
   });
 
   (sale.customItems || []).forEach((item: any) => {
-    const hsn = "N/A";
+    const taxRate = Number(item.taxRate !== undefined ? item.taxRate : item.gstRate) || 0;
+    const hsn = item.hsnCode || (taxRate > 0 ? `GST ${taxRate}%` : "N/A");
     const itemTotal = (Number(item.quantity) || 1) * Number(item.price);
-    const taxRate = 0;
+    const taxableValue = taxRate > 0 ? itemTotal / (1 + taxRate / 100) : itemTotal;
+    const totalTax = itemTotal - taxableValue;
     
     totalQty += Number(item.quantity) || 1;
 
     if (!hsnSummary[hsn]) {
       hsnSummary[hsn] = { taxable: 0, rate: taxRate, cgst: 0, sgst: 0 };
     }
-    hsnSummary[hsn].taxable += itemTotal;
+    hsnSummary[hsn].taxable += taxableValue;
+    hsnSummary[hsn].cgst += totalTax / 2;
+    hsnSummary[hsn].sgst += totalTax / 2;
   });
 
   const totalTaxable = Object.values(hsnSummary).reduce(
@@ -340,7 +344,11 @@ const GSTInvoice: React.FC<GSTInvoiceProps> = ({
                   </td>
                 </tr>
               ))}
-              {(sale.customItems || []).map((item: any, i: number) => (
+              {(sale.customItems || []).map((item: any, i: number) => {
+                const itemGst = Number(item.taxRate !== undefined ? item.taxRate : item.gstRate) || 0;
+                const lineTotal = (Number(item.quantity) || 1) * Number(item.price);
+                const taxableVal = itemGst > 0 ? (lineTotal * (100 / (100 + itemGst))) : lineTotal;
+                return (
                 <tr key={`custom-${i}`} className="align-top border-t border-black/10">
                   <td className="border-r border-black px-1 py-1 text-center font-bold">
                     {(sale.items?.length || 0) + i + 1}
@@ -349,8 +357,13 @@ const GSTInvoice: React.FC<GSTInvoiceProps> = ({
                     <p className="font-bold uppercase leading-tight text-[13px]">
                       {item.name}
                     </p>
+                    {itemGst > 0 && (
+                      <span className="text-[10px] text-gray-500 font-semibold block">
+                        GST: {itemGst}%
+                      </span>
+                    )}
                   </td>
-                  <td className="border-r border-black px-1 py-1 text-center">—</td>
+                  <td className="border-r border-black px-1 py-1 text-center">{item.hsnCode || "—"}</td>
                   <td className="border-r border-black px-1 py-1 text-center font-bold">{item.quantity}</td>
                   <td className="border-r border-black px-1 py-1 text-right font-bold">
                     {Number(item.price).toLocaleString("en-IN", {
@@ -358,10 +371,10 @@ const GSTInvoice: React.FC<GSTInvoiceProps> = ({
                     })}
                   </td>
                   <td className="px-1 py-1 text-right font-bold">
-                    {((Number(item.quantity) || 1) * Number(item.price)).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    {taxableVal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                   </td>
                 </tr>
-              ))}
+              );})}
               {(sale.additionalItems || []).length > 0 && (
                 <tr className="bg-gray-50 italic">
                   <td className="border-r border-black px-1 py-1 text-center font-bold"></td>

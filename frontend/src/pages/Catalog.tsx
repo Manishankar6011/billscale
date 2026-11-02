@@ -148,8 +148,10 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
 
   const categories = ["All", ...Array.from(new Set(data.products.map(p => p.category || "General")))];
   
+  const searchLower = (search || "").toLowerCase().trim();
   const filteredProducts = data.products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase());
+    if (!p) return false;
+    const matchesSearch = (p.name || "").toLowerCase().includes(searchLower);
     const matchesCategory = selectedCategory === "All" || (p.category || "General") === selectedCategory;
     return matchesSearch && matchesCategory;
   });
