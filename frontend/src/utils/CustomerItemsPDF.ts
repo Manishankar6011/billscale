@@ -13,7 +13,7 @@ interface CustomerItem {
 
 interface CustomerData {
   name: string;
-  phone: string;
+  phone?: string;
   address?: string;
 }
 
