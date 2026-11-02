@@ -309,6 +309,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     }
 
     // Add custom direct-sale items to totalAmount & totalProfit
+    const processedCustomItems = [];
     if (customItems && Array.isArray(customItems)) {
       for (const item of customItems) {
         const customPrice = Number(item.price) || 0;
@@ -317,8 +318,11 @@ export const processSale = async (req: AuthRequest, res: Response) => {
         const profitPercent = Number(item.profitPercent) || 0;
         const purchasePrice = Number(item.purchasePrice) || 0;
         const profitAmount = Number(item.profitAmount) || 0;
+        const itemTaxRate = Number(item.taxRate !== undefined ? item.taxRate : (item.gstRate !== undefined ? item.gstRate : 0)) || 0;
+        const itemTaxAmount = Number(item.taxAmount) || (itemTaxRate > 0 ? (lineTotal * itemTaxRate) / (100 + itemTaxRate) : 0);
 
         totalAmount += lineTotal;
+        totalTaxAmount += itemTaxAmount;
         if (purchasePrice > 0) {
           totalProfit += (customPrice - purchasePrice) * customQuantity;
         } else if (profitAmount > 0) {
@@ -326,6 +330,22 @@ export const processSale = async (req: AuthRequest, res: Response) => {
         } else {
           totalProfit += (lineTotal * profitPercent) / 100;
         }
+
+        processedCustomItems.push({
+          name: item.name,
+          price: customPrice,
+          quantity: customQuantity,
+          profitPercent: profitPercent,
+          mrp: Number(item.mrp) || customPrice,
+          purchasePrice: purchasePrice,
+          profitAmount: profitAmount,
+          taxRate: itemTaxRate,
+          taxAmount: itemTaxAmount,
+          gstRate: itemTaxRate,
+          hsnCode: item.hsnCode || "",
+          isTaxInclusive: item.isTaxInclusive !== false,
+          basePrice: item.basePrice !== undefined ? Number(item.basePrice) : undefined
+        });
       }
     }
 
@@ -366,7 +386,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
       invoiceNumber,
       items: processedItems,
       additionalItems: additionalItems || [],
-      customItems: customItems || [],
+      customItems: processedCustomItems,
       totalAmount,
       totalProfit,
       taxAmount: totalTaxAmount,
@@ -572,6 +592,7 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
       }
     }
 
+    const processedCustomItems = [];
     if (customItems && Array.isArray(customItems)) {
       for (const item of customItems) {
         const customPrice = Number(item.price) || 0;
@@ -580,8 +601,11 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
         const profitPercent = Number(item.profitPercent) || 0;
         const purchasePrice = Number(item.purchasePrice) || 0;
         const profitAmount = Number(item.profitAmount) || 0;
+        const itemTaxRate = Number(item.taxRate !== undefined ? item.taxRate : (item.gstRate !== undefined ? item.gstRate : 0)) || 0;
+        const itemTaxAmount = Number(item.taxAmount) || (itemTaxRate > 0 ? (lineTotal * itemTaxRate) / (100 + itemTaxRate) : 0);
 
         totalAmount += lineTotal;
+        totalTaxAmount += itemTaxAmount;
         if (purchasePrice > 0) {
           totalProfit += (customPrice - purchasePrice) * customQuantity;
         } else if (profitAmount > 0) {
@@ -589,6 +613,22 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
         } else {
           totalProfit += (lineTotal * profitPercent) / 100;
         }
+
+        processedCustomItems.push({
+          name: item.name,
+          price: customPrice,
+          quantity: customQuantity,
+          profitPercent: profitPercent,
+          mrp: Number(item.mrp) || customPrice,
+          purchasePrice: purchasePrice,
+          profitAmount: profitAmount,
+          taxRate: itemTaxRate,
+          taxAmount: itemTaxAmount,
+          gstRate: itemTaxRate,
+          hsnCode: item.hsnCode || "",
+          isTaxInclusive: item.isTaxInclusive !== false,
+          basePrice: item.basePrice !== undefined ? Number(item.basePrice) : undefined
+        });
       }
     }
 
@@ -618,7 +658,7 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
     oldSale.customerStateCode = customerStateCode || oldSale.customerStateCode;
     oldSale.items = processedItems;
     oldSale.additionalItems = additionalItems || [];
-    oldSale.customItems = customItems || [];
+    oldSale.customItems = processedCustomItems;
     oldSale.totalAmount = totalAmount;
     oldSale.totalProfit = totalProfit;
     oldSale.taxAmount = totalTaxAmount;

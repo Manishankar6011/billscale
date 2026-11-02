@@ -124,10 +124,13 @@ const Salary = () => {
     });
   };
 
-  const filteredStaff = staffList.filter(s =>
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.role.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const term = (searchTerm || "").toLowerCase().trim();
+  const filteredStaff = staffList.filter(s => {
+    if (!s) return false;
+    const name = (s.name || "").toLowerCase();
+    const role = (s.role || "").toLowerCase();
+    return name.includes(term) || role.includes(term);
+  });
 
   if (loading) return <TableSkeleton rows={10} />;
 

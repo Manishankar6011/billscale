@@ -27,7 +27,7 @@ interface Transaction {
 interface CustomerReportData {
   customer: {
     name: string;
-    phone: string;
+    phone?: string;
     address?: string;
     gstin?: string;
   };

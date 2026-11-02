@@ -130,9 +130,10 @@ export const generateInvoice = async (
 
         if (sale.customItems && sale.customItems.length > 0) {
             sale.customItems.forEach((item: any) => {
+                const itemGst = Number(item.taxRate !== undefined ? item.taxRate : item.gstRate) || 0;
                 tableRows.push([
-                    item.name,
-                    "-",
+                    itemGst > 0 ? `${item.name} (GST ${itemGst}%)` : item.name,
+                    item.hsnCode || "-",
                     `${item.quantity} unit`,
                     `Rs.${(item.price || 0).toFixed(2)}`,
                     `Rs.${((item.quantity || 1) * (item.price || 0)).toFixed(2)}`

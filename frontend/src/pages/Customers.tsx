@@ -52,8 +52,10 @@ interface LedgerEntry {
 interface CustomerData {
   _id: string;
   name: string;
-  phone: string;
+  phone?: string;
+  email?: string;
   address?: string;
+  gstin?: string;
   totalSales: number;
   totalAmount: number;
   totalPaid: number;
@@ -256,11 +258,20 @@ const Customers = () => {
     }
   };
 
-  const filtered = customers.filter(
-    (c) =>
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.phone.includes(search),
-  );
+  const searchLower = (search || "").toLowerCase().trim();
+  const filtered = customers.filter((c) => {
+    if (!c) return false;
+    const name = (c.name || "").toLowerCase();
+    const phone = (c.phone || "").toLowerCase();
+    const address = (c.address || "").toLowerCase();
+    const gstin = (c.gstin || "").toLowerCase();
+    return (
+      name.includes(searchLower) ||
+      phone.includes(searchLower) ||
+      address.includes(searchLower) ||
+      gstin.includes(searchLower)
+    );
+  });
 
   const totalCustomers = customers.length;
   const totalRevenue = customers.reduce((a, c) => a + c.totalAmount, 0);
@@ -722,7 +733,7 @@ const Customers = () => {
           >
             <div className="flex items-start justify-between mb-4">
               <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-primary-700 rounded-2xl flex items-center justify-center text-white font-black text-lg shadow-lg shadow-primary-100">
-                {c.name.charAt(0).toUpperCase()}
+                {(c.name || "C").charAt(0).toUpperCase()}
               </div>
               <div className="flex gap-2">
                 <button

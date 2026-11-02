@@ -106,11 +106,14 @@ const StaffPage = () => {
         saveMutation.mutate(formData);
     };
 
-    const filteredStaff = staffList.filter(staff => 
-        staff.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        staff.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        staff.phone?.includes(searchTerm)
-    );
+    const term = (searchTerm || "").toLowerCase().trim();
+    const filteredStaff = staffList.filter(staff => {
+        if (!staff) return false;
+        const name = (staff.name || "").toLowerCase();
+        const role = (staff.role || "").toLowerCase();
+        const phone = (staff.phone || "").toLowerCase();
+        return name.includes(term) || role.includes(term) || phone.includes(term);
+    });
 
     if (loading) return <TableSkeleton rows={10} />;
 
@@ -195,7 +198,7 @@ const StaffPage = () => {
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-3">
                                             <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-lg">
-                                                {staff.name.charAt(0).toUpperCase()}
+                                                {(staff.name || "S").charAt(0).toUpperCase()}
                                             </div>
                                             <div>
                                                 <p className="font-bold text-slate-800">{staff.name}</p>
