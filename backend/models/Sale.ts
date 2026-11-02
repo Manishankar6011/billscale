@@ -159,7 +159,9 @@ const saleSchema: Schema = new mongoose.Schema({
         taxRate: { type: Number, default: 0 },
         taxAmount: { type: Number, default: 0 },
         gstRate: { type: Number, default: 0 },
-        hsnCode: { type: String, trim: true, default: '' }
+        hsnCode: { type: String, trim: true, default: '' },
+        isTaxInclusive: { type: Boolean, default: true },
+        basePrice: { type: Number }
     }],
     invoiceNumber: {
         type: String,

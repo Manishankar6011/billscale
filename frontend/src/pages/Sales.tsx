@@ -485,7 +485,21 @@ const Sales = () => {
     { name: string; price: string; profitPercent: string; mrp?: string; purchasePrice?: string; profitAmount?: string }[]
   >([]);
   const [customItems, setCustomItems] = useState<
-    { name: string; price: string; quantity: string; profitPercent: string; mrp?: string; purchasePrice?: string; profitAmount?: string; gstRate?: string; taxRate?: string; taxAmount?: string; hsnCode?: string }[]
+    {
+      name: string;
+      price: string;
+      quantity: string;
+      profitPercent: string;
+      mrp?: string;
+      purchasePrice?: string;
+      profitAmount?: string;
+      gstRate?: string;
+      taxRate?: string;
+      taxAmount?: string;
+      hsnCode?: string;
+      isTaxInclusive?: boolean;
+      basePrice?: string;
+    }[]
   >([]);
 
   // Item-Add modal (removed itemsModalMode from here)
@@ -506,6 +520,7 @@ const Sales = () => {
   const [newCustomPurchasePrice, setNewCustomPurchasePrice] = useState("");
   const [newCustomGstRate, setNewCustomGstRate] = useState("0");
   const [isCustomGst, setIsCustomGst] = useState(false);
+  const [customGstType, setCustomGstType] = useState<"exclusive" | "inclusive">("exclusive");
   const [newCustomHsnCode, setNewCustomHsnCode] = useState("");
 
   // Cart cost visibility toggle (default hidden as per user requirement)
@@ -619,6 +634,7 @@ const Sales = () => {
     setNewCustomPurchasePrice("");
     setNewCustomGstRate("0");
     setIsCustomGst(false);
+    setCustomGstType("exclusive");
     setNewCustomHsnCode("");
     setShowCartCost(false);
     setRevealedCosts({});
@@ -693,12 +709,22 @@ const Sales = () => {
   const effectiveCart = cart;
 
   // Grand total calculations
+  const directItemPendingTotal = (() => {
+    if (!newCustomName || (!newCustomPrice && !newCustomMrp)) return 0;
+    const p = Number(newCustomPrice || newCustomMrp) || 0;
+    const q = Number(newCustomQuantity) || 1;
+    const gst = Number(newCustomGstRate) || 0;
+    const isExcl = customGstType === "exclusive" && gst > 0;
+    const unitP = isExcl ? Number((p * (1 + gst / 100)).toFixed(2)) : p;
+    return unitP * q;
+  })();
+
   const rawTotal =
     effectiveCart.reduce((acc, item) => acc + item.quantity * item.sellingPrice, 0) +
     additionalItems.reduce((acc, item) => acc + (Number(item.price) || 0), 0) +
     customItems.reduce((acc, item) => acc + (Number(item.price) || 0) * (Number(item.quantity) || 1), 0) +
     (newChargeName && newChargePrice ? (Number(newChargePrice) || 0) : 0) +
-    (newCustomName && newCustomPrice ? (Number(newCustomPrice) || 0) * (Number(newCustomQuantity) || 1) : 0);
+    directItemPendingTotal;
   const specialDiscAmt = Number(specialDiscountAmount) || 0;
   const roundOffAmount = roundOff ? Math.round((Math.round(rawTotal - specialDiscAmt) - (rawTotal - specialDiscAmt)) * 100) / 100 : 0;
   const grandTotal = Math.max(0, Math.round((rawTotal + roundOffAmount - specialDiscAmt) * 100) / 100);
@@ -926,6 +952,8 @@ const Sales = () => {
           const gst = Number(i.gstRate !== undefined ? i.gstRate : i.taxRate) || 0;
           const lineTotal = (Number(i.quantity) || 1) * (Number(i.price) || 0);
           const taxAmt = gst > 0 ? (lineTotal * gst) / (100 + gst) : 0;
+          const isTaxInclusive = i.isTaxInclusive !== false;
+          const basePrice = i.basePrice !== undefined ? Number(i.basePrice) : (isTaxInclusive && gst > 0 ? Number((Number(i.price) / (1 + gst / 100)).toFixed(2)) : Number(i.price));
           return {
             name: i.name,
             price: Number(i.price) || 0,
@@ -938,37 +966,43 @@ const Sales = () => {
             taxRate: gst,
             taxAmount: taxAmt,
             hsnCode: i.hsnCode || "",
+            isTaxInclusive,
+            basePrice,
           };
         }),
         ...(newCustomName && (newCustomPrice || newCustomMrp)
           ? [
               (() => {
-                const price = Number(newCustomPrice || newCustomMrp) || 0;
+                const enteredPrice = Number(newCustomPrice || newCustomMrp) || 0;
                 const cost = Number(newCustomPurchasePrice) || 0;
                 const qty = Number(newCustomQuantity) || 1;
                 const gst = Number(newCustomGstRate) || 0;
-                const lineTotal = price * qty;
+                const isExcl = customGstType === "exclusive" && gst > 0;
+                const effectiveUnitPrice = isExcl ? Number((enteredPrice * (1 + gst / 100)).toFixed(2)) : enteredPrice;
+                const lineTotal = effectiveUnitPrice * qty;
                 const taxAmt = gst > 0 ? (lineTotal * gst) / (100 + gst) : 0;
                 let pAmt = 0;
                 let pPct = Number(newCustomProfitPercent) || 0;
                 if (cost > 0) {
-                  pAmt = (price - cost) * qty;
-                  pPct = ((price - cost) / cost) * 100;
+                  pAmt = (effectiveUnitPrice - cost) * qty;
+                  pPct = ((effectiveUnitPrice - cost) / cost) * 100;
                 } else {
-                  pAmt = (price * qty * pPct) / 100;
+                  pAmt = (effectiveUnitPrice * qty * pPct) / 100;
                 }
                 return {
                   name: newCustomName,
-                  price: price,
+                  price: effectiveUnitPrice,
                   quantity: qty,
                   profitPercent: Number(pPct.toFixed(1)),
-                  mrp: Number(newCustomMrp) || price,
+                  mrp: Number(newCustomMrp) || effectiveUnitPrice,
                   purchasePrice: cost,
                   profitAmount: Number((pAmt / qty).toFixed(2)),
                   gstRate: gst,
                   taxRate: gst,
                   taxAmount: taxAmt,
                   hsnCode: newCustomHsnCode.trim(),
+                  isTaxInclusive: !isExcl,
+                  basePrice: enteredPrice,
                 };
               })(),
             ]
@@ -1614,6 +1648,8 @@ const Sales = () => {
         taxRate: (i.taxRate !== undefined ? i.taxRate : (i as any).gstRate !== undefined ? (i as any).gstRate : 0).toString(),
         taxAmount: (i.taxAmount || 0).toString(),
         hsnCode: (i as any).hsnCode || "",
+        isTaxInclusive: (i as any).isTaxInclusive !== false,
+        basePrice: (i as any).basePrice !== undefined ? (i as any).basePrice.toString() : i.price.toString(),
       })),
     );
     setIsModalOpen(true);
@@ -2857,7 +2893,7 @@ const Sales = () => {
                             </p>
                             {Number(item.gstRate) > 0 && (
                               <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-                                GST: {item.gstRate}% {item.hsnCode ? `(HSN: ${item.hsnCode})` : ""}
+                                GST: {item.gstRate}% {item.isTaxInclusive === false ? `(+GST, Base ₹${item.basePrice || item.price})` : `(Incl.)`} {item.hsnCode ? `(HSN: ${item.hsnCode})` : ""}
                               </span>
                             )}
                           </div>
@@ -3049,14 +3085,42 @@ const Sales = () => {
                       {(newCustomPrice || newCustomMrp) && (
                         <div className="flex items-center gap-2 flex-wrap">
                           {Number(newCustomGstRate) > 0 && (
-                            <span className="text-[10px] font-black px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full">
-                              GST ({newCustomGstRate}%): ₹
-                              {(() => {
-                                const price = Number(newCustomPrice || newCustomMrp) || 0;
-                                const qty = Number(newCustomQuantity) || 1;
-                                const gst = Number(newCustomGstRate) || 0;
-                                return ((price * qty * gst) / (100 + gst)).toFixed(1);
-                              })()}
+                            <span className="text-[10px] font-black px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full flex items-center gap-1">
+                              {customGstType === "exclusive" ? (
+                                <>
+                                  <span>+GST ({newCustomGstRate}%): ₹{(() => {
+                                    const price = Number(newCustomPrice || newCustomMrp) || 0;
+                                    const qty = Number(newCustomQuantity) || 1;
+                                    const gst = Number(newCustomGstRate) || 0;
+                                    return ((price * qty * gst) / 100).toFixed(1);
+                                  })()}</span>
+                                  <span className="text-blue-500 font-medium">
+                                    (Final: ₹{(() => {
+                                      const price = Number(newCustomPrice || newCustomMrp) || 0;
+                                      const qty = Number(newCustomQuantity) || 1;
+                                      const gst = Number(newCustomGstRate) || 0;
+                                      return ((price * (1 + gst / 100)) * qty).toFixed(1);
+                                    })()})
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <span>Incl. GST ({newCustomGstRate}%): ₹{(() => {
+                                    const price = Number(newCustomPrice || newCustomMrp) || 0;
+                                    const qty = Number(newCustomQuantity) || 1;
+                                    const gst = Number(newCustomGstRate) || 0;
+                                    return ((price * qty * gst) / (100 + gst)).toFixed(1);
+                                  })()}</span>
+                                  <span className="text-blue-500 font-medium">
+                                    (Net Base: ₹{(() => {
+                                      const price = Number(newCustomPrice || newCustomMrp) || 0;
+                                      const qty = Number(newCustomQuantity) || 1;
+                                      const gst = Number(newCustomGstRate) || 0;
+                                      return ((price * qty * 100) / (100 + gst)).toFixed(1);
+                                    })()})
+                                  </span>
+                                </>
+                              )}
                             </span>
                           )}
                           <span className="text-[10px] font-black px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full">
@@ -3158,12 +3222,37 @@ const Sales = () => {
 
                       {/* GST Rate (%) Option */}
                       <div className="md:col-span-2 space-y-1">
-                        <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest flex items-center justify-between">
-                          <span>GST Option</span>
-                          {Number(newCustomGstRate) > 0 && (
-                            <span className="text-[9px] font-bold text-blue-600 lowercase">(incl.)</span>
-                          )}
-                        </label>
+                        <div className="flex items-center justify-between">
+                          <label className="text-[9px] font-black text-blue-700 ml-1 uppercase tracking-widest">
+                            GST Rate
+                          </label>
+                          <div className="inline-flex rounded-md p-0.5 bg-blue-100 border border-blue-200">
+                            <button
+                              type="button"
+                              onClick={() => setCustomGstType("exclusive")}
+                              className={`px-1.5 py-0.5 text-[9px] font-black rounded transition-all ${
+                                customGstType === "exclusive"
+                                  ? "bg-blue-600 text-white shadow-xs"
+                                  : "text-blue-700 hover:text-blue-900"
+                              }`}
+                              title="Exclusive: Price + GST (e.g. ₹100 + 18% = ₹118)"
+                            >
+                              + GST
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCustomGstType("inclusive")}
+                              className={`px-1.5 py-0.5 text-[9px] font-black rounded transition-all ${
+                                customGstType === "inclusive"
+                                  ? "bg-blue-600 text-white shadow-xs"
+                                  : "text-blue-700 hover:text-blue-900"
+                              }`}
+                              title="Inclusive: Price includes GST (e.g. ₹100 incl. 18%)"
+                            >
+                              Incl.
+                            </button>
+                          </div>
+                        </div>
                         {isCustomGst ? (
                           <div className="flex items-center gap-1">
                             <input
@@ -3288,34 +3377,38 @@ const Sales = () => {
                             const price = newCustomPrice || newCustomMrp;
                             if (newCustomName && price) {
                               const cost = Number(newCustomPurchasePrice) || 0;
-                              const rate = Number(price) || 0;
+                              const enteredRate = Number(price) || 0;
                               const qty = Number(newCustomQuantity) || 1;
                               const gst = Number(newCustomGstRate) || 0;
-                              const lineTotal = rate * qty;
+                              const isExcl = customGstType === "exclusive" && gst > 0;
+                              const effectiveUnitPrice = isExcl ? Number((enteredRate * (1 + gst / 100)).toFixed(2)) : enteredRate;
+                              const lineTotal = effectiveUnitPrice * qty;
                               const taxAmt = gst > 0 ? (lineTotal * gst) / (100 + gst) : 0;
                               let pAmt = 0;
                               let pPct = Number(newCustomProfitPercent) || 0;
                               if (cost > 0) {
-                                pAmt = (rate - cost) * qty;
-                                pPct = ((rate - cost) / cost) * 100;
+                                pAmt = (effectiveUnitPrice - cost) * qty;
+                                pPct = ((effectiveUnitPrice - cost) / cost) * 100;
                               } else {
-                                pAmt = ((rate * qty) * pPct) / 100;
+                                pAmt = ((effectiveUnitPrice * qty) * pPct) / 100;
                               }
 
                               setCustomItems((prev) => [
                                 ...prev,
                                 {
                                   name: newCustomName,
-                                  price: price,
+                                  price: effectiveUnitPrice.toString(),
                                   quantity: newCustomQuantity || "1",
                                   profitPercent: pPct.toFixed(1),
-                                  mrp: newCustomMrp || price,
+                                  mrp: newCustomMrp ? (isExcl ? Number((Number(newCustomMrp) * (1 + gst / 100)).toFixed(2)).toString() : newCustomMrp) : effectiveUnitPrice.toString(),
                                   purchasePrice: newCustomPurchasePrice || "0",
                                   profitAmount: (pAmt / qty).toFixed(2),
                                   gstRate: gst.toString(),
                                   taxRate: gst.toString(),
                                   taxAmount: taxAmt.toFixed(2),
                                   hsnCode: newCustomHsnCode.trim(),
+                                  isTaxInclusive: !isExcl,
+                                  basePrice: enteredRate.toString(),
                                 },
                               ]);
                               setNewCustomName("");
@@ -3326,6 +3419,7 @@ const Sales = () => {
                               setNewCustomProfitPercent("0");
                               setNewCustomGstRate("0");
                               setIsCustomGst(false);
+                              setCustomGstType("exclusive");
                               setNewCustomHsnCode("");
                             }
                           }}
@@ -3595,7 +3689,9 @@ const Sales = () => {
                           taxRate: gst,
                           gstRate: gst,
                           taxAmount: gst > 0 ? (lineTotal * gst) / (100 + gst) : 0,
-                          hsnCode: i.hsnCode || ""
+                          hsnCode: i.hsnCode || "",
+                          isTaxInclusive: i.isTaxInclusive !== false,
+                          basePrice: i.basePrice ? Number(i.basePrice) : Number(i.price)
                         };
                       }),
                       totalAmount: grandTotal,
@@ -3646,7 +3742,9 @@ const Sales = () => {
                           taxRate: gst,
                           gstRate: gst,
                           taxAmount: gst > 0 ? (lineTotal * gst) / (100 + gst) : 0,
-                          hsnCode: i.hsnCode || ""
+                          hsnCode: i.hsnCode || "",
+                          isTaxInclusive: i.isTaxInclusive !== false,
+                          basePrice: i.basePrice ? Number(i.basePrice) : Number(i.price)
                         };
                       }),
                       totalAmount: grandTotal,
@@ -3699,7 +3797,9 @@ const Sales = () => {
                           taxRate: gst,
                           gstRate: gst,
                           taxAmount: gst > 0 ? (lineTotal * gst) / (100 + gst) : 0,
-                          hsnCode: i.hsnCode || ""
+                          hsnCode: i.hsnCode || "",
+                          isTaxInclusive: i.isTaxInclusive !== false,
+                          basePrice: i.basePrice ? Number(i.basePrice) : Number(i.price)
                         };
                       }),
                       totalAmount: grandTotal,

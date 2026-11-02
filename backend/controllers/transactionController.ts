@@ -342,7 +342,9 @@ export const processSale = async (req: AuthRequest, res: Response) => {
           taxRate: itemTaxRate,
           taxAmount: itemTaxAmount,
           gstRate: itemTaxRate,
-          hsnCode: item.hsnCode || ""
+          hsnCode: item.hsnCode || "",
+          isTaxInclusive: item.isTaxInclusive !== false,
+          basePrice: item.basePrice !== undefined ? Number(item.basePrice) : undefined
         });
       }
     }
@@ -623,7 +625,9 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
           taxRate: itemTaxRate,
           taxAmount: itemTaxAmount,
           gstRate: itemTaxRate,
-          hsnCode: item.hsnCode || ""
+          hsnCode: item.hsnCode || "",
+          isTaxInclusive: item.isTaxInclusive !== false,
+          basePrice: item.basePrice !== undefined ? Number(item.basePrice) : undefined
         });
       }
     }
