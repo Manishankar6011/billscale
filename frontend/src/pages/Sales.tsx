@@ -411,8 +411,8 @@ const Sales = () => {
 
     // Also index in barcodeLocalMap for instant 0ms lookups
     map.forEach((p) => {
-      if (p.barcode) barcodeLocalMap.current.set(p.barcode.trim(), p);
-      if (p.subUnitBarcode) barcodeLocalMap.current.set(p.subUnitBarcode.trim(), p);
+      if (p.barcode && p.barcode.trim()) barcodeLocalMap.current.set(p.barcode.trim(), p);
+      if (p.subUnitBarcode && p.subUnitBarcode.trim()) barcodeLocalMap.current.set(p.subUnitBarcode.trim(), p);
     });
 
     return Array.from(map.values());
@@ -718,11 +718,13 @@ const Sales = () => {
         setScannedProducts([]);
         setItemQtyMap({});
         setItemPriceMap({});
+        setSelectedProducts({});
       });
       setShowLeaveWarning(true);
     } else {
       setItemsModalMode(null);
       setScannedProducts([]);
+      setSelectedProducts({});
     }
   };
 
@@ -1196,6 +1198,13 @@ const Sales = () => {
   const addQuickItem = useCallback(
     (product: Product) => {
       const pid = product._id!;
+      if (product.barcode && product.barcode.trim()) {
+        barcodeLocalMap.current.set(product.barcode.trim(), product);
+      }
+      if (product.subUnitBarcode && product.subUnitBarcode.trim()) {
+        barcodeLocalMap.current.set(product.subUnitBarcode.trim(), product);
+      }
+      setSelectedProducts((prev) => ({ ...prev, [pid]: product }));
       setCart((prev) => {
         const existingIndex = prev.findIndex((item) => item.productId === pid && !item.isSubUnit);
         if (existingIndex !== -1) {
@@ -1262,29 +1271,35 @@ const Sales = () => {
         );
       }
 
-      // 3. If in modal with search results, check top search result
-      if (!product && displayItems.length > 0 && itemSearch.trim()) {
-        product = displayItems[0];
-      }
-
       let isSubUnitScan = false;
 
-      // 4. Fallback to API by barcode
+      // 3. Fallback to API by exact barcode
       if (!product) {
         try {
           const res = await axios.get(`/api/inventory/barcode/${encodeURIComponent(trimmedCode)}`, {
             headers: { Authorization: `Bearer ${user?.token}` },
           });
-          product = res.data;
+          if (res.data && res.data._id) {
+            product = res.data;
+          }
         } catch (err) {
-          // 5. Fallback to API by search
+          // 4. Fallback to API by search
           try {
             const searchRes = await axios.get<PaginatedResponse<Product>>(`/api/inventory`, {
               params: { search: trimmedCode, limit: 1 },
               headers: { Authorization: `Bearer ${user?.token}` },
             });
             if (searchRes.data?.products?.length > 0) {
-              product = searchRes.data.products[0];
+              const matched = searchRes.data.products[0];
+              if (matched) {
+                const b = (matched.barcode || "").trim().toLowerCase();
+                const sb = (matched.subUnitBarcode || "").trim().toLowerCase();
+                const n = (matched.name || "").trim().toLowerCase();
+                const q = trimmedCode.toLowerCase();
+                if (b === q || sb === q || n === q || n.includes(q)) {
+                  product = matched;
+                }
+              }
             }
           } catch (e) {
             // ignore
@@ -1292,20 +1307,32 @@ const Sales = () => {
         }
       }
 
-      if (!product) {
+      if (!product || !product._id) {
         showToast(`Item "${trimmedCode}" not found`, "error");
         return;
       }
 
-      barcodeLocalMap.current.set(trimmedCode, product);
-      if (product.barcode) barcodeLocalMap.current.set(product.barcode.trim(), product);
-      if (product.subUnitBarcode) barcodeLocalMap.current.set(product.subUnitBarcode.trim(), product);
+      const pid = product._id;
+      isSubUnitScan = Boolean(
+        product.hasSubUnit &&
+        product.subUnitBarcode &&
+        product.subUnitBarcode.trim() === trimmedCode
+      );
+
+      if (product.barcode && product.barcode.trim()) {
+        barcodeLocalMap.current.set(product.barcode.trim(), product);
+      }
+      if (product.subUnitBarcode && product.subUnitBarcode.trim()) {
+        barcodeLocalMap.current.set(product.subUnitBarcode.trim(), product);
+      }
+      setSelectedProducts((prev) => ({
+        ...prev,
+        [pid]: product!,
+      }));
       setHwScannerInput("");
-      const pid = product._id!;
-      isSubUnitScan = Boolean(product.hasSubUnit && product.subUnitBarcode === trimmedCode);
 
       if (itemsModalMode !== null) {
-        // Add to scannedProducts so it appears in list
+        // Add to scannedProducts so it appears at top of list
         setScannedProducts((prev) => {
           const others = prev.filter((p) => p._id !== pid);
           return [product!, ...others];
@@ -1323,10 +1350,6 @@ const Sales = () => {
           [pid]: isSubUnitScan
             ? (product!.subUnitSalePrice || product!.pricePerUnit).toString()
             : product!.pricePerUnit.toString(),
-        }));
-        setSelectedProducts((prev) => ({
-          ...prev,
-          [pid]: product!,
         }));
         setItemSearch("");
         showToast(`${product.name} added to list`, "success");
@@ -1375,17 +1398,18 @@ const Sales = () => {
     },
     [
       allProductsList,
-      displayItems,
-      itemSearch,
       user?.token,
       showToast,
       itemsModalMode,
       setItemQtyMap,
+      setItemUnitMap,
       setItemPriceMap,
       setItemSearch,
       setCart,
       setIsScannerOpen,
       setHwScannerInput,
+      setSelectedProducts,
+      setScannedProducts,
     ],
   );
 
@@ -1496,6 +1520,7 @@ const Sales = () => {
       });
       return updatedCart;
     });
+    setScannedProducts([]);
     setItemQtyMap({});
     setItemPriceMap({});
     setSelectedProducts({});
@@ -4318,7 +4343,13 @@ const Sales = () => {
                       if (displayItems.length > 0 && matchingCount > 0 && displayItems[0]) {
                         const topMatch = displayItems[0];
                         const pid = topMatch._id!;
-                        const isSub = Boolean(topMatch.hasSubUnit && topMatch.subUnitBarcode === q);
+                        const isSub = Boolean(topMatch.hasSubUnit && topMatch.subUnitBarcode?.trim() === q);
+                        if (topMatch.barcode && topMatch.barcode.trim()) {
+                          barcodeLocalMap.current.set(topMatch.barcode.trim(), topMatch);
+                        }
+                        if (topMatch.subUnitBarcode && topMatch.subUnitBarcode.trim()) {
+                          barcodeLocalMap.current.set(topMatch.subUnitBarcode.trim(), topMatch);
+                        }
                         setScannedProducts((prev) => {
                           const others = prev.filter((p) => p._id !== pid);
                           return [topMatch, ...others];
