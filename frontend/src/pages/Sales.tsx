@@ -249,6 +249,14 @@ const Sales = () => {
   const [scannedProducts, setScannedProducts] = useState<Product[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<Record<string, Product>>({});
   const [itemsModalMode, setItemsModalMode] = useState<"all" | "scan" | null>(null);
+  const [itemQtyMap, setItemQtyMap] = useState<Record<string, string>>({});
+  const [itemPriceMap, setItemPriceMap] = useState<Record<string, string>>({});
+  const [itemUnitMap, setItemUnitMap] = useState<Record<string, 'unit' | 'subunit'>>({});
+
+  // Quick item search on the New Sale form
+  const [quickSearch, setQuickSearch] = useState("");
+  const [isQuickSearchOpen, setIsQuickSearchOpen] = useState(false);
+  const quickSearchWrapperRef = useRef<HTMLDivElement>(null);
 
   // Debounce search terms
   useEffect(() => {
@@ -257,7 +265,7 @@ const Sales = () => {
   }, [filterSearch]);
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedItemSearch(itemSearch), 500);
+    const timer = setTimeout(() => setDebouncedItemSearch(itemSearch), 200);
     return () => clearTimeout(timer);
   }, [itemSearch]);
 
@@ -351,7 +359,7 @@ const Sales = () => {
         {
           params: {
             page: pageParam,
-            limit: 20,
+            limit: 100,
             search: debouncedItemSearch,
           },
           headers: { Authorization: `Bearer ${user?.token}` },
@@ -369,22 +377,135 @@ const Sales = () => {
     enabled: !!user?.token,
   });
 
-  const products = useMemo(() => {
-    // If in scan mode and no search query, show ONLY scanned items
-    if (itemsModalMode === "scan" && !itemSearch) {
-      return scannedProducts;
+  // Fast unified product catalog: merges all pages, query client cache, scannedProducts, selectedProducts
+  const allProductsList = useMemo(() => {
+    const map = new Map<string, Product>();
+
+    // Add query cache items
+    const cachedQueries = queryClient.getQueriesData<InfiniteData<PaginatedResponse<Product>>>({ queryKey: ["inventory"] });
+    cachedQueries.forEach(([_, data]) => {
+      data?.pages?.forEach((page) => {
+        page.products?.forEach((p) => {
+          if (p._id && !map.has(p._id)) map.set(p._id, p);
+        });
+      });
+    });
+
+    // Add current query results
+    productsData?.pages.forEach((page) => {
+      page.products.forEach((p) => {
+        if (p._id && !map.has(p._id)) map.set(p._id, p);
+      });
+    });
+
+    // Add scanned products
+    scannedProducts.forEach((p) => {
+      if (p._id && !map.has(p._id)) map.set(p._id, p);
+    });
+
+    // Add selected products
+    Object.values(selectedProducts).forEach((p) => {
+      if (p._id && !map.has(p._id)) map.set(p._id, p);
+    });
+
+    // Also index in barcodeLocalMap for instant 0ms lookups
+    map.forEach((p) => {
+      if (p.barcode) barcodeLocalMap.current.set(p.barcode.trim(), p);
+      if (p.subUnitBarcode) barcodeLocalMap.current.set(p.subUnitBarcode.trim(), p);
+    });
+
+    return Array.from(map.values());
+  }, [productsData, scannedProducts, selectedProducts, queryClient]);
+
+  // Instant Search & Display logic for Item Modal
+  // Rule: Searched items come FIRST; previously added items come BELOW (nichhe)
+  const { displayItems, matchingCount, addedCount } = useMemo(() => {
+    const query = (itemSearch || "").trim().toLowerCase();
+
+    // When NO search query:
+    if (!query) {
+      if (itemsModalMode === "scan") {
+        return { displayItems: scannedProducts, matchingCount: 0, addedCount: scannedProducts.length };
+      }
+      // "all" mode without search: show already selected/added items first, then the rest
+      const added: Product[] = [];
+      const unadded: Product[] = [];
+      const seen = new Set<string>();
+
+      allProductsList.forEach((p) => {
+        if (!p._id || seen.has(p._id)) return;
+        seen.add(p._id);
+        const isAdded = Boolean(Number(itemQtyMap[p._id] || 0) > 0 || scannedProducts.some((sp) => sp._id === p._id));
+        if (isAdded) added.push(p);
+        else unadded.push(p);
+      });
+
+      return {
+        displayItems: [...added, ...unadded],
+        matchingCount: 0,
+        addedCount: added.length,
+      };
     }
 
-    const flatProducts = productsData?.pages.flatMap((page) => page.products) || [];
-    // Combine scanned products and query results, avoiding duplicates
-    const combined = [...scannedProducts];
-    flatProducts.forEach(p => {
-      if (!combined.find(s => s._id === p._id)) {
-        combined.push(p);
+    // When user IS searching:
+    // 1. Matching searched items FIRST (scored and sorted by relevance)
+    const matching: { product: Product; score: number }[] = [];
+    const matchedIds = new Set<string>();
+
+    allProductsList.forEach((p) => {
+      if (!p._id) return;
+      const name = (p.name || "").toLowerCase().trim();
+      const barcode = (p.barcode || "").toLowerCase().trim();
+      const subBarcode = (p.subUnitBarcode || "").toLowerCase().trim();
+      const batch = (p.batchNumber || "").toLowerCase().trim();
+
+      let score = 0;
+      if (barcode === query || subBarcode === query) {
+        score = 10000; // Exact barcode match
+      } else if (name === query) {
+        score = 5000; // Exact name match
+      } else if (name.startsWith(query)) {
+        score = 3000; // Starts with name
+      } else if (barcode.startsWith(query) || subBarcode.startsWith(query)) {
+        score = 2500;
+      } else if (name.split(/\s+/).some((w) => w.startsWith(query))) {
+        score = 2000; // Word in name starts with query
+      } else if (name.includes(query)) {
+        score = 1000; // Name contains query
+      } else if (barcode.includes(query) || subBarcode.includes(query)) {
+        score = 500; // Barcode contains query
+      } else if (batch && batch.includes(query)) {
+        score = 200; // Batch match
+      }
+
+      if (score > 0) {
+        matchedIds.add(p._id);
+        matching.push({ product: p, score });
       }
     });
-    return combined;
-  }, [productsData, scannedProducts, itemsModalMode, itemSearch]);
+
+    matching.sort((a, b) => b.score - a.score);
+    const sortedMatches = matching.map((m) => m.product);
+
+    // 2. Already added items that DO NOT match the search query (added wala nichhe)
+    const addedNonMatching: Product[] = [];
+    allProductsList.forEach((p) => {
+      if (!p._id || matchedIds.has(p._id)) return;
+      const isAdded = Boolean(Number(itemQtyMap[p._id] || 0) > 0 || scannedProducts.some((sp) => sp._id === p._id));
+      if (isAdded) {
+        addedNonMatching.push(p);
+      }
+    });
+
+    return {
+      displayItems: [...sortedMatches, ...addedNonMatching],
+      matchingCount: sortedMatches.length,
+      addedCount: addedNonMatching.length,
+    };
+  }, [itemSearch, itemsModalMode, allProductsList, itemQtyMap, scannedProducts]);
+
+  // Keep `products` referencing `displayItems` for any consumers
+  const products = displayItems;
 
   // Infinite Scroll Observers
   const salesObserver = useRef<IntersectionObserver | null>(null);
@@ -503,10 +624,6 @@ const Sales = () => {
   >([]);
 
   // Item-Add modal (removed itemsModalMode from here)
-
-  const [itemQtyMap, setItemQtyMap] = useState<Record<string, string>>({});
-  const [itemPriceMap, setItemPriceMap] = useState<Record<string, string>>({});
-  const [itemUnitMap, setItemUnitMap] = useState<Record<string, 'unit' | 'subunit'>>({});
   // Additional charge inputs (new)
   const [newChargeName, setNewChargeName] = useState("");
   const [newChargePrice, setNewChargePrice] = useState("");
@@ -1039,6 +1156,84 @@ const Sales = () => {
     }
   };
 
+  // Click outside to close quick search dropdown
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (quickSearchWrapperRef.current && !quickSearchWrapperRef.current.contains(e.target as Node)) {
+        setIsQuickSearchOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Quick item search on billing form
+  const quickSearchResults = useMemo(() => {
+    const q = quickSearch.trim().toLowerCase();
+    if (!q) return [];
+    const scored: { product: Product; score: number }[] = [];
+    allProductsList.forEach((p) => {
+      if (!p._id) return;
+      const name = (p.name || "").toLowerCase().trim();
+      const barcode = (p.barcode || "").toLowerCase().trim();
+      const subBarcode = (p.subUnitBarcode || "").toLowerCase().trim();
+
+      let score = 0;
+      if (barcode === q || subBarcode === q) score = 10000;
+      else if (name === q) score = 5000;
+      else if (name.startsWith(q)) score = 3000;
+      else if (barcode.startsWith(q) || subBarcode.startsWith(q)) score = 2500;
+      else if (name.split(/\s+/).some((w) => w.startsWith(q))) score = 2000;
+      else if (name.includes(q)) score = 1000;
+      else if (barcode.includes(q) || subBarcode.includes(q)) score = 500;
+
+      if (score > 0) scored.push({ product: p, score });
+    });
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, 8).map((s) => s.product);
+  }, [quickSearch, allProductsList]);
+
+  const addQuickItem = useCallback(
+    (product: Product) => {
+      const pid = product._id!;
+      setCart((prev) => {
+        const existingIndex = prev.findIndex((item) => item.productId === pid && !item.isSubUnit);
+        if (existingIndex !== -1) {
+          const item = prev[existingIndex]!;
+          const others = prev.filter((_, idx) => idx !== existingIndex);
+          return [{ ...item, quantity: item.quantity + 1 }, ...others];
+        }
+        return [
+          {
+            productId: pid,
+            name: product.name,
+            quantity: 1,
+            unit: product.unit,
+            conversionFactor: 1,
+            sellingPrice: product.pricePerUnit,
+            originalSellingPrice: product.pricePerUnit,
+            discountPercent:
+              product.mrp && product.pricePerUnit && product.mrp >= product.pricePerUnit
+                ? parseFloat(((1 - product.pricePerUnit / product.mrp) * 100).toFixed(2))
+                : 0,
+            purchasePrice: product.purchasePrice,
+            mrp: product.mrp || 0,
+            hsnCode: product.hsnCode,
+            gstRate: product.gstRate,
+            batchNumber: product.batchNumber,
+            expiryDate: product.expiryDate ? format(new Date(product.expiryDate), "dd MMM yy") : undefined,
+            isSubUnit: false,
+          },
+          ...prev,
+        ];
+      });
+      setQuickSearch("");
+      setIsQuickSearchOpen(false);
+      showToast(`${product.name} added to bill`, "success");
+    },
+    [showToast]
+  );
+
   const handleScan = useCallback(
     async (code: string) => {
       const trimmedCode = code.trim();
@@ -1051,48 +1246,30 @@ const Sales = () => {
       // 0. Check in-memory fast map
       let product = barcodeLocalMap.current.get(trimmedCode);
 
-      // 1. Check already scanned products
+      // 1. Check all loaded products by barcode or subunit barcode
       if (!product) {
-        product = scannedProducts.find(
-          (p) => (p.barcode && p.barcode.trim() === trimmedCode) || (p.subUnitBarcode && p.subUnitBarcode.trim() === trimmedCode)
+        product = allProductsList.find(
+          (p) =>
+            (p.barcode && p.barcode.trim() === trimmedCode) ||
+            (p.subUnitBarcode && p.subUnitBarcode.trim() === trimmedCode)
         );
       }
 
-      // 2. Check loaded pages in current inventory query
-      if (!product && productsData?.pages) {
-        for (const page of productsData.pages) {
-          const match = page.products.find(
-            (p) => (p.barcode && p.barcode.trim() === trimmedCode) || (p.subUnitBarcode && p.subUnitBarcode.trim() === trimmedCode)
-          );
-          if (match) {
-            product = match;
-            break;
-          }
-        }
+      // 2. Check all loaded products by exact name (case-insensitive)
+      if (!product) {
+        product = allProductsList.find(
+          (p) => p.name && p.name.trim().toLowerCase() === trimmedCode.toLowerCase()
+        );
       }
 
-      // 3. Check any cached inventory queries in React Query cache
-      if (!product) {
-        const cachedQueries = queryClient.getQueriesData<InfiniteData<PaginatedResponse<Product>>>({ queryKey: ["inventory"] });
-        for (const [_, data] of cachedQueries) {
-          if (data?.pages) {
-            for (const page of data.pages) {
-              const match = page.products?.find(
-                (p: Product) => (p.barcode && p.barcode.trim() === trimmedCode) || (p.subUnitBarcode && p.subUnitBarcode.trim() === trimmedCode)
-              );
-              if (match) {
-                product = match;
-                break;
-              }
-            }
-          }
-          if (product) break;
-        }
+      // 3. If in modal with search results, check top search result
+      if (!product && displayItems.length > 0 && itemSearch.trim()) {
+        product = displayItems[0];
       }
 
       let isSubUnitScan = false;
 
-      // 4. Fallback to API if not in local cache
+      // 4. Fallback to API by barcode
       if (!product) {
         try {
           const res = await axios.get(`/api/inventory/barcode/${encodeURIComponent(trimmedCode)}`, {
@@ -1100,87 +1277,106 @@ const Sales = () => {
           });
           product = res.data;
         } catch (err) {
-          showToast(`Product with barcode ${trimmedCode} not found`, "error");
-          return;
+          // 5. Fallback to API by search
+          try {
+            const searchRes = await axios.get<PaginatedResponse<Product>>(`/api/inventory`, {
+              params: { search: trimmedCode, limit: 1 },
+              headers: { Authorization: `Bearer ${user?.token}` },
+            });
+            if (searchRes.data?.products?.length > 0) {
+              product = searchRes.data.products[0];
+            }
+          } catch (e) {
+            // ignore
+          }
         }
       }
 
-      if (product) {
-        barcodeLocalMap.current.set(trimmedCode, product);
-        setHwScannerInput("");
-        const pid = product._id!;
-        isSubUnitScan = Boolean(product.hasSubUnit && product.subUnitBarcode === trimmedCode);
+      if (!product) {
+        showToast(`Item "${trimmedCode}" not found`, "error");
+        return;
+      }
 
-        if (itemsModalMode !== null) {
-          // Add to scannedProducts so it appears at top
-          setScannedProducts(prev => {
-            const others = prev.filter(p => p._id !== pid);
-            return [product!, ...others];
-          });
-          setItemQtyMap((prev) => ({
+      barcodeLocalMap.current.set(trimmedCode, product);
+      if (product.barcode) barcodeLocalMap.current.set(product.barcode.trim(), product);
+      if (product.subUnitBarcode) barcodeLocalMap.current.set(product.subUnitBarcode.trim(), product);
+      setHwScannerInput("");
+      const pid = product._id!;
+      isSubUnitScan = Boolean(product.hasSubUnit && product.subUnitBarcode === trimmedCode);
+
+      if (itemsModalMode !== null) {
+        // Add to scannedProducts so it appears in list
+        setScannedProducts((prev) => {
+          const others = prev.filter((p) => p._id !== pid);
+          return [product!, ...others];
+        });
+        setItemQtyMap((prev) => ({
+          ...prev,
+          [pid]: (Number(prev[pid] || 0) + 1).toString(),
+        }));
+        setItemUnitMap((prev) => ({
+          ...prev,
+          [pid]: isSubUnitScan ? "subunit" : "unit",
+        }));
+        setItemPriceMap((prev) => ({
+          ...prev,
+          [pid]: isSubUnitScan
+            ? (product!.subUnitSalePrice || product!.pricePerUnit).toString()
+            : product!.pricePerUnit.toString(),
+        }));
+        setSelectedProducts((prev) => ({
+          ...prev,
+          [pid]: product!,
+        }));
+        setItemSearch("");
+        showToast(`${product.name} added to list`, "success");
+      } else {
+        setCart((prev) => {
+          // match both product ID AND whether it's a subunit
+          const existingIndex = prev.findIndex(
+            (item) => item.productId === pid && Boolean(item.isSubUnit) === isSubUnitScan
+          );
+          if (existingIndex !== -1) {
+            // Move existing item to top and increment qty
+            const item = prev[existingIndex]!;
+            const others = prev.filter((_, idx) => idx !== existingIndex);
+            return [{ ...item, quantity: item.quantity + 1 }, ...others];
+          }
+          // Add new item to top of cart
+          return [
+            {
+              productId: pid,
+              name: product!.name,
+              quantity: 1,
+              unit: isSubUnitScan ? product!.subUnitName || "SubUnit" : product!.unit,
+              conversionFactor: isSubUnitScan ? product!.subUnitValue || 1 : 1,
+              sellingPrice: isSubUnitScan ? getSubUnitSalePrice(product!) : product!.pricePerUnit,
+              originalSellingPrice: isSubUnitScan ? getSubUnitSalePrice(product!) : product!.pricePerUnit,
+              discountPercent: (() => {
+                const mrp = isSubUnitScan ? getSubUnitMrp(product!) : product!.mrp || 0;
+                const sale = isSubUnitScan ? getSubUnitSalePrice(product!) : product!.pricePerUnit || 0;
+                return mrp > 0 && sale > 0 && mrp >= sale
+                  ? parseFloat(((1 - sale / mrp) * 100).toFixed(2))
+                  : 0;
+              })(),
+              purchasePrice: isSubUnitScan ? getSubUnitPurchasePrice(product!) : product!.purchasePrice,
+              mrp: isSubUnitScan ? getSubUnitMrp(product!) : product!.mrp || 0,
+              hsnCode: product!.hsnCode,
+              gstRate: product!.gstRate,
+              batchNumber: product!.batchNumber,
+              expiryDate: product!.expiryDate ? format(new Date(product!.expiryDate), "dd MMM yy") : undefined,
+              isSubUnit: isSubUnitScan,
+            },
             ...prev,
-            [pid]: (Number(prev[pid] || 0) + 1).toString(),
-          }));
-          setItemUnitMap((prev) => ({
-            ...prev,
-            [pid]: isSubUnitScan ? 'subunit' : 'unit',
-          }));
-          setItemPriceMap((prev) => ({
-            ...prev,
-            [pid]: isSubUnitScan ? (product!.subUnitSalePrice || product!.pricePerUnit).toString() : product!.pricePerUnit.toString(),
-          }));
-          setSelectedProducts((prev) => ({
-            ...prev,
-            [pid]: product!,
-          }));
-          setItemSearch("");
-          showToast(`${product.name} added to list`, "success");
-        } else {
-          setCart((prev) => {
-            // we should try to match both product ID AND whether it's a subunit
-            const existingIndex = prev.findIndex((item) => item.productId === pid && Boolean(item.isSubUnit) === isSubUnitScan);
-            if (existingIndex !== -1) {
-              // Move existing item to top and increment qty
-              const item = prev[existingIndex]!;
-              const others = prev.filter((_, idx) => idx !== existingIndex);
-              return [{ ...item, quantity: item.quantity + 1 }, ...others];
-            }
-            // Add new item to top
-            return [
-              {
-                productId: pid,
-                name: product!.name,
-                quantity: 1,
-                unit: isSubUnitScan ? (product!.subUnitName || 'SubUnit') : product!.unit,
-                conversionFactor: isSubUnitScan ? (product!.subUnitValue || 1) : 1,
-                sellingPrice: isSubUnitScan ? getSubUnitSalePrice(product!) : product!.pricePerUnit,
-                originalSellingPrice: isSubUnitScan ? getSubUnitSalePrice(product!) : product!.pricePerUnit,
-                discountPercent: (() => {
-                  const mrp = isSubUnitScan ? getSubUnitMrp(product!) : (product!.mrp || 0);
-                  const sale = isSubUnitScan ? getSubUnitSalePrice(product!) : (product!.pricePerUnit || 0);
-                  return mrp > 0 && sale > 0 && mrp >= sale
-                    ? parseFloat(((1 - sale / mrp) * 100).toFixed(2))
-                    : 0;
-                })(),
-                purchasePrice: isSubUnitScan ? getSubUnitPurchasePrice(product!) : product!.purchasePrice,
-                mrp: isSubUnitScan ? getSubUnitMrp(product!) : (product!.mrp || 0),
-                hsnCode: product!.hsnCode,
-                gstRate: product!.gstRate,
-                batchNumber: product!.batchNumber,
-                expiryDate: product!.expiryDate ? format(new Date(product!.expiryDate), "dd MMM yy") : undefined,
-                isSubUnit: isSubUnitScan,
-              },
-              ...prev,
-            ];
-          });
-          showToast(`${product.name} added to cart`, "success");
-        }
+          ];
+        });
+        showToast(`${product.name} added to cart`, "success");
       }
     },
     [
-      scannedProducts,
-      productsData,
-      queryClient,
+      allProductsList,
+      displayItems,
+      itemSearch,
       user?.token,
       showToast,
       itemsModalMode,
@@ -1193,32 +1389,52 @@ const Sales = () => {
     ],
   );
 
-  // Item modal handlers
-  // Item modal handlers optimized with useMemo
-  const filteredItems = useMemo(() => {
-    const term = (itemSearch || "").toLowerCase().trim();
-    return (
-      itemsModalMode === "scan"
-        ? products.filter(
-            (p) =>
-              Number(itemQtyMap[p._id!]) > 0 ||
-              (term &&
-                ((p.name || "").toLowerCase().includes(term) ||
-                  ((p.barcode || "").includes(itemSearch)))),
-          )
-        : products.filter(
-            (p) =>
-              (p.name || "").toLowerCase().includes(term) ||
-              ((p.barcode || "").includes(itemSearch)),
-          )
-    ).sort((a, b) => {
-      const qtyA = Number(itemQtyMap[a._id!] || 0);
-      const qtyB = Number(itemQtyMap[b._id!] || 0);
-      if (qtyA > 0 && qtyB === 0) return -1;
-      if (qtyA === 0 && qtyB > 0) return 1;
-      return 0;
-    });
-  }, [products, itemsModalMode, itemSearch, itemQtyMap]);
+  // Global hardware barcode scanner listener
+  useEffect(() => {
+    let buffer = "";
+    let lastKeyTime = Date.now();
+
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Only listen when New Sale modal is open
+      if (!isModalOpen) return;
+
+      const target = e.target as HTMLElement | null;
+      if (target?.getAttribute("data-barcode-input") === "true") {
+        return;
+      }
+
+      const isRegularInput =
+        target &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+
+      const currentTime = Date.now();
+      const timeDiff = currentTime - lastKeyTime;
+      lastKeyTime = currentTime;
+
+      if (e.key === "Enter") {
+        if (buffer.length >= 3) {
+          if (!isRegularInput || timeDiff < 80) {
+            e.preventDefault();
+            handleScan(buffer.trim());
+            buffer = "";
+          }
+        }
+        buffer = "";
+        return;
+      }
+
+      if (e.key.length === 1) {
+        if (timeDiff > 100) {
+          buffer = e.key;
+        } else {
+          buffer += e.key;
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [isModalOpen, handleScan]);
 
   const addItemsFromModal = () => {
     const newItems: CartItem[] = [];
@@ -1261,19 +1477,21 @@ const Sales = () => {
       return;
     }
     setCart((prev) => {
+      // Put newly added items at the top of cart (first me)
       const updatedCart = [...prev];
       newItems.forEach((newItem) => {
         const existingIdx = updatedCart.findIndex(
-          (item) => item.productId === newItem.productId,
+          (item) => item.productId === newItem.productId && item.isSubUnit === newItem.isSubUnit,
         );
         if (existingIdx !== -1) {
           const existingItem = updatedCart[existingIdx]!;
-          updatedCart[existingIdx] = {
+          updatedCart.splice(existingIdx, 1);
+          updatedCart.unshift({
             ...existingItem,
             quantity: existingItem.quantity + newItem.quantity,
-          };
+          });
         } else {
-          updatedCart.push(newItem);
+          updatedCart.unshift(newItem);
         }
       });
       return updatedCart;
@@ -2520,6 +2738,89 @@ const Sales = () => {
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* Instant Item Search & Barcode Scan Input directly on billing screen */}
+              <div ref={quickSearchWrapperRef} className="relative">
+                <div className="relative group">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary-500 transition-colors">
+                    <Search size={18} />
+                  </div>
+                  <input
+                    data-barcode-input="true"
+                    type="text"
+                    placeholder="Instant search item by name or scan barcode to add directly..."
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3.5 pl-12 pr-10 text-sm font-bold focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all placeholder:text-slate-400"
+                    value={quickSearch}
+                    onChange={(e) => {
+                      setQuickSearch(e.target.value);
+                      setIsQuickSearchOpen(true);
+                    }}
+                    onFocus={() => {
+                      if (quickSearch.trim()) setIsQuickSearchOpen(true);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        if (quickSearchResults.length > 0 && quickSearchResults[0]) {
+                          addQuickItem(quickSearchResults[0]);
+                        } else if (quickSearch.trim()) {
+                          handleScan(quickSearch.trim());
+                          setQuickSearch("");
+                          setIsQuickSearchOpen(false);
+                        }
+                      } else if (e.key === "Escape") {
+                        setIsQuickSearchOpen(false);
+                      }
+                    }}
+                  />
+                  {quickSearch && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuickSearch("");
+                        setIsQuickSearchOpen(false);
+                      }}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200 transition-colors"
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Instant Suggestions Dropdown */}
+                {isQuickSearchOpen && quickSearch.trim() && (
+                  <div className="absolute left-0 right-0 top-full mt-2 bg-white rounded-2xl shadow-2xl border border-slate-100 max-h-72 overflow-y-auto z-50 p-2 space-y-1 custom-scrollbar animate-in fade-in-50 duration-150">
+                    {quickSearchResults.length > 0 ? (
+                      quickSearchResults.map((prod) => (
+                        <button
+                          key={prod._id}
+                          type="button"
+                          onClick={() => addQuickItem(prod)}
+                          className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-primary-50 text-left transition-all group cursor-pointer"
+                        >
+                          <div>
+                            <p className="font-bold text-slate-800 text-sm group-hover:text-primary-700">
+                              {prod.name}
+                            </p>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                              {prod.unit} · MRP: ₹{prod.mrp || 0} · Stock: {Number(prod.stock || 0).toFixed(0)}
+                              {prod.barcode ? ` · Barcode: ${prod.barcode}` : ""}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-sm font-black text-primary-600">₹{prod.pricePerUnit}</span>
+                            <span className="block text-[10px] font-bold text-emerald-600 group-hover:underline">+ Add to Bill</span>
+                          </div>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="p-4 text-center text-xs text-slate-400 font-medium">
+                        No product in local cache. Press Enter to search database or scan barcode.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Scan, Add Items & Direct Sale Buttons */}
@@ -4001,6 +4302,7 @@ const Sales = () => {
                   size={18}
                 />
                 <input
+                  data-barcode-input="true"
                   type="text"
                   placeholder="Search by Item / Barcode..."
                   className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-12 pr-4 text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all"
@@ -4009,7 +4311,39 @@ const Sales = () => {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      handleScan(itemSearch);
+                      const q = itemSearch.trim();
+                      if (!q) return;
+
+                      // If matching items found, immediately add/increment the top matching item
+                      if (displayItems.length > 0 && matchingCount > 0 && displayItems[0]) {
+                        const topMatch = displayItems[0];
+                        const pid = topMatch._id!;
+                        const isSub = Boolean(topMatch.hasSubUnit && topMatch.subUnitBarcode === q);
+                        setScannedProducts((prev) => {
+                          const others = prev.filter((p) => p._id !== pid);
+                          return [topMatch, ...others];
+                        });
+                        setItemQtyMap((prev) => ({
+                          ...prev,
+                          [pid]: (Number(prev[pid] || 0) + 1).toString(),
+                        }));
+                        setItemUnitMap((prev) => ({
+                          ...prev,
+                          [pid]: isSub ? 'subunit' : 'unit',
+                        }));
+                        setItemPriceMap((prev) => ({
+                          ...prev,
+                          [pid]: isSub ? (topMatch.subUnitSalePrice || topMatch.pricePerUnit).toString() : topMatch.pricePerUnit.toString(),
+                        }));
+                        setSelectedProducts((prev) => ({
+                          ...prev,
+                          [pid]: topMatch,
+                        }));
+                        setItemSearch("");
+                        showToast(`${topMatch.name} added (+1)`, "success");
+                      } else {
+                        handleScan(q);
+                      }
                     }
                   }}
                   autoFocus
@@ -4051,14 +4385,32 @@ const Sales = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {products.map((p, index) => {
-                    const isLastProduct = index === products.length - 1;
+                  {displayItems.map((p, index) => {
+                    const isLastProduct = index === displayItems.length - 1;
+                    const hasActiveSearch = Boolean(itemSearch.trim());
+                    const showSearchResultsHeader = hasActiveSearch && index === 0 && matchingCount > 0;
+                    const showAddedSectionHeader = hasActiveSearch && index === matchingCount && addedCount > 0;
+
                     return (
-                      <tr
-                        key={p._id}
-                        ref={isLastProduct ? lastProductElementRef : null}
-                        className={`hover:bg-primary-50/30 transition-colors ${itemQtyMap[p._id!] && Number(itemQtyMap[p._id!]) > 0 ? "bg-emerald-50/30" : ""}`}
-                      >
+                      <React.Fragment key={p._id}>
+                        {showSearchResultsHeader && (
+                          <tr className="bg-primary-50/80 border-y border-primary-200">
+                            <td colSpan={6} className="px-6 py-2 text-[10px] font-black uppercase tracking-wider text-primary-700">
+                              🔍 Search Results ({matchingCount})
+                            </td>
+                          </tr>
+                        )}
+                        {showAddedSectionHeader && (
+                          <tr className="bg-slate-100/90 border-y border-slate-200">
+                            <td colSpan={6} className="px-6 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                              ✓ Already Added to Bill ({addedCount})
+                            </td>
+                          </tr>
+                        )}
+                        <tr
+                          ref={isLastProduct ? lastProductElementRef : null}
+                          className={`hover:bg-primary-50/30 transition-colors ${itemQtyMap[p._id!] && Number(itemQtyMap[p._id!]) > 0 ? "bg-emerald-50/30" : ""}`}
+                        >
                         <td className="px-4 py-3">
                           <p className="font-bold text-slate-800 text-sm">
                             {p.name}
@@ -4208,8 +4560,9 @@ const Sales = () => {
                           )}
                         </td>
                       </tr>
-                    );
-                  })}
+                    </React.Fragment>
+                  );
+                })}
                 </tbody>
               </table>
               {isFetchingNextProductsPage && (
