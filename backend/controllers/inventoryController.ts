@@ -21,10 +21,14 @@ export const getProducts = async (req: AuthRequest, res: Response) => {
 
         // 1. Search Logic
         if (search) {
+            const trimmed = search.trim();
+            const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, (c) => '\\' + c);
             query.$or = [
-                { name: { $regex: search, $options: 'i' } },
-                { barcode: { $regex: search, $options: 'i' } },
-                { subUnitBarcode: { $regex: search, $options: 'i' } }
+                { barcode: trimmed },
+                { subUnitBarcode: trimmed },
+                { name: { $regex: escaped, $options: 'i' } },
+                { barcode: { $regex: escaped, $options: 'i' } },
+                { subUnitBarcode: { $regex: escaped, $options: 'i' } }
             ];
         }
 
@@ -47,22 +51,27 @@ export const getProducts = async (req: AuthRequest, res: Response) => {
         else if (sortBy === 'stock-asc') sort = { stock: 1 };
         else if (sortBy === 'stock-desc') sort = { stock: -1 };
 
+        const needStats = !search && req.query.skipStats !== 'true';
+
         const [products, totalCount, totalStats] = await Promise.all([
             Product.find(query)
                 .sort(sort)
                 .skip(skip)
-                .limit(limit),
+                .limit(limit)
+                .lean(),
             Product.countDocuments(query),
-            Product.aggregate([
-                { $match: query },
-                { 
-                    $group: { 
-                        _id: null, 
-                        totalPurchaseValue: { $sum: { $multiply: ["$stock", "$purchasePrice"] } },
-                        totalSellingValue: { $sum: { $multiply: ["$stock", "$pricePerUnit"] } }
-                    } 
-                }
-            ])
+            needStats
+                ? Product.aggregate([
+                    { $match: query },
+                    { 
+                        $group: { 
+                            _id: null, 
+                            totalPurchaseValue: { $sum: { $multiply: ["$stock", "$purchasePrice"] } },
+                            totalSellingValue: { $sum: { $multiply: ["$stock", "$pricePerUnit"] } }
+                        } 
+                    }
+                ])
+                : Promise.resolve([])
         ]);
 
         res.status(200).json({
