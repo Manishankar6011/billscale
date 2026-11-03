@@ -248,6 +248,7 @@ const Sales = () => {
   const [debouncedItemSearch, setDebouncedItemSearch] = useState("");
   const [scannedProducts, setScannedProducts] = useState<Product[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<Record<string, Product>>({});
+  const barcodeLocalMap = useRef<Map<string, Product>>(new Map());
   const [itemsModalMode, setItemsModalMode] = useState<"all" | "scan" | null>(null);
   const [itemQtyMap, setItemQtyMap] = useState<Record<string, string>>({});
   const [itemPriceMap, setItemPriceMap] = useState<Record<string, string>>({});
@@ -657,7 +658,6 @@ const Sales = () => {
   const [removeItemDiscounts, setRemoveItemDiscounts] = useState(false);
   const [isAdditionalChargesOpen, setIsAdditionalChargesOpen] = useState(false);
   const [isDirectSaleOpen, setIsDirectSaleOpen] = useState(false);
-  const barcodeLocalMap = useRef<Map<string, Product>>(new Map());
   const [showQRCode, setShowQRCode] = useState(false);
   const [printData, setPrintData] = useState<any>(null);
   const [selectedSaleForEdit, setSelectedSaleForEdit] = useState<Sale | null>(
