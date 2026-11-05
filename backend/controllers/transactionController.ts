@@ -157,7 +157,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
   } = req.body;
 
   // 0. Pre-transaction validation: Check Tenant and Free Plan Limits
-  const tenant = await Tenant.findById(req.tenantId);
+  const tenant = req.tenant || await Tenant.findById(req.tenantId);
   if (!tenant) return res.status(401).json({ message: "Unauthorized or Business not found" });
 
   if (tenant.planType === "free") {
@@ -183,9 +183,6 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     session = await mongoose.startSession();
     session.startTransaction();
 
-    const sessionTenant = await Tenant.findById(req.tenantId).session(session);
-    if (!sessionTenant) throw new Error("Unauthorized or Business not found");
-
     let totalAmount = 0;
     let totalProfit = 0;
     let totalTaxAmount = 0;
@@ -193,23 +190,37 @@ export const processSale = async (req: AuthRequest, res: Response) => {
 
     // 1. Handle Customer Auto-Creation/Linking
     let finalCustomerId = req.body.customerId || null;
+    const isGenericWalkIn = !customerPhone && (!customerName || customerName.trim().toLowerCase() === "cash sale");
+    const shouldLookupCustomer = !finalCustomerId && !isGenericWalkIn && (customerPhone || customerName);
 
-    if (!finalCustomerId && (customerPhone || customerName)) {
-      let existingCustomer;
-      if (customerPhone) {
-        existingCustomer = await Customer.findOne({
-          tenantId: req.tenantId,
-          phone: customerPhone,
-        }).session(session);
-      } else {
-        // Match by name if phone is missing
-        existingCustomer = await Customer.findOne({
-          tenantId: req.tenantId,
-          name: customerName,
-          $or: [{ phone: "" }, { phone: { $exists: false } }, { phone: null }],
-        }).session(session);
-      }
+    const productIds = items.map((i: any) => i.productId);
 
+    // Parallelize Atomic Invoice Increment, Customer Lookup & Products Fetch in 1 single roundtrip!
+    const [updatedTenant, existingCustomer, products] = await Promise.all([
+      Tenant.findByIdAndUpdate(
+        req.tenantId,
+        { $inc: { nextInvoiceNumber: 1 } },
+        { session, new: false }
+      ),
+      shouldLookupCustomer
+        ? (customerPhone
+            ? Customer.findOne({ tenantId: req.tenantId, phone: customerPhone }).session(session)
+            : Customer.findOne({
+                tenantId: req.tenantId,
+                name: customerName,
+                $or: [{ phone: "" }, { phone: { $exists: false } }, { phone: null }],
+              }).session(session)
+          )
+        : Promise.resolve(null),
+      Product.find({
+        _id: { $in: productIds },
+        tenantId: req.tenantId,
+      }).session(session),
+    ]);
+
+    if (!updatedTenant) throw new Error("Unauthorized or Business not found");
+
+    if (shouldLookupCustomer) {
       if (!existingCustomer && customerName) {
         const newCustomer = new Customer({
           tenantId: req.tenantId,
@@ -226,13 +237,6 @@ export const processSale = async (req: AuthRequest, res: Response) => {
         finalCustomerId = existingCustomer._id;
       }
     }
-
-    // Fetch all products in one go to prevent N+1 queries
-    const productIds = items.map((i: any) => i.productId);
-    const products = await Product.find({
-      _id: { $in: productIds },
-      tenantId: req.tenantId,
-    }).session(session);
 
     const productMap = new Map();
     products.forEach((p) => productMap.set(p._id.toString(), p));
@@ -374,7 +378,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
       calculatedStatus = "pending";
     }
 
-    const currentInvoiceNum = sessionTenant.nextInvoiceNumber || 1;
+    const currentInvoiceNum = updatedTenant.nextInvoiceNumber || 1;
     const invoiceNumber = `INV-${currentInvoiceNum}`;
 
     const sale = new Sale({
@@ -409,9 +413,6 @@ export const processSale = async (req: AuthRequest, res: Response) => {
 
     await sale.save({ session });
 
-    // Increment Invoice Number
-    sessionTenant.nextInvoiceNumber = currentInvoiceNum + 1;
-    await sessionTenant.save({ session });
 
     // Commit transaction immediately to release DB locks
     await session.commitTransaction();
