@@ -943,9 +943,9 @@ const Sales = () => {
 
       // Invalidate sales list so new bill appears immediately
       queryClient.invalidateQueries({ queryKey: ["sales"] });
-      // Invalidate inventory & stats lazily without triggering an instant server storm
+      // Invalidate inventory & stats so dashboard reflects the new bill immediately
       queryClient.invalidateQueries({ queryKey: ["inventory"], refetchType: "none" });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"], refetchType: "none" });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
       queryClient.invalidateQueries({ queryKey: ["quick-catalog"], refetchType: "none" });
       resetForm();
     },
@@ -978,7 +978,7 @@ const Sales = () => {
       setSelectedSaleForEdit(null);
       queryClient.invalidateQueries({ queryKey: ["sales"] });
       queryClient.invalidateQueries({ queryKey: ["inventory"], refetchType: "none" });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"], refetchType: "none" });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
       queryClient.invalidateQueries({ queryKey: ["quick-catalog"] });
       resetForm();
     },
@@ -1001,7 +1001,7 @@ const Sales = () => {
       showToast(t("billing.sale_deleted"), "success");
       queryClient.invalidateQueries({ queryKey: ["sales"] });
       queryClient.invalidateQueries({ queryKey: ["inventory"], refetchType: "none" });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"], refetchType: "none" });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
       queryClient.invalidateQueries({ queryKey: ["quick-catalog"] });
     },
     onError: (err: any) => {
@@ -1719,14 +1719,9 @@ const Sales = () => {
     };
   }, [filteredSales, sales, saleTypeFilter, salesSummary, salesData]);
 
-  // Summary metrics from backend (Excluding additional charges for accurate item-based profit view)
-  const totalSales = displaySummary.totalAmount;
-  const totalPaid = Math.max(
-    0,
-    salesSummary.totalPaid -
-      (salesSummary.totalAdditionalCharges || 0) -
-      (salesSummary.totalRoundOff || 0),
-  );
+  // Summary metrics from backend: use full accurate backend aggregations without artificial deductions
+  const totalSales = saleTypeFilter === "all" ? salesSummary.totalAmount : displaySummary.totalAmount;
+  const totalPaid = salesSummary.totalPaid;
   const totalUnpaid = salesSummary.totalUnpaid;
   const totalNetProfit = displaySummary.totalProfit;
 
