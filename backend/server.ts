@@ -57,11 +57,11 @@ app.use("/api/master-products", masterProductRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/purchases", purchaseRoutes);
 app.use("/api/reports", gstRoutes);
-app.use("/api/catalog", catalogRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/catalog/orders", orderRoutes);
-app.use("/api/settings/payment-gateway", paymentGatewayRoutes);
 app.use("/api/catalog/payment", paymentGatewayRoutes);
+app.use("/api/catalog", catalogRoutes);
+app.use("/api/settings/payment-gateway", paymentGatewayRoutes);
 
 // Keep-Alive & Health Check
 app.get("/api/health", (req: Request, res: Response) => {

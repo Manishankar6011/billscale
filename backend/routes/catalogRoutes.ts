@@ -14,8 +14,14 @@ const router = express.Router();
 // Get catalog by custom domain (placed before :slug so :slug never intercepts)
 router.get('/by-domain/lookup', getCatalogByDomain);
 
-// Get catalog by slug
-router.get('/:slug', getCatalogBySlug);
+// Get catalog by slug (skip reserved subpaths if called or passed through)
+router.get('/:slug', (req, res, next) => {
+    const reserved = ['orders', 'payment', 'by-domain', 'custom-domain'];
+    if (reserved.includes(req.params.slug)) {
+        return next();
+    }
+    return getCatalogBySlug(req, res);
+});
 
 // ─── Protected Routes (Paid Plans Only) ────────────────────────────────────
 router.post(
