@@ -56,4 +56,7 @@ customerSchema.index(
     }
 );
 
+// Index for fast customer search by name (e.g. during billing)
+customerSchema.index({ tenantId: 1, name: 1 });
+
 export default mongoose.model<ICustomer>('Customer', customerSchema);
