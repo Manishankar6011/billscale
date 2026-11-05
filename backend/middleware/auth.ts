@@ -11,6 +11,7 @@ export interface AuthRequest extends Request {
     subscriptionStatus?: string;
     planType?: 'free' | 'basic' | 'business';
     companyName?: string;
+    tenant?: any;
 }
 
 export const protect = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -78,6 +79,7 @@ export const checkSubscription = async (req: AuthRequest, res: Response, next: N
         req.subscriptionStatus = tenant.subscriptionStatus;
         req.planType = tenant.planType as any;
         req.companyName = tenant.companyName;
+        req.tenant = tenant;
         next();
     } catch (error: any) {
         res.status(500).json({ message: error.message });
