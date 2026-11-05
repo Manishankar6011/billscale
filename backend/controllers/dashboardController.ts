@@ -155,11 +155,11 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
       ]),
       // Totals and Alerts
       Sale.aggregate([
-        { $match: { tenantId, status: "pending" } },
-        { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+        { $match: { tenantId, balanceDue: { $gt: 0 } } },
+        { $group: { _id: null, total: { $sum: "$balanceDue" } } },
       ]),
       Purchase.aggregate([
-        { $match: { tenantId, paymentStatus: "pending" } },
+        { $match: { tenantId, paymentStatus: { $ne: "paid" } } },
         { $group: { _id: null, total: { $sum: "$totalAmount" } } },
       ]),
       Product.aggregate([
@@ -176,10 +176,10 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
           },
         },
       ]),
-      // Lifetime totals for Balance
+      // Lifetime totals for Balance: count all cash actually collected from all sales (including partial)
       Sale.aggregate([
-        { $match: { tenantId, status: "paid" } },
-        { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+        { $match: { tenantId } },
+        { $group: { _id: null, total: { $sum: "$amountPaid" } } },
       ]),
       Purchase.aggregate([
         { $match: { tenantId, paymentStatus: "paid" } },

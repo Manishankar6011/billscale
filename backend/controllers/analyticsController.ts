@@ -164,10 +164,9 @@ export const getItemSalesByDateRange = async (req: AuthRequest, res: Response) =
       return res.status(400).json({ message: "Start date and end date are required" });
     }
 
-    const start = new Date(startDate as string);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(endDate as string);
-    end.setHours(23, 59, 59, 999);
+    // Parse boundary with explicit IST (+05:30) offset so midnight boundary matches Indian timezone on server
+    const start = new Date(`${startDate}T00:00:00+05:30`);
+    const end = new Date(`${endDate}T23:59:59.999+05:30`);
 
     const itemSales = await Sale.aggregate([
       {
@@ -176,26 +175,67 @@ export const getItemSalesByDateRange = async (req: AuthRequest, res: Response) =
           date: { $gte: start, $lte: end },
         },
       },
-      { $unwind: "$items" },
+      {
+        $project: {
+          allItems: {
+            $concatArrays: [
+              {
+                $map: {
+                  input: { $ifNull: ["$items", []] },
+                  as: "i",
+                  in: {
+                    productId: "$$i.productId",
+                    name: null,
+                    unit: "$$i.unit",
+                    quantity: "$$i.quantity",
+                    sellingPrice: "$$i.sellingPrice",
+                    purchasePrice: { $ifNull: ["$$i.purchasePriceAtTime", 0] },
+                  },
+                },
+              },
+              {
+                $map: {
+                  input: { $ifNull: ["$customItems", []] },
+                  as: "ci",
+                  in: {
+                    productId: null,
+                    name: "$$ci.name",
+                    unit: "piece",
+                    quantity: { $ifNull: ["$$ci.quantity", 1] },
+                    sellingPrice: "$$ci.price",
+                    purchasePrice: { $ifNull: ["$$ci.purchasePrice", 0] },
+                  },
+                },
+              },
+            ],
+          },
+        },
+      },
+      { $unwind: "$allItems" },
       {
         $group: {
-          _id: "$items.productId",
-          totalQuantity: { $sum: "$items.quantity" },
-          totalRevenue: { $sum: { $multiply: ["$items.quantity", "$items.sellingPrice"] } },
+          _id: {
+            $ifNull: ["$allItems.productId", "$allItems.name"],
+          },
+          productId: { $first: "$allItems.productId" },
+          customName: { $first: "$allItems.name" },
+          itemUnit: { $first: "$allItems.unit" },
+          totalQuantity: { $sum: "$allItems.quantity" },
+          totalRevenue: { $sum: { $multiply: ["$allItems.quantity", "$allItems.sellingPrice"] } },
           totalProfit: { 
             $sum: { 
               $subtract: [
-                { $multiply: ["$items.quantity", "$items.sellingPrice"] }, 
-                { $multiply: ["$items.quantity", "$items.purchasePriceAtTime"] }
-              ] 
-            } 
+                { $multiply: ["$allItems.quantity", "$allItems.sellingPrice"] }, 
+                { $multiply: ["$allItems.quantity", "$allItems.purchasePrice"] }
+              ],
+            },
           },
         },
       },
       {
         $lookup: {
           from: "products",
-          localField: "_id",
+          localField: "productId",
           foreignField: "_id",
           as: "product",
         },
@@ -204,8 +244,8 @@ export const getItemSalesByDateRange = async (req: AuthRequest, res: Response) =
       {
         $project: {
           _id: 1,
-          name: { $ifNull: ["$product.name", "Unknown Product"] },
-          unit: { $ifNull: ["$product.unit", "-"] },
+          name: { $ifNull: ["$product.name", { $ifNull: ["$customName", "Custom Item"] }] },
+          unit: { $ifNull: ["$product.unit", { $ifNull: ["$itemUnit", "-"] }] },
           totalQuantity: 1,
           totalRevenue: 1,
           totalProfit: 1,
