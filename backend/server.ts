@@ -89,7 +89,12 @@ const MONGO_URI =
   process.env.MONGO_URI || "mongodb://localhost:27017/buildmate_erp";
 
 mongoose
-  .connect(MONGO_URI)
+  .connect(MONGO_URI, {
+    maxPoolSize: 20,
+    minPoolSize: 5,
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+  })
   .then(() => {
     console.log("MongoDB connected...");
     if (process.env.NODE_ENV !== "test") {

@@ -135,6 +135,7 @@ export const getSales = async (req: AuthRequest, res: Response) => {
 // @desc    Process a new sale (decreases stock)
 // @route   POST /api/transactions/sales
 export const processSale = async (req: AuthRequest, res: Response) => {
+  const startTime = Date.now();
   const {
     customerName,
     customerPhone,
@@ -217,6 +218,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
         tenantId: req.tenantId,
       }).session(session),
     ]);
+    const tParallel = Date.now();
 
     if (!updatedTenant) throw new Error("Unauthorized or Business not found");
 
@@ -295,6 +297,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     if (bulkOperations.length > 0) {
       await Product.bulkWrite(bulkOperations, { session });
     }
+    const tBulk = Date.now();
 
     // Add additional items to totalAmount & calculate Profit contribution
     if (additionalItems && Array.isArray(additionalItems)) {
@@ -412,12 +415,15 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     });
 
     await sale.save({ session });
-
+    const tSave = Date.now();
 
     // Commit transaction immediately to release DB locks
     await session.commitTransaction();
+    const tCommit = Date.now();
     session.endSession();
     session = null;
+
+    console.log(`⏱️ [SALE_TIMING] Invoice: ${invoiceNumber} | Total: ${tCommit - startTime}ms (ParallelFetch: ${tParallel - startTime}ms, BulkWrite: ${tBulk - tParallel}ms, SaleSave: ${tSave - tBulk}ms, CommitTx: ${tCommit - tSave}ms)`);
 
     // Attach in-memory populated product details for instant response without extra network trip
     const saleObj: any = sale.toObject();
