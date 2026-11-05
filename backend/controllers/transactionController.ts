@@ -224,17 +224,26 @@ export const processSale = async (req: AuthRequest, res: Response) => {
 
     if (shouldLookupCustomer) {
       if (!existingCustomer && customerName) {
-        const newCustomer = new Customer({
-          tenantId: req.tenantId,
-          name: customerName,
-          phone: customerPhone || undefined,
-          address: customerAddress,
-          gstin: customerGSTIN,
-          state: customerState,
-          stateCode: customerStateCode,
-        });
-        await newCustomer.save({ session });
-        finalCustomerId = newCustomer._id;
+        try {
+          const newCustomer = new Customer({
+            tenantId: req.tenantId,
+            name: customerName,
+            phone: customerPhone || undefined,
+            address: customerAddress,
+            gstin: customerGSTIN,
+            state: customerState,
+            stateCode: customerStateCode,
+          });
+          await newCustomer.save({ session });
+          finalCustomerId = newCustomer._id;
+        } catch (custErr: any) {
+          if (custErr.code === 11000 && customerPhone) {
+            const fallback = await Customer.findOne({ tenantId: req.tenantId, phone: customerPhone }).session(session);
+            if (fallback) finalCustomerId = fallback._id;
+          } else {
+            throw custErr;
+          }
+        }
       } else if (existingCustomer) {
         finalCustomerId = existingCustomer._id;
       }
@@ -381,8 +390,24 @@ export const processSale = async (req: AuthRequest, res: Response) => {
       calculatedStatus = "pending";
     }
 
-    const currentInvoiceNum = updatedTenant.nextInvoiceNumber || 1;
-    const invoiceNumber = `INV-${currentInvoiceNum}`;
+    let currentInvoiceNum = updatedTenant.nextInvoiceNumber || 1;
+    let invoiceNumber = `INV-${currentInvoiceNum}`;
+
+    // Verify invoice number is truly unique for this tenant before saving to avoid duplicate key errors
+    let existingSale: any = await Sale.findOne({ tenantId: req.tenantId, invoiceNumber }).session(session).select("_id").lean();
+    while (existingSale) {
+      currentInvoiceNum++;
+      invoiceNumber = `INV-${currentInvoiceNum}`;
+      existingSale = await Sale.findOne({ tenantId: req.tenantId, invoiceNumber }).session(session).select("_id").lean();
+    }
+
+    if (currentInvoiceNum > (updatedTenant.nextInvoiceNumber || 1)) {
+      await Tenant.findByIdAndUpdate(
+        req.tenantId,
+        { nextInvoiceNumber: currentInvoiceNum + 1 },
+        { session }
+      );
+    }
 
     const sale = new Sale({
       tenantId: req.tenantId,
@@ -456,6 +481,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     if (session) {
       await session.abortTransaction();
     }
+    console.error("❌ [SALE_ERROR] Failed to process sale:", err.message);
     res.status(400).json({ message: err.message });
   } finally {
     if (session) {
@@ -756,6 +782,7 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
     if (session) {
       await session.abortTransaction();
     }
+    console.error("❌ [SALE_ERROR] Failed to process sale:", err.message);
     res.status(400).json({ message: err.message });
   } finally {
     if (session) {
