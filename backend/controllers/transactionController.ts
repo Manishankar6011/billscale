@@ -156,32 +156,35 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     specialDiscountLabel,
   } = req.body;
 
+  // 0. Pre-transaction validation: Check Tenant and Free Plan Limits
+  const tenant = await Tenant.findById(req.tenantId);
+  if (!tenant) return res.status(401).json({ message: "Unauthorized or Business not found" });
+
+  if (tenant.planType === "free") {
+    const startOfMonth = new Date();
+    startOfMonth.setHours(0, 0, 0, 0);
+    startOfMonth.setDate(1);
+
+    const billsCount = await Sale.countDocuments({
+      tenantId: req.tenantId,
+      date: { $gte: startOfMonth },
+    });
+
+    if (billsCount >= 50) {
+      return res.status(403).json({
+        message:
+          "Monthly bill limit (50) reached for Free Starter plan. Please upgrade to create more bills.",
+      });
+    }
+  }
+
   let session: any;
   try {
     session = await mongoose.startSession();
     session.startTransaction();
 
-    // 0. Check Subscription Limits for Free Plan
-    const tenant = await Tenant.findById(req.tenantId).session(session);
-    if (!tenant) throw new Error("Unauthorized or Business not found");
-
-    if (tenant.planType === "free") {
-      const startOfMonth = new Date();
-      startOfMonth.setHours(0, 0, 0, 0);
-      startOfMonth.setDate(1);
-
-      const billsCount = await Sale.countDocuments({
-        tenantId: req.tenantId,
-        date: { $gte: startOfMonth },
-      });
-
-      if (billsCount >= 50) {
-        return res.status(403).json({
-          message:
-            "Monthly bill limit (50) reached for Free Starter plan. Please upgrade to create more bills.",
-        });
-      }
-    }
+    const sessionTenant = await Tenant.findById(req.tenantId).session(session);
+    if (!sessionTenant) throw new Error("Unauthorized or Business not found");
 
     let totalAmount = 0;
     let totalProfit = 0;
@@ -371,7 +374,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
       calculatedStatus = "pending";
     }
 
-    const currentInvoiceNum = tenant.nextInvoiceNumber || 1;
+    const currentInvoiceNum = sessionTenant.nextInvoiceNumber || 1;
     const invoiceNumber = `INV-${currentInvoiceNum}`;
 
     const sale = new Sale({
@@ -407,17 +410,50 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     await sale.save({ session });
 
     // Increment Invoice Number
-    tenant.nextInvoiceNumber = currentInvoiceNum + 1;
-    await tenant.save({ session });
+    sessionTenant.nextInvoiceNumber = currentInvoiceNum + 1;
+    await sessionTenant.save({ session });
 
-    await sale.populate("items.productId", "name unit mrp purchasePrice hasSubUnit subUnitName subUnitValue subUnitMrp subUnitPurchasePrice subUnitSalePrice");
+    // Commit transaction immediately to release DB locks
     await session.commitTransaction();
-    res.status(201).json(sale);
+    session.endSession();
+    session = null;
+
+    // Attach in-memory populated product details for instant response without extra network trip
+    const saleObj: any = sale.toObject();
+    saleObj.items = saleObj.items.map((item: any) => {
+      const p = productMap.get(item.productId?.toString());
+      return {
+        ...item,
+        productId: p ? {
+          _id: p._id,
+          name: p.name,
+          unit: p.unit,
+          mrp: p.mrp,
+          purchasePrice: p.purchasePrice,
+          hasSubUnit: p.hasSubUnit,
+          subUnitName: p.subUnitName,
+          subUnitValue: p.subUnitValue,
+          subUnitMrp: p.subUnitMrp,
+          subUnitPurchasePrice: p.subUnitPurchasePrice,
+          subUnitSalePrice: p.subUnitSalePrice,
+          barcode: p.barcode,
+          subUnitBarcode: p.subUnitBarcode,
+          hsnCode: p.hsnCode,
+          gstRate: p.gstRate
+        } : item.productId
+      };
+    });
+
+    res.status(201).json(saleObj);
   } catch (err: any) {
-    await session.abortTransaction();
+    if (session) {
+      await session.abortTransaction();
+    }
     res.status(400).json({ message: err.message });
   } finally {
-    session.endSession();
+    if (session) {
+      session.endSession();
+    }
   }
 };
 
@@ -445,7 +481,7 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
     specialDiscountLabel,
   } = req.body;
 
-  const session = await mongoose.startSession();
+  let session: any = await mongoose.startSession();
   session.startTransaction();
 
   try {
@@ -677,21 +713,54 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
 
     await oldSale.save({ session });
 
-    await oldSale.populate("items.productId", "name unit mrp purchasePrice hasSubUnit subUnitName subUnitValue subUnitMrp subUnitPurchasePrice subUnitSalePrice");
+    // Commit transaction immediately to release DB locks
     await session.commitTransaction();
-    res.json(oldSale);
+    session.endSession();
+    session = null;
+
+    // Attach in-memory populated product details for instant response without extra network trip
+    const saleObj: any = oldSale.toObject();
+    saleObj.items = saleObj.items.map((item: any) => {
+      const p = productMap.get(item.productId?.toString());
+      return {
+        ...item,
+        productId: p ? {
+          _id: p._id,
+          name: p.name,
+          unit: p.unit,
+          mrp: p.mrp,
+          purchasePrice: p.purchasePrice,
+          hasSubUnit: p.hasSubUnit,
+          subUnitName: p.subUnitName,
+          subUnitValue: p.subUnitValue,
+          subUnitMrp: p.subUnitMrp,
+          subUnitPurchasePrice: p.subUnitPurchasePrice,
+          subUnitSalePrice: p.subUnitSalePrice,
+          barcode: p.barcode,
+          subUnitBarcode: p.subUnitBarcode,
+          hsnCode: p.hsnCode,
+          gstRate: p.gstRate
+        } : item.productId
+      };
+    });
+
+    res.json(saleObj);
   } catch (err: any) {
-    await session.abortTransaction();
+    if (session) {
+      await session.abortTransaction();
+    }
     res.status(400).json({ message: err.message });
   } finally {
-    session.endSession();
+    if (session) {
+      session.endSession();
+    }
   }
 };
 
 // @desc    Delete a sale (reverts stock)
 // @route   DELETE /api/transactions/sales/:id
 export const deleteSale = async (req: AuthRequest, res: Response) => {
-  const session = await mongoose.startSession();
+  let session: any = await mongoose.startSession();
   session.startTransaction();
 
   try {
@@ -818,7 +887,7 @@ export const processPurchase = async (req: AuthRequest, res: Response) => {
     paymentStatus,
     date,
   } = req.body;
-  const session = await mongoose.startSession();
+  let session: any = await mongoose.startSession();
   session.startTransaction();
 
   try {
@@ -984,7 +1053,7 @@ export const updatePurchase = async (req: AuthRequest, res: Response) => {
     paymentStatus,
     date,
   } = req.body;
-  const session = await mongoose.startSession();
+  let session: any = await mongoose.startSession();
   session.startTransaction();
 
   try {
@@ -1147,7 +1216,7 @@ export const updatePurchase = async (req: AuthRequest, res: Response) => {
 // @desc    Delete a purchase (reverts stock)
 // @route   DELETE /api/transactions/purchases/:id
 export const deletePurchase = async (req: AuthRequest, res: Response) => {
-  const session = await mongoose.startSession();
+  let session: any = await mongoose.startSession();
   session.startTransaction();
 
   try {
