@@ -378,9 +378,28 @@ const Sales = () => {
     enabled: !!user?.token,
   });
 
-  // Fast unified product catalog: merges all pages, query client cache, scannedProducts, selectedProducts
+  // Ultra-fast background catalog for 0ms barcode and POS lookup
+  const { data: quickCatalogData } = useQuery<Product[]>({
+    queryKey: ["quick-catalog"],
+    queryFn: async () => {
+      const res = await axios.get<Product[]>("/api/inventory/quick-catalog", {
+        headers: { Authorization: `Bearer ${user?.token}` },
+      });
+      return res.data;
+    },
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    enabled: !!user?.token,
+  });
+
+  // Fast unified product catalog: merges quickCatalog, all pages, query cache, scannedProducts, selectedProducts
   const allProductsList = useMemo(() => {
     const map = new Map<string, Product>();
+
+    // Add quick catalog items (covers all products & barcodes in store for instant 0ms lookups)
+    quickCatalogData?.forEach((p) => {
+      if (p._id && !map.has(p._id)) map.set(p._id, p);
+    });
 
     // Add query cache items
     const cachedQueries = queryClient.getQueriesData<InfiniteData<PaginatedResponse<Product>>>({ queryKey: ["inventory"] });
@@ -416,7 +435,7 @@ const Sales = () => {
     });
 
     return Array.from(map.values());
-  }, [productsData, scannedProducts, selectedProducts, queryClient]);
+  }, [productsData, quickCatalogData, scannedProducts, selectedProducts, queryClient]);
 
   // Instant Search & Display logic for Item Modal
   // Rule: Searched items come FIRST; previously added items come BELOW (nichhe)
@@ -894,9 +913,40 @@ const Sales = () => {
         setPrintData(newSale);
       }
       setIsModalOpen(false);
+
+      // Fast optimistic update of stock for instant subsequent barcode scans
+      if (newSale?.items && Array.isArray(newSale.items)) {
+        const soldMap = new Map<string, number>();
+        newSale.items.forEach((item: any) => {
+          const pid = (typeof item.productId === 'object' ? item.productId?._id : item.productId)?.toString();
+          if (pid) {
+            const factor = Number(item.conversionFactor) || 1;
+            const qty = Number(item.quantity) / factor;
+            soldMap.set(pid, (soldMap.get(pid) || 0) + qty);
+          }
+        });
+
+        queryClient.setQueryData<Product[]>(["quick-catalog"], (old) => {
+          if (!old) return old;
+          return old.map((p) => {
+            const soldQty = p._id ? soldMap.get(p._id) : undefined;
+            if (soldQty !== undefined) {
+              const updated = { ...p, stock: Math.max(0, p.stock - soldQty) };
+              if (updated.barcode?.trim()) barcodeLocalMap.current.set(updated.barcode.trim(), updated);
+              if (updated.subUnitBarcode?.trim()) barcodeLocalMap.current.set(updated.subUnitBarcode.trim(), updated);
+              return updated;
+            }
+            return p;
+          });
+        });
+      }
+
+      // Invalidate sales list so new bill appears immediately
       queryClient.invalidateQueries({ queryKey: ["sales"] });
-      queryClient.invalidateQueries({ queryKey: ["inventory"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      // Invalidate inventory & stats lazily without triggering an instant server storm
+      queryClient.invalidateQueries({ queryKey: ["inventory"], refetchType: "none" });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"], refetchType: "none" });
+      queryClient.invalidateQueries({ queryKey: ["quick-catalog"], refetchType: "none" });
       resetForm();
     },
     onError: (err: any) => {
@@ -927,8 +977,9 @@ const Sales = () => {
       setIsModalOpen(false);
       setSelectedSaleForEdit(null);
       queryClient.invalidateQueries({ queryKey: ["sales"] });
-      queryClient.invalidateQueries({ queryKey: ["inventory"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory"], refetchType: "none" });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"], refetchType: "none" });
+      queryClient.invalidateQueries({ queryKey: ["quick-catalog"] });
       resetForm();
     },
     onError: (err: any) => {
@@ -949,8 +1000,9 @@ const Sales = () => {
     onSuccess: () => {
       showToast(t("billing.sale_deleted"), "success");
       queryClient.invalidateQueries({ queryKey: ["sales"] });
-      queryClient.invalidateQueries({ queryKey: ["inventory"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory"], refetchType: "none" });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"], refetchType: "none" });
+      queryClient.invalidateQueries({ queryKey: ["quick-catalog"] });
     },
     onError: (err: any) => {
       showToast(err.response?.data?.message || "Error deleting sale", "error");

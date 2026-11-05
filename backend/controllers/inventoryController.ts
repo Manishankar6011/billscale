@@ -19,16 +19,14 @@ export const getProducts = async (req: AuthRequest, res: Response) => {
         const tenantId = new mongoose.Types.ObjectId(req.tenantId as string);
         let query: any = { tenantId };
 
-        // 1. Search Logic
+        // 1. Search Logic (Indexed exact barcode + regex name only)
         if (search) {
             const trimmed = search.trim();
             const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, (c) => '\\' + c);
             query.$or = [
                 { barcode: trimmed },
                 { subUnitBarcode: trimmed },
-                { name: { $regex: escaped, $options: 'i' } },
-                { barcode: { $regex: escaped, $options: 'i' } },
-                { subUnitBarcode: { $regex: escaped, $options: 'i' } }
+                { name: { $regex: escaped, $options: 'i' } }
             ];
         }
 
@@ -53,26 +51,44 @@ export const getProducts = async (req: AuthRequest, res: Response) => {
 
         const needStats = !search && req.query.skipStats !== 'true';
 
-        const [products, totalCount, totalStats] = await Promise.all([
-            Product.find(query)
+        let products: any[] = [];
+        let totalCount = 0;
+        let totalStats: any[] = [];
+
+        if (search) {
+            products = await Product.find(query)
                 .sort(sort)
                 .skip(skip)
                 .limit(limit)
-                .lean(),
-            Product.countDocuments(query),
-            needStats
-                ? Product.aggregate([
-                    { $match: query },
-                    { 
-                        $group: { 
-                            _id: null, 
+                .lean();
+
+            if (page === 1 && products.length < limit) {
+                totalCount = products.length;
+            } else {
+                totalCount = await Product.countDocuments(query);
+            }
+        } else {
+            [products, totalCount, totalStats] = await Promise.all([
+                Product.find(query)
+                    .sort(sort)
+                    .skip(skip)
+                    .limit(limit)
+                    .lean(),
+                Product.countDocuments(query),
+                needStats
+                    ? Product.aggregate([
+                        { $match: query },
+                        { 
+                            $group: { 
+                                _id: null, 
                             totalPurchaseValue: { $sum: { $multiply: ["$stock", "$purchasePrice"] } },
                             totalSellingValue: { $sum: { $multiply: ["$stock", "$pricePerUnit"] } }
                         } 
                     }
                 ])
                 : Promise.resolve([])
-        ]);
+            ]);
+        }
 
         res.status(200).json({
             products,
@@ -91,7 +107,24 @@ export const getProducts = async (req: AuthRequest, res: Response) => {
     }
 };
 
-// Barcode In-Memory Cache (TTL: 60s)
+// @desc    Get lightweight product catalog for instant POS / barcode billing
+// @route   GET /api/inventory/quick-catalog
+export const getQuickCatalog = async (req: AuthRequest, res: Response) => {
+    try {
+        const tenantId = new mongoose.Types.ObjectId(req.tenantId as string);
+
+        const products = await Product.find(
+            { tenantId },
+            'name barcode subUnitBarcode pricePerUnit mrp purchasePrice stock unit hasSubUnit subUnitName subUnitValue subUnitMrp subUnitSalePrice subUnitPurchasePrice gstRate hsnCode category batchNumber expiryDate minStockAlert subUnitDiscount'
+        ).lean();
+
+        res.status(200).json(products);
+    } catch (err: any) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
+// Barcode In-Memory Cache (TTL: 5 mins)
 const scanCache = new Map<string, { product: any; expiresAt: number }>();
 
 export const invalidateScanCache = (tenantId?: string) => {
@@ -137,7 +170,7 @@ export const getProductByBarcode = async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ message: 'Product not found' });
         }
 
-        scanCache.set(cacheKey, { product, expiresAt: Date.now() + 60000 });
+        scanCache.set(cacheKey, { product, expiresAt: Date.now() + 300000 });
         
         res.status(200).json(product);
     } catch (err: any) {

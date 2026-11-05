@@ -8,7 +8,8 @@ import {
     bulkAddProducts, 
     bulkUpdateProducts,
     getCategories,
-    addCategory
+    addCategory,
+    getQuickCatalog
 } from '../controllers/inventoryController';
 import { protect, checkSubscription } from '../middleware/auth';
 import { checkPermission } from '../middleware/permission';
@@ -20,6 +21,7 @@ router.use(protect);
 router.use(tenant);
 
 router.get('/', checkPermission('inventory', 'view'), getProducts);
+router.get('/quick-catalog', checkPermission('inventory', 'view'), getQuickCatalog);
 router.get('/categories', checkPermission('inventory', 'view'), getCategories);
 router.post('/categories', checkSubscription, checkPermission('inventory', 'create'), addCategory);
 router.get('/barcode/:barcode', checkPermission('inventory', 'view'), getProductByBarcode);
