@@ -181,80 +181,44 @@ export const processSale = async (req: AuthRequest, res: Response) => {
 
   let session: any;
   try {
-    session = await mongoose.startSession();
-    session.startTransaction();
+    const itemsList = Array.isArray(items) ? items : [];
+    const productIds = itemsList.map((i: any) => i.productId).filter(Boolean);
+
+    // 1. Handle Customer Auto-Creation/Linking preparation
+    let finalCustomerId = req.body.customerId || null;
+    const isGenericWalkIn = !customerPhone && (!customerName || customerName.trim().toLowerCase() === "cash sale");
+    const shouldLookupCustomer = !finalCustomerId && !isGenericWalkIn && (customerPhone || customerName);
+
+    // Fetch read queries in parallel OUTSIDE the transaction session (Fast & standard, avoiding concurrent txn operations)
+    const [existingCustomer, products] = await Promise.all([
+      shouldLookupCustomer
+        ? (customerPhone
+            ? Customer.findOne({ tenantId: req.tenantId, phone: customerPhone }).lean()
+            : Customer.findOne({
+                tenantId: req.tenantId,
+                name: customerName,
+                $or: [{ phone: "" }, { phone: { $exists: false } }, { phone: null }],
+              }).lean()
+          )
+        : Promise.resolve(null),
+      Product.find({
+        _id: { $in: productIds },
+        tenantId: req.tenantId,
+      }),
+    ]);
+    const tRead = Date.now();
 
     let totalAmount = 0;
     let totalProfit = 0;
     let totalTaxAmount = 0;
     const processedItems = [];
 
-    // 1. Handle Customer Auto-Creation/Linking
-    let finalCustomerId = req.body.customerId || null;
-    const isGenericWalkIn = !customerPhone && (!customerName || customerName.trim().toLowerCase() === "cash sale");
-    const shouldLookupCustomer = !finalCustomerId && !isGenericWalkIn && (customerPhone || customerName);
-
-    const productIds = items.map((i: any) => i.productId);
-
-    // Parallelize Atomic Invoice Increment, Customer Lookup & Products Fetch in 1 single roundtrip!
-    const [updatedTenant, existingCustomer, products] = await Promise.all([
-      Tenant.findByIdAndUpdate(
-        req.tenantId,
-        { $inc: { nextInvoiceNumber: 1 } },
-        { session, new: false }
-      ),
-      shouldLookupCustomer
-        ? (customerPhone
-            ? Customer.findOne({ tenantId: req.tenantId, phone: customerPhone }).session(session)
-            : Customer.findOne({
-                tenantId: req.tenantId,
-                name: customerName,
-                $or: [{ phone: "" }, { phone: { $exists: false } }, { phone: null }],
-              }).session(session)
-          )
-        : Promise.resolve(null),
-      Product.find({
-        _id: { $in: productIds },
-        tenantId: req.tenantId,
-      }).session(session),
-    ]);
-    const tParallel = Date.now();
-
-    if (!updatedTenant) throw new Error("Unauthorized or Business not found");
-
-    if (shouldLookupCustomer) {
-      if (!existingCustomer && customerName) {
-        try {
-          const newCustomer = new Customer({
-            tenantId: req.tenantId,
-            name: customerName,
-            phone: customerPhone || undefined,
-            address: customerAddress,
-            gstin: customerGSTIN,
-            state: customerState,
-            stateCode: customerStateCode,
-          });
-          await newCustomer.save({ session });
-          finalCustomerId = newCustomer._id;
-        } catch (custErr: any) {
-          if (custErr.code === 11000 && customerPhone) {
-            const fallback = await Customer.findOne({ tenantId: req.tenantId, phone: customerPhone }).session(session);
-            if (fallback) finalCustomerId = fallback._id;
-          } else {
-            throw custErr;
-          }
-        }
-      } else if (existingCustomer) {
-        finalCustomerId = existingCustomer._id;
-      }
-    }
-
     const productMap = new Map();
     products.forEach((p) => productMap.set(p._id.toString(), p));
 
     const bulkOperations = [];
 
-    for (const item of items) {
+    for (const item of itemsList) {
       if (Number(item.quantity) <= 0)
         throw new Error(`Invalid quantity for item`);
       if (Number(item.sellingPrice) < 0)
@@ -302,11 +266,6 @@ export const processSale = async (req: AuthRequest, res: Response) => {
         },
       });
     }
-
-    if (bulkOperations.length > 0) {
-      await Product.bulkWrite(bulkOperations, { session });
-    }
-    const tBulk = Date.now();
 
     // Add additional items to totalAmount & calculate Profit contribution
     if (additionalItems && Array.isArray(additionalItems)) {
@@ -390,6 +349,46 @@ export const processSale = async (req: AuthRequest, res: Response) => {
       calculatedStatus = "pending";
     }
 
+    // Start MongoDB ACID Transaction for writes only (strictly sequential on session)
+    session = await mongoose.startSession();
+    session.startTransaction();
+
+    // 1. Save new customer if needed inside session
+    if (shouldLookupCustomer) {
+      if (!existingCustomer && customerName) {
+        try {
+          const newCustomer = new Customer({
+            tenantId: req.tenantId,
+            name: customerName,
+            phone: customerPhone || undefined,
+            address: customerAddress,
+            gstin: customerGSTIN,
+            state: customerState,
+            stateCode: customerStateCode,
+          });
+          await newCustomer.save({ session });
+          finalCustomerId = newCustomer._id;
+        } catch (custErr: any) {
+          if (custErr.code === 11000 && customerPhone) {
+            const fallback = await Customer.findOne({ tenantId: req.tenantId, phone: customerPhone }).session(session);
+            if (fallback) finalCustomerId = fallback._id;
+          } else {
+            throw custErr;
+          }
+        }
+      } else if (existingCustomer) {
+        finalCustomerId = existingCustomer._id;
+      }
+    }
+
+    // 2. Atomically increment invoice number inside session
+    const updatedTenant = await Tenant.findByIdAndUpdate(
+      req.tenantId,
+      { $inc: { nextInvoiceNumber: 1 } },
+      { session, new: false }
+    );
+    if (!updatedTenant) throw new Error("Unauthorized or Business not found");
+
     let currentInvoiceNum = updatedTenant.nextInvoiceNumber || 1;
     let invoiceNumber = `INV-${currentInvoiceNum}`;
 
@@ -409,6 +408,13 @@ export const processSale = async (req: AuthRequest, res: Response) => {
       );
     }
 
+    // 3. Deduct stock sequentially inside session
+    if (bulkOperations.length > 0) {
+      await Product.bulkWrite(bulkOperations, { session });
+    }
+    const tBulk = Date.now();
+
+    // 4. Save sale record inside session
     const sale = new Sale({
       tenantId: req.tenantId,
       customerId: finalCustomerId,
@@ -448,7 +454,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     session.endSession();
     session = null;
 
-    console.log(`⏱️ [SALE_TIMING] Invoice: ${invoiceNumber} | Total: ${tCommit - startTime}ms (ParallelFetch: ${tParallel - startTime}ms, BulkWrite: ${tBulk - tParallel}ms, SaleSave: ${tSave - tBulk}ms, CommitTx: ${tCommit - tSave}ms)`);
+    console.log(`⏱️ [SALE_TIMING] Invoice: ${invoiceNumber} | Total: ${tCommit - startTime}ms (ReadFetch: ${tRead - startTime}ms, BulkWrite: ${tBulk - tRead}ms, SaleSave: ${tSave - tBulk}ms, CommitTx: ${tCommit - tSave}ms)`);
 
     // Attach in-memory populated product details for instant response without extra network trip
     const saleObj: any = sale.toObject();
