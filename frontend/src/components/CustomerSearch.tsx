@@ -3,6 +3,7 @@ import { Search, UserPlus, Phone, User } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import type { Customer } from '../types';
+import { saveCustomersOffline, getCustomersOffline } from '../utils/offlineDb';
 
 interface CustomerSearchProps {
     onSelect: (customer: Customer) => void;
@@ -34,12 +35,27 @@ const CustomerSearch: React.FC<CustomerSearchProps> = ({ onSelect, onAddNew, ini
             if (query.length >= 2 || query === '') {
                 setLoading(true);
                 try {
-                    const res = await axios.get(`/api/customers/search?query=${query}`, {
-                        headers: { Authorization: `Bearer ${user?.token}` }
-                    });
-                    setResults(res.data);
+                    if (navigator.onLine) {
+                        const res = await axios.get(`/api/customers/search?query=${query}`, {
+                            headers: { Authorization: `Bearer ${user?.token}` },
+                            timeout: 4000,
+                        });
+                        setResults(res.data);
+                        if (Array.isArray(res.data) && res.data.length > 0) {
+                            saveCustomersOffline(res.data).catch(() => {});
+                        }
+                    } else {
+                        const local = await getCustomersOffline(query);
+                        setResults(local);
+                    }
                 } catch (err) {
-                    console.error('Customer search error:', err);
+                    console.warn('Customer search network error, falling back to offline cache:', err);
+                    try {
+                        const local = await getCustomersOffline(query);
+                        setResults(local);
+                    } catch (idbErr) {
+                        console.error('Offline customer search error:', idbErr);
+                    }
                 } finally {
                     setLoading(false);
                 }

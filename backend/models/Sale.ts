@@ -166,6 +166,11 @@ const saleSchema: Schema = new mongoose.Schema({
     invoiceNumber: {
         type: String,
     },
+    offlineInvoiceNumber: {
+        type: String,
+        trim: true,
+        default: ''
+    },
     date: {
         type: Date,
         default: Date.now
@@ -195,6 +200,7 @@ const saleSchema: Schema = new mongoose.Schema({
 
 // Indices for performance and uniqueness
 saleSchema.index({ tenantId: 1, invoiceNumber: 1 }, { unique: true });
+saleSchema.index({ tenantId: 1, offlineInvoiceNumber: 1 });
 saleSchema.index({ tenantId: 1, date: -1 });
 saleSchema.index({ tenantId: 1, status: 1 });
 saleSchema.index({ tenantId: 1, createdAt: -1 });

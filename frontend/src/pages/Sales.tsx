@@ -44,9 +44,21 @@ import {
   EyeOff,
   Zap,
   ChevronDown,
+  Wifi,
+  WifiOff,
+  UploadCloud,
 } from "lucide-react";
 import BarcodeScanner from "../components/BarcodeScanner";
 import CustomerSearch from "../components/CustomerSearch";
+import OfflineSyncModal from "../components/OfflineSyncModal";
+import { useNetworkStatus } from "../hooks/useNetworkStatus";
+import {
+  saveProductsOffline,
+  getProductsOffline,
+  findProductByBarcodeOffline,
+  getNextOfflineInvoiceNumber,
+  saveOfflineSale,
+} from "../utils/offlineDb";
 import axios from "axios";
 import type {
   Sale,
@@ -192,6 +204,30 @@ const Sales = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const isSubmittingRef = useRef(false);
+
+  // Offline Mode & Sync Hooks
+  const { isOnline, isSyncing, pendingCount, refreshPendingCount, syncOfflineSales } = useNetworkStatus(user?.token);
+  const [isOfflineModalOpen, setIsOfflineModalOpen] = useState(false);
+
+  const handleSyncAllBills = async () => {
+    if (!user?.token) return;
+    try {
+      const res = await syncOfflineSales(user.token, (record, cloudSale) => {
+        showToast(`✅ Offline bill ${record.offlineInvoiceNumber} synced! (Cloud: ${cloudSale.invoiceNumber})`, "success");
+      });
+      if (res.synced > 0) {
+        queryClient.invalidateQueries({ queryKey: ["sales"] });
+        queryClient.invalidateQueries({ queryKey: ["inventory"], refetchType: "none" });
+        queryClient.invalidateQueries({ queryKey: ["quick-catalog"], refetchType: "none" });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      }
+      if (res.failed > 0) {
+        showToast(`⚠️ ${res.failed} bill(s) failed to sync. Check Offline Bills list.`, "error");
+      }
+    } catch (e: any) {
+      showToast("Sync failed: " + (e.message || "Unknown error"), "error");
+    }
+  };
 
   // State Declarations (Moved to top)
   const [filterSearch, setFilterSearch] = useState("");
@@ -382,10 +418,22 @@ const Sales = () => {
   const { data: quickCatalogData } = useQuery<Product[]>({
     queryKey: ["quick-catalog"],
     queryFn: async () => {
-      const res = await axios.get<Product[]>("/api/inventory/quick-catalog", {
-        headers: { Authorization: `Bearer ${user?.token}` },
-      });
-      return res.data;
+      try {
+        const res = await axios.get<Product[]>("/api/inventory/quick-catalog", {
+          headers: { Authorization: `Bearer ${user?.token}` },
+        });
+        if (Array.isArray(res.data) && res.data.length > 0) {
+          saveProductsOffline(res.data).catch(() => {});
+        }
+        return res.data;
+      } catch (err) {
+        console.warn("Could not fetch quick-catalog from cloud, loading offline cache:", err);
+        const offlineProds = await getProductsOffline();
+        if (offlineProds.length > 0) {
+          return offlineProds;
+        }
+        throw err;
+      }
     },
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
@@ -898,14 +946,115 @@ const Sales = () => {
     }
   }, [grandTotal, paymentMode, isModalOpen, selectedSaleForEdit]);
 
+  const handleOfflineSaleCreation = useCallback(async (saleData: Partial<Sale>) => {
+    isSubmittingRef.current = false;
+    try {
+      const offlineInvoiceNumber = await getNextOfflineInvoiceNumber();
+      const offlineSale: Sale = {
+        _id: `off_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        invoiceNumber: offlineInvoiceNumber,
+        offlineInvoiceNumber: offlineInvoiceNumber,
+        customerName: saleData.customerName || "Cash Sale",
+        customerPhone: saleData.customerPhone || "",
+        customerAddress: saleData.customerAddress || "",
+        customerGSTIN: saleData.customerGSTIN || "",
+        customerState: saleData.customerState || "",
+        customerStateCode: saleData.customerStateCode || "",
+        items: (saleData.items || []).map((item: any) => {
+          const rawId = typeof item.productId === "object" ? item.productId?._id : item.productId;
+          const matchedProd = allProductsList.find((p) => p._id === rawId);
+          return {
+            ...item,
+            productId: matchedProd || item.productId,
+          };
+        }),
+        additionalItems: saleData.additionalItems || [],
+        customItems: saleData.customItems || [],
+        totalAmount: Number(saleData.totalAmount) || 0,
+        totalProfit: Number(saleData.totalProfit) || 0,
+        amountPaid: Number(saleData.amountPaid) || 0,
+        balanceDue: Number(saleData.balanceDue) || 0,
+        roundOffAmount: Number(saleData.roundOffAmount) || 0,
+        paymentMode: (saleData.paymentMode as any) || "cash",
+        status: (saleData.status as any) || "paid",
+        date: saleData.date || new Date().toISOString(),
+        showQRCode: !!saleData.showQRCode,
+        specialDiscount: Number(saleData.specialDiscount) || 0,
+        specialDiscountPercent: Number(saleData.specialDiscountPercent) || 0,
+        specialDiscountLabel: saleData.specialDiscountLabel || "",
+        isOffline: true,
+        syncStatus: "pending",
+      };
+
+      await saveOfflineSale(offlineSale, saleData);
+
+      // Fast optimistic update of stock for instant subsequent barcode scans
+      if (offlineSale.items && Array.isArray(offlineSale.items)) {
+        const soldMap = new Map<string, number>();
+        offlineSale.items.forEach((item: any) => {
+          const pid = (typeof item.productId === "object" ? item.productId?._id : item.productId)?.toString();
+          if (pid) {
+            const factor = Number(item.conversionFactor) || 1;
+            const qty = Number(item.quantity) / factor;
+            soldMap.set(pid, (soldMap.get(pid) || 0) + qty);
+          }
+        });
+
+        queryClient.setQueryData<Product[]>(["quick-catalog"], (old) => {
+          if (!old) return old;
+          return old.map((p) => {
+            const soldQty = p._id ? soldMap.get(p._id) : undefined;
+            if (soldQty !== undefined) {
+              const updated = { ...p, stock: Math.max(0, p.stock - soldQty) };
+              if (updated.barcode?.trim()) barcodeLocalMap.current.set(updated.barcode.trim(), updated);
+              if (updated.subUnitBarcode?.trim()) barcodeLocalMap.current.set(updated.subUnitBarcode.trim(), updated);
+              return updated;
+            }
+            return p;
+          });
+        });
+      }
+
+      showToast(`⚡ Bill saved offline (${offlineInvoiceNumber})! Ready to print.`, "success");
+
+      if (autoPrint) {
+        setPrintData(offlineSale);
+      }
+
+      setIsModalOpen(false);
+      resetForm();
+      await refreshPendingCount();
+    } catch (saveErr: any) {
+      console.error("Failed to save offline sale:", saveErr);
+      showToast("Could not save bill locally: " + (saveErr.message || "Unknown error"), "error");
+    }
+  }, [allProductsList, autoPrint, queryClient, refreshPendingCount, showToast]);
+
   // Mutations
   const createSaleMutation = useMutation({
     mutationFn: async (saleData: Partial<Sale>) => {
-      return axios.post<Sale>("/api/transactions/sales", saleData, {
-        headers: { Authorization: `Bearer ${user?.token}` },
-      });
+      if (!navigator.onLine) {
+        await handleOfflineSaleCreation(saleData);
+        return { isOfflineHandled: true } as any;
+      }
+      try {
+        return await axios.post<Sale>("/api/transactions/sales", saleData, {
+          headers: { Authorization: `Bearer ${user?.token}` },
+          timeout: 10000,
+        });
+      } catch (err: any) {
+        if (!err.response || err.code === "ERR_NETWORK" || err.code === "ECONNABORTED") {
+          console.warn("Network error during sale post, falling back to offline save:", err);
+          await handleOfflineSaleCreation(saleData);
+          return { isOfflineHandled: true } as any;
+        }
+        throw err;
+      }
     },
-    onSuccess: (res) => {
+    onSuccess: (res: any) => {
+      if (res?.isOfflineHandled) {
+        return;
+      }
       isSubmittingRef.current = false;
       const newSale = res.data;
       showToast(t("billing.sale_recorded"), "success");
@@ -1356,6 +1505,18 @@ const Sales = () => {
           } catch (e) {
             // ignore
           }
+        }
+      }
+
+      // 5. Fallback to local IndexedDB store
+      if (!product) {
+        try {
+          const offlineProd = await findProductByBarcodeOffline(trimmedCode);
+          if (offlineProd && offlineProd._id) {
+            product = offlineProd;
+          }
+        } catch (e) {
+          // ignore
         }
       }
 
@@ -2064,6 +2225,36 @@ const Sales = () => {
             <p className="text-slate-500">{t("billing.sale_subtitle")}</p>
           </div>
           <div className="flex items-center gap-3">
+            {/* Offline Status & Sync Pill */}
+            {!isOnline ? (
+              <button
+                onClick={() => setIsOfflineModalOpen(true)}
+                title="Offline Mode Active. Click to view offline bills."
+                className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 border border-rose-300 rounded-2xl text-xs font-bold text-rose-700 hover:bg-rose-100 transition-all shadow-sm animate-pulse"
+              >
+                <WifiOff size={15} className="text-rose-600" />
+                <span>Offline ({pendingCount})</span>
+              </button>
+            ) : pendingCount > 0 ? (
+              <button
+                onClick={() => setIsOfflineModalOpen(true)}
+                title="Click to sync offline bills with cloud"
+                className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 border border-amber-300 rounded-2xl text-xs font-bold text-amber-800 hover:bg-amber-100 transition-all shadow-sm animate-pulse"
+              >
+                <UploadCloud size={15} className="text-amber-600" />
+                <span>{pendingCount} to Sync</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => setIsOfflineModalOpen(true)}
+                title="Offline Database Ready & Synced"
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-all"
+              >
+                <Wifi size={14} className="text-emerald-500" />
+                <span className="hidden sm:inline">Online</span>
+              </button>
+            )}
+
             <button
               onClick={exportPDF}
               className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-600 hover:bg-primary-50 hover:border-primary-200 hover:text-primary-600 transition-all shadow-sm"
@@ -2693,9 +2884,16 @@ const Sales = () => {
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4 print:hidden">
           <div className="bg-white w-full max-w-6xl rounded-3xl shadow-2xl p-8 animate-in fade-in zoom-in duration-200 h-[90vh] flex flex-col">
             <div className="flex justify-between items-center mb-6 shrink-0">
-              <h2 className="text-2xl font-black text-slate-800 tracking-tighter">
-                {selectedSaleForEdit ? "Edit Sale" : t("billing.new_sale")}
-              </h2>
+              <div className="flex items-center gap-3">
+                <h2 className="text-2xl font-black text-slate-800 tracking-tighter">
+                  {selectedSaleForEdit ? "Edit Sale" : t("billing.new_sale")}
+                </h2>
+                {!isOnline && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-700">
+                    <WifiOff size={12} /> Offline
+                  </span>
+                )}
+              </div>
               <button
                 onClick={() => tryClose(closeModal)}
                 className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 transition-all"
@@ -2703,6 +2901,15 @@ const Sales = () => {
                 &times;
               </button>
             </div>
+
+            {!isOnline && (
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-2xl flex items-center gap-2.5 text-xs text-amber-800 shrink-0">
+                <WifiOff size={16} className="text-amber-600 shrink-0" />
+                <span>
+                  <strong>⚡ Offline Billing Active:</strong> This bill will be recorded locally and printed immediately without internet. It will automatically sync to cloud when you reconnect.
+                </span>
+              </div>
+            )}
 
             <form
               onSubmit={handleSubmit}
@@ -3997,9 +4204,10 @@ const Sales = () => {
                       <Receipt size={20} />{" "}
                       {selectedSaleForEdit
                         ? "Update Sale"
+                        : !isOnline
+                        ? "Save & Print Offline"
                         : t("billing.complete_sale")}{" "}
-                      (₹
-                      {grandTotal.toLocaleString()})
+                      (₹{grandTotal.toLocaleString()})
                     </>
                   )}
                 </button>
@@ -4896,6 +5104,17 @@ const Sales = () => {
           </div>
         </div>
       )}
+
+      {/* Offline Bills & Sync Manager Modal */}
+      <OfflineSyncModal
+        isOpen={isOfflineModalOpen}
+        onClose={() => setIsOfflineModalOpen(false)}
+        isOnline={isOnline}
+        isSyncing={isSyncing}
+        onSyncAll={handleSyncAllBills}
+        onPrintSale={(sale) => setPrintData(sale)}
+        onRefreshStats={refreshPendingCount}
+      />
     </div>
   );
 };

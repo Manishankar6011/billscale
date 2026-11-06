@@ -170,6 +170,7 @@ export interface ISale extends Document {
   additionalItems?: { name: string, price: number, profitPercent?: number, mrp?: number, purchasePrice?: number, profitAmount?: number }[];
   customItems?: { name: string, price: number, quantity: number, profitPercent?: number, mrp?: number, purchasePrice?: number, profitAmount?: number, taxRate?: number, taxAmount?: number, gstRate?: number, hsnCode?: string, isTaxInclusive?: boolean, basePrice?: number }[];
   invoiceNumber: string;
+  offlineInvoiceNumber?: string;
   date: Date;
   showQRCode?: boolean;
   createdAt: Date;

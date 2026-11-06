@@ -39,6 +39,7 @@ export const getSales = async (req: AuthRequest, res: Response) => {
         { customerName: { $regex: search, $options: "i" } },
         { invoiceNumber: { $regex: search, $options: "i" } },
         { customerPhone: { $regex: search, $options: "i" } },
+        { offlineInvoiceNumber: { $regex: search, $options: "i" } },
       ];
     }
 
@@ -155,6 +156,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     specialDiscount,
     specialDiscountPercent,
     specialDiscountLabel,
+    offlineInvoiceNumber,
   } = req.body;
 
   // 0. Pre-transaction validation: Check Tenant and Free Plan Limits
@@ -425,6 +427,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
       customerState: customerState || "",
       customerStateCode: customerStateCode || "",
       invoiceNumber,
+      offlineInvoiceNumber: offlineInvoiceNumber || "",
       items: processedItems,
       additionalItems: additionalItems || [],
       customItems: processedCustomItems,
@@ -518,6 +521,7 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
     specialDiscount,
     specialDiscountPercent,
     specialDiscountLabel,
+    offlineInvoiceNumber,
   } = req.body;
 
   let session: any = await mongoose.startSession();

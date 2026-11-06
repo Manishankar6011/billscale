@@ -221,6 +221,10 @@ export interface Sale {
   additionalItems?: { name: string; price: number; profitPercent?: number; mrp?: number; purchasePrice?: number; profitAmount?: number }[];
   customItems?: { name: string; price: number; quantity: number; profitPercent?: number; mrp?: number; purchasePrice?: number; profitAmount?: number; taxRate?: number; taxAmount?: number; gstRate?: number; hsnCode?: string; isTaxInclusive?: boolean; basePrice?: number }[];
   invoiceNumber: string;
+  offlineInvoiceNumber?: string;
+  isOffline?: boolean;
+  syncStatus?: "pending" | "syncing" | "synced" | "failed";
+  syncError?: string;
   date: string;
   showQRCode?: boolean;
   createdBy?: string | { _id: string; name: string; role?: string };
