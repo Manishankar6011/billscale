@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { User, Building2, Phone, MapPin, Save, ShieldCheck, Crown, ArrowRight, Upload, Image, Mail, Pen, X, AlertCircle, Loader2, MessageSquare, Bug, Lightbulb, Trash2, AlertTriangle, Users, Plus, Link, ExternalLink, Globe, Settings as SettingsIcon, ChevronRight, KeyRound, CheckSquare, Square, Box, Receipt, ShoppingCart, UserRound, Sparkles, BarChart3, Wallet, CalendarCheck, Check, Instagram, Facebook, Twitter, Youtube, Share2, Star } from 'lucide-react';
+import { User, Building2, Phone, MapPin, Save, ShieldCheck, Crown, ArrowRight, Upload, Image, Mail, Pen, X, AlertCircle, Loader2, MessageSquare, MessageCircle, Bug, Lightbulb, Trash2, AlertTriangle, Users, Plus, Link, ExternalLink, Globe, Settings as SettingsIcon, ChevronRight, KeyRound, CheckSquare, Square, Box, Receipt, ShoppingCart, UserRound, Sparkles, BarChart3, Wallet, CalendarCheck, Check, Instagram, Facebook, Twitter, Youtube, Share2, Star } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { canUseFeature } from '../utils/planLimits';
@@ -12,6 +12,79 @@ import { Lock, CreditCard, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { DEFAULT_STAFF_PERMISSIONS, type StaffPermissions } from '../types';
 import { buildWhatsAppBillMessage } from '../utils/whatsapp';
+
+const SOCIAL_PLATFORMS = [
+    {
+        id: 'whatsapp',
+        label: 'WhatsApp',
+        desc: 'Chat, Channel or Group link',
+        placeholder: 'e.g. 9876543210 or https://chat.whatsapp.com/...',
+        icon: MessageCircle,
+        color: 'text-emerald-600',
+        bg: 'bg-emerald-50',
+        ring: 'focus:ring-emerald-500/20 focus:border-emerald-500',
+    },
+    {
+        id: 'instagram',
+        label: 'Instagram',
+        desc: 'Profile handle or link',
+        placeholder: 'e.g. @yourshop or instagram.com/yourshop',
+        icon: Instagram,
+        color: 'text-pink-600',
+        bg: 'bg-pink-50',
+        ring: 'focus:ring-pink-500/20 focus:border-pink-500',
+    },
+    {
+        id: 'facebook',
+        label: 'Facebook',
+        desc: 'Page or profile link',
+        placeholder: 'e.g. facebook.com/yourshop',
+        icon: Facebook,
+        color: 'text-blue-600',
+        bg: 'bg-blue-50',
+        ring: 'focus:ring-blue-500/20 focus:border-blue-500',
+    },
+    {
+        id: 'website',
+        label: 'Website / Store',
+        desc: 'Online store or website link',
+        placeholder: 'e.g. https://yourbusiness.com',
+        icon: Globe,
+        color: 'text-teal-600',
+        bg: 'bg-teal-50',
+        ring: 'focus:ring-teal-500/20 focus:border-teal-500',
+    },
+    {
+        id: 'googleReview',
+        label: 'Google Review',
+        desc: 'Customer review or Maps link',
+        placeholder: 'e.g. https://g.page/r/your-shop/review',
+        icon: Star,
+        color: 'text-amber-500',
+        bg: 'bg-amber-50',
+        ring: 'focus:ring-amber-500/20 focus:border-amber-500',
+    },
+    {
+        id: 'youtube',
+        label: 'YouTube',
+        desc: 'Channel link or handle',
+        placeholder: 'e.g. youtube.com/@yourshop',
+        icon: Youtube,
+        color: 'text-red-600',
+        bg: 'bg-red-50',
+        ring: 'focus:ring-red-500/20 focus:border-red-500',
+    },
+    {
+        id: 'twitter',
+        label: 'Twitter / X',
+        desc: 'Profile handle or link',
+        placeholder: 'e.g. @yourshop or x.com/yourshop',
+        icon: Twitter,
+        color: 'text-slate-800',
+        bg: 'bg-slate-100',
+        ring: 'focus:ring-slate-500/20 focus:border-slate-500',
+    },
+] as const;
 
 const Settings = () => {
     const { t, i18n } = useTranslation();
@@ -51,6 +124,7 @@ const Settings = () => {
         invoiceFormat: 'modern' as 'modern' | 'gst',
         enableInventoryImageUpload: false,
         socialLinks: {
+            whatsapp: '',
             instagram: '',
             facebook: '',
             twitter: '',
@@ -59,6 +133,21 @@ const Settings = () => {
             googleReview: '',
         }
     });
+
+    const [enabledSocials, setEnabledSocials] = useState<Record<string, boolean>>({});
+
+    const toggleSocialPlatform = (id: string) => {
+        setEnabledSocials(prev => {
+            const nextVal = !prev[id];
+            if (!nextVal) {
+                setFormData(f => ({
+                    ...f,
+                    socialLinks: { ...f.socialLinks, [id]: '' }
+                }));
+            }
+            return { ...prev, [id]: nextVal };
+        });
+    };
 
     const logoInputRef = useRef<HTMLInputElement>(null);
     const sigInputRef = useRef<HTMLInputElement>(null);
@@ -122,6 +211,7 @@ const Settings = () => {
                 invoiceFormat: profile.tenantId?.invoiceFormat || 'modern',
                 enableInventoryImageUpload: profile.tenantId?.enableInventoryImageUpload || false,
                 socialLinks: {
+                    whatsapp: profile.tenantId?.socialLinks?.whatsapp || '',
                     instagram: profile.tenantId?.socialLinks?.instagram || '',
                     facebook: profile.tenantId?.socialLinks?.facebook || '',
                     twitter: profile.tenantId?.socialLinks?.twitter || '',
@@ -129,6 +219,17 @@ const Settings = () => {
                     website: profile.tenantId?.socialLinks?.website || '',
                     googleReview: profile.tenantId?.socialLinks?.googleReview || '',
                 }
+            });
+
+            const sl = profile.tenantId?.socialLinks || {};
+            setEnabledSocials({
+                whatsapp: Boolean(sl.whatsapp?.trim()),
+                instagram: Boolean(sl.instagram?.trim()),
+                facebook: Boolean(sl.facebook?.trim()),
+                website: Boolean(sl.website?.trim()),
+                googleReview: Boolean(sl.googleReview?.trim()),
+                youtube: Boolean(sl.youtube?.trim()),
+                twitter: Boolean(sl.twitter?.trim()),
             });
             // Load saved custom domain info
             setSavedCustomDomain(profile.tenantId?.customDomain || '');
@@ -775,7 +876,7 @@ const Settings = () => {
                                                     Social Media & WhatsApp Bill Share
                                                 </h4>
                                                 <p className="text-xs text-slate-400 font-medium">
-                                                    Links added here are automatically included when sharing bills/invoices on WhatsApp
+                                                    Turn on the channels you want to share with customers on WhatsApp bills
                                                 </p>
                                             </div>
                                         </div>
@@ -784,108 +885,81 @@ const Settings = () => {
                                         </span>
                                     </div>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        {/* Instagram */}
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
-                                                <Instagram size={14} className="text-pink-500" /> Instagram Handle / Link
-                                            </label>
-                                            <input
-                                                type="text"
-                                                className="input py-3.5 px-4 font-bold bg-slate-50 border-none focus:ring-2 focus:ring-pink-500/20 focus:bg-white rounded-2xl w-full transition-all text-sm"
-                                                value={formData.socialLinks.instagram}
-                                                onChange={(e) => setFormData({
-                                                    ...formData,
-                                                    socialLinks: { ...formData.socialLinks, instagram: e.target.value }
-                                                })}
-                                                placeholder="e.g. @yourshop or instagram.com/yourshop"
-                                            />
-                                        </div>
+                                    {/* Clean Platform Cards with Toggle Switches */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {SOCIAL_PLATFORMS.map((platform) => {
+                                            const isEnabled = Boolean(enabledSocials[platform.id]);
+                                            const Icon = platform.icon;
+                                            const currentValue = (formData.socialLinks as any)[platform.id] || '';
 
-                                        {/* Facebook */}
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
-                                                <Facebook size={14} className="text-blue-600" /> Facebook Page
-                                            </label>
-                                            <input
-                                                type="text"
-                                                className="input py-3.5 px-4 font-bold bg-slate-50 border-none focus:ring-2 focus:ring-blue-500/20 focus:bg-white rounded-2xl w-full transition-all text-sm"
-                                                value={formData.socialLinks.facebook}
-                                                onChange={(e) => setFormData({
-                                                    ...formData,
-                                                    socialLinks: { ...formData.socialLinks, facebook: e.target.value }
-                                                })}
-                                                placeholder="e.g. facebook.com/yourshop"
-                                            />
-                                        </div>
+                                            return (
+                                                <div
+                                                    key={platform.id}
+                                                    className={`p-4 rounded-2xl border transition-all duration-200 ${
+                                                        isEnabled
+                                                            ? 'bg-white border-slate-200 shadow-sm ring-1 ring-slate-100'
+                                                            : 'bg-slate-50/50 border-slate-100 hover:bg-slate-50'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        <div className="flex items-center gap-3 min-w-0">
+                                                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${platform.bg} ${platform.color}`}>
+                                                                <Icon size={18} />
+                                                            </div>
+                                                            <div className="min-w-0">
+                                                                <span className="text-xs font-black text-slate-800 block truncate">
+                                                                    {platform.label}
+                                                                </span>
+                                                                <span className="text-[10px] text-slate-400 font-medium block truncate">
+                                                                    {platform.desc}
+                                                                </span>
+                                                            </div>
+                                                        </div>
 
-                                        {/* Website */}
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
-                                                <Globe size={14} className="text-teal-600" /> Website / Online Store
-                                            </label>
-                                            <input
-                                                type="text"
-                                                className="input py-3.5 px-4 font-bold bg-slate-50 border-none focus:ring-2 focus:ring-teal-500/20 focus:bg-white rounded-2xl w-full transition-all text-sm"
-                                                value={formData.socialLinks.website}
-                                                onChange={(e) => setFormData({
-                                                    ...formData,
-                                                    socialLinks: { ...formData.socialLinks, website: e.target.value }
-                                                })}
-                                                placeholder="e.g. https://yourbusiness.com"
-                                            />
-                                        </div>
+                                                        {/* Toggle Switch */}
+                                                        <button
+                                                            type="button"
+                                                            role="switch"
+                                                            aria-checked={isEnabled}
+                                                            onClick={() => toggleSocialPlatform(platform.id)}
+                                                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                                                isEnabled ? 'bg-emerald-600' : 'bg-slate-200'
+                                                            }`}
+                                                            title={`Toggle ${platform.label}`}
+                                                        >
+                                                            <span
+                                                                aria-hidden="true"
+                                                                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                                                    isEnabled ? 'translate-x-5' : 'translate-x-0'
+                                                                }`}
+                                                            />
+                                                        </button>
+                                                    </div>
 
-                                        {/* Google Review */}
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
-                                                <Star size={14} className="text-amber-500 fill-amber-500" /> Google Review Link
-                                            </label>
-                                            <input
-                                                type="text"
-                                                className="input py-3.5 px-4 font-bold bg-slate-50 border-none focus:ring-2 focus:ring-amber-500/20 focus:bg-white rounded-2xl w-full transition-all text-sm"
-                                                value={formData.socialLinks.googleReview}
-                                                onChange={(e) => setFormData({
-                                                    ...formData,
-                                                    socialLinks: { ...formData.socialLinks, googleReview: e.target.value }
-                                                })}
-                                                placeholder="e.g. https://g.page/r/yourstore/review"
-                                            />
-                                        </div>
-
-                                        {/* YouTube */}
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
-                                                <Youtube size={14} className="text-red-500" /> YouTube Channel
-                                            </label>
-                                            <input
-                                                type="text"
-                                                className="input py-3.5 px-4 font-bold bg-slate-50 border-none focus:ring-2 focus:ring-red-500/20 focus:bg-white rounded-2xl w-full transition-all text-sm"
-                                                value={formData.socialLinks.youtube}
-                                                onChange={(e) => setFormData({
-                                                    ...formData,
-                                                    socialLinks: { ...formData.socialLinks, youtube: e.target.value }
-                                                })}
-                                                placeholder="e.g. youtube.com/@yourshop"
-                                            />
-                                        </div>
-
-                                        {/* Twitter / X */}
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
-                                                <Twitter size={14} className="text-slate-800" /> Twitter / X
-                                            </label>
-                                            <input
-                                                type="text"
-                                                className="input py-3.5 px-4 font-bold bg-slate-50 border-none focus:ring-2 focus:ring-slate-500/20 focus:bg-white rounded-2xl w-full transition-all text-sm"
-                                                value={formData.socialLinks.twitter}
-                                                onChange={(e) => setFormData({
-                                                    ...formData,
-                                                    socialLinks: { ...formData.socialLinks, twitter: e.target.value }
-                                                })}
-                                                placeholder="e.g. @yourshop or x.com/yourshop"
-                                            />
-                                        </div>
+                                                    {/* Expandable Input when Switch is ON */}
+                                                    {isEnabled && (
+                                                        <div className="mt-3 pt-3 border-t border-slate-100 animate-in fade-in slide-in-from-top-1 duration-200">
+                                                            <input
+                                                                type="text"
+                                                                value={currentValue}
+                                                                onChange={(e) =>
+                                                                    setFormData({
+                                                                        ...formData,
+                                                                        socialLinks: {
+                                                                            ...formData.socialLinks,
+                                                                            [platform.id]: e.target.value,
+                                                                        },
+                                                                    })
+                                                                }
+                                                                placeholder={platform.placeholder}
+                                                                className={`input py-2.5 px-3.5 font-bold bg-slate-50 border border-slate-200 focus:bg-white rounded-xl w-full text-xs transition-all outline-none ${platform.ring}`}
+                                                                autoFocus={!currentValue}
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
 
                                     {/* Real-time WhatsApp Message Preview */}
@@ -895,7 +969,7 @@ const Settings = () => {
                                             WhatsApp Bill Share Message Preview
                                         </div>
                                         <p className="text-[11px] text-slate-500 font-medium mb-3">
-                                            When you click "WhatsApp Share" on any bill, the message will include your social media links like this:
+                                            When you click "WhatsApp Share" on any bill, the message will include your enabled links like this:
                                         </p>
                                         <div className="bg-white p-4 rounded-2xl border border-emerald-200/60 shadow-sm text-xs font-mono whitespace-pre-wrap text-slate-700 leading-relaxed">
                                             {buildWhatsAppBillMessage(
@@ -903,7 +977,7 @@ const Settings = () => {
                                                     customerName: 'Rahul Sharma',
                                                     invoiceNumber: 'INV-1024',
                                                     totalAmount: 1450,
-                                                    _id: 'example_id'
+                                                    _id: 'example_id',
                                                 },
                                                 formData.companyName || 'Your Store Name',
                                                 `${window.location.origin}/public-invoice/example_id`,

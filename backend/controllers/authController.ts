@@ -159,6 +159,7 @@ export const updateProfile = async (req: AuthRequest, res: Response, next: NextF
                 }
                 if (socialLinks !== undefined && typeof socialLinks === 'object') {
                     tenant.socialLinks = {
+                        whatsapp: (socialLinks.whatsapp || '').trim(),
                         instagram: (socialLinks.instagram || '').trim(),
                         facebook: (socialLinks.facebook || '').trim(),
                         twitter: (socialLinks.twitter || '').trim(),

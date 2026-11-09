@@ -707,6 +707,16 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
       <footer className="mt-20 py-12 bg-white border-t border-slate-100 text-center">
         {data.socialLinks && Object.values(data.socialLinks).some(Boolean) && (
           <div className="mb-6 flex flex-wrap items-center justify-center gap-2.5 max-w-xl mx-auto px-4">
+            {data.socialLinks.whatsapp && (
+              <a
+                href={formatSocialUrl(data.socialLinks.whatsapp, 'whatsapp')}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-bold transition-all shadow-sm"
+              >
+                <MessageCircle size={14} /> WhatsApp
+              </a>
+            )}
             {data.socialLinks.instagram && (
               <a
                 href={formatSocialUrl(data.socialLinks.instagram, 'instagram')}
