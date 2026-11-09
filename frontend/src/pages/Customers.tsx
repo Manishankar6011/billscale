@@ -25,6 +25,7 @@ import { format } from "date-fns";
 import Skeleton from "../components/Skeleton";
 import { generateCustomerReportPDF } from "../utils/CustomerReportPDF";
 import { generateCustomerItemsPDF } from "../utils/CustomerItemsPDF";
+import { formatWhatsAppPhone } from "../utils/whatsapp";
 
 interface CustomerItem {
   _id: string;
@@ -497,7 +498,7 @@ const Customers = () => {
 
               {selected.phone && (
                 <a
-                  href={`https://wa.me/${selected.phone.replace(/\D/g, "")}`}
+                  href={`https://wa.me/${formatWhatsAppPhone(selected.phone)}`}
                   target="_blank"
                   rel="noreferrer"
                   className="w-full flex items-center justify-center gap-2 py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100 mt-4"

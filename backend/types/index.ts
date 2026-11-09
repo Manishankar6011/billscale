@@ -38,6 +38,14 @@ export interface ITenant extends Document {
     isActive: boolean;
   };
   customCategories?: string[];
+  socialLinks?: {
+    instagram?: string;
+    facebook?: string;
+    twitter?: string;
+    youtube?: string;
+    website?: string;
+    googleReview?: string;
+  };
   createdAt: Date;
 }
 

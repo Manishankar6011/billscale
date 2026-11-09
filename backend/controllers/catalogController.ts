@@ -46,6 +46,7 @@ export const getCatalogBySlug = async (req: Request, res: Response) => {
             address: tenant.address,
             phone: tenant.phone,
             logoUrl: tenant.logoUrl,
+            socialLinks: (tenant as any).socialLinks || {},
             products,
             paymentGateway: {
                 provider: 'razorpay',
@@ -139,6 +140,7 @@ export const getCatalogByDomain = async (req: Request, res: Response) => {
             address: tenant.address,
             phone: tenant.phone,
             logoUrl: tenant.logoUrl,
+            socialLinks: (tenant as any).socialLinks || {},
             products,
             slug: tenant.slug,
             paymentGateway: {

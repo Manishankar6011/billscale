@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import type { CatalogOrder } from '../types';
+import { formatWhatsAppPhone } from '../utils/whatsapp';
 
 export const OrderNotifications: React.FC = () => {
     const { user } = useAuth();
@@ -434,7 +435,7 @@ export const OrderNotifications: React.FC = () => {
                                         <div className="flex items-center justify-between gap-2 pt-1">
                                             {order.customerPhone && (
                                                 <a
-                                                    href={`https://wa.me/${order.customerPhone.replace(/\D/g, '')}?text=${encodeURIComponent(
+                                                    href={`https://wa.me/${formatWhatsAppPhone(order.customerPhone)}?text=${encodeURIComponent(
                                                         `Hello ${order.customerName}, regarding your order #${order.orderNumber} for ₹${order.totalAmount}...`
                                                     )}`}
                                                     target="_blank"

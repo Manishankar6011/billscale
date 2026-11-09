@@ -139,6 +139,14 @@ const tenantSchema: Schema = new mongoose.Schema({
         type: [String],
         default: []
     },
+    socialLinks: {
+        instagram: { type: String, trim: true, default: '' },
+        facebook: { type: String, trim: true, default: '' },
+        twitter: { type: String, trim: true, default: '' },
+        youtube: { type: String, trim: true, default: '' },
+        website: { type: String, trim: true, default: '' },
+        googleReview: { type: String, trim: true, default: '' }
+    },
     createdAt: {
         type: Date,
         default: Date.now

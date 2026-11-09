@@ -48,6 +48,7 @@ import {
 import BarcodeScanner from "../components/BarcodeScanner";
 import CustomerSearch from "../components/CustomerSearch";
 import axios from "axios";
+import { buildWhatsAppBillMessage, getWhatsAppShareUrl } from "../utils/whatsapp";
 import type {
   Sale,
   Product,
@@ -1042,13 +1043,11 @@ const Sales = () => {
   const handleWhatsAppShare = (sale: any) => {
     if (!sale) return;
     const storeName = user?.companyName || "BuildMate ERP";
-    const total = (sale.totalAmount || 0).toLocaleString();
     const publicLink = `${window.location.origin}/public-invoice/${sale._id}`;
-    const message = `Hello ${sale.customerName || "Customer"}, thank you for shopping at *${storeName}*! Your invoice ${sale.invoiceNumber} for *₹${total}* is ready. View it here: ${publicLink}`;
-    window.open(
-      `https://wa.me/${sale.customerPhone ? sale.customerPhone.replace(/\D/g, "") : ""}?text=${encodeURIComponent(message)}`,
-      "_blank",
-    );
+    const socials = (user as any)?.socialLinks || sale.tenantId?.socialLinks;
+    const message = buildWhatsAppBillMessage(sale, storeName, publicLink, socials);
+    const whatsappUrl = getWhatsAppShareUrl(sale.customerPhone, message);
+    window.open(whatsappUrl, "_blank");
   };
 
   const handleSubmit = async (e?: React.FormEvent) => {

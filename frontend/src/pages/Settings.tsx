@@ -4,13 +4,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { User, Building2, Phone, MapPin, Save, ShieldCheck, Crown, ArrowRight, Upload, Image, Mail, Pen, X, AlertCircle, Loader2, MessageSquare, Bug, Lightbulb, Trash2, AlertTriangle, Users, Plus, Link, ExternalLink, Globe, Settings as SettingsIcon, ChevronRight, KeyRound, CheckSquare, Square, Box, Receipt, ShoppingCart, UserRound, Sparkles, BarChart3, Wallet, CalendarCheck, Check } from 'lucide-react';
+import { User, Building2, Phone, MapPin, Save, ShieldCheck, Crown, ArrowRight, Upload, Image, Mail, Pen, X, AlertCircle, Loader2, MessageSquare, Bug, Lightbulb, Trash2, AlertTriangle, Users, Plus, Link, ExternalLink, Globe, Settings as SettingsIcon, ChevronRight, KeyRound, CheckSquare, Square, Box, Receipt, ShoppingCart, UserRound, Sparkles, BarChart3, Wallet, CalendarCheck, Check, Instagram, Facebook, Twitter, Youtube, Share2, Star } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { canUseFeature } from '../utils/planLimits';
 import { Lock, CreditCard, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { DEFAULT_STAFF_PERMISSIONS, type StaffPermissions } from '../types';
+import { buildWhatsAppBillMessage } from '../utils/whatsapp';
 
 const Settings = () => {
     const { t, i18n } = useTranslation();
@@ -48,7 +49,15 @@ const Settings = () => {
         stateName: '',
         stateCode: '',
         invoiceFormat: 'modern' as 'modern' | 'gst',
-        enableInventoryImageUpload: false
+        enableInventoryImageUpload: false,
+        socialLinks: {
+            instagram: '',
+            facebook: '',
+            twitter: '',
+            youtube: '',
+            website: '',
+            googleReview: '',
+        }
     });
 
     const logoInputRef = useRef<HTMLInputElement>(null);
@@ -112,6 +121,14 @@ const Settings = () => {
                 stateCode: profile.tenantId?.stateCode || '',
                 invoiceFormat: profile.tenantId?.invoiceFormat || 'modern',
                 enableInventoryImageUpload: profile.tenantId?.enableInventoryImageUpload || false,
+                socialLinks: {
+                    instagram: profile.tenantId?.socialLinks?.instagram || '',
+                    facebook: profile.tenantId?.socialLinks?.facebook || '',
+                    twitter: profile.tenantId?.socialLinks?.twitter || '',
+                    youtube: profile.tenantId?.socialLinks?.youtube || '',
+                    website: profile.tenantId?.socialLinks?.website || '',
+                    googleReview: profile.tenantId?.socialLinks?.googleReview || '',
+                }
             });
             // Load saved custom domain info
             setSavedCustomDomain(profile.tenantId?.customDomain || '');
@@ -742,6 +759,156 @@ const Settings = () => {
                                                 />
                                             </div>
                                             <p className="text-[9px] text-slate-400 font-bold ml-1 italic">Used for dynamic QR codes on bills</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Social Media Links for WhatsApp Bill Sharing */}
+                                <div className="pt-8 border-t border-slate-100">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center shrink-0">
+                                                <Share2 size={20} />
+                                            </div>
+                                            <div>
+                                                <h4 className="text-base font-black text-slate-800 uppercase tracking-tight">
+                                                    Social Media & WhatsApp Bill Share
+                                                </h4>
+                                                <p className="text-xs text-slate-400 font-medium">
+                                                    Links added here are automatically included when sharing bills/invoices on WhatsApp
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 w-fit">
+                                            <Sparkles size={12} /> WhatsApp Enabled
+                                        </span>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        {/* Instagram */}
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                                                <Instagram size={14} className="text-pink-500" /> Instagram Handle / Link
+                                            </label>
+                                            <input
+                                                type="text"
+                                                className="input py-3.5 px-4 font-bold bg-slate-50 border-none focus:ring-2 focus:ring-pink-500/20 focus:bg-white rounded-2xl w-full transition-all text-sm"
+                                                value={formData.socialLinks.instagram}
+                                                onChange={(e) => setFormData({
+                                                    ...formData,
+                                                    socialLinks: { ...formData.socialLinks, instagram: e.target.value }
+                                                })}
+                                                placeholder="e.g. @yourshop or instagram.com/yourshop"
+                                            />
+                                        </div>
+
+                                        {/* Facebook */}
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                                                <Facebook size={14} className="text-blue-600" /> Facebook Page
+                                            </label>
+                                            <input
+                                                type="text"
+                                                className="input py-3.5 px-4 font-bold bg-slate-50 border-none focus:ring-2 focus:ring-blue-500/20 focus:bg-white rounded-2xl w-full transition-all text-sm"
+                                                value={formData.socialLinks.facebook}
+                                                onChange={(e) => setFormData({
+                                                    ...formData,
+                                                    socialLinks: { ...formData.socialLinks, facebook: e.target.value }
+                                                })}
+                                                placeholder="e.g. facebook.com/yourshop"
+                                            />
+                                        </div>
+
+                                        {/* Website */}
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                                                <Globe size={14} className="text-teal-600" /> Website / Online Store
+                                            </label>
+                                            <input
+                                                type="text"
+                                                className="input py-3.5 px-4 font-bold bg-slate-50 border-none focus:ring-2 focus:ring-teal-500/20 focus:bg-white rounded-2xl w-full transition-all text-sm"
+                                                value={formData.socialLinks.website}
+                                                onChange={(e) => setFormData({
+                                                    ...formData,
+                                                    socialLinks: { ...formData.socialLinks, website: e.target.value }
+                                                })}
+                                                placeholder="e.g. https://yourbusiness.com"
+                                            />
+                                        </div>
+
+                                        {/* Google Review */}
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                                                <Star size={14} className="text-amber-500 fill-amber-500" /> Google Review Link
+                                            </label>
+                                            <input
+                                                type="text"
+                                                className="input py-3.5 px-4 font-bold bg-slate-50 border-none focus:ring-2 focus:ring-amber-500/20 focus:bg-white rounded-2xl w-full transition-all text-sm"
+                                                value={formData.socialLinks.googleReview}
+                                                onChange={(e) => setFormData({
+                                                    ...formData,
+                                                    socialLinks: { ...formData.socialLinks, googleReview: e.target.value }
+                                                })}
+                                                placeholder="e.g. https://g.page/r/yourstore/review"
+                                            />
+                                        </div>
+
+                                        {/* YouTube */}
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                                                <Youtube size={14} className="text-red-500" /> YouTube Channel
+                                            </label>
+                                            <input
+                                                type="text"
+                                                className="input py-3.5 px-4 font-bold bg-slate-50 border-none focus:ring-2 focus:ring-red-500/20 focus:bg-white rounded-2xl w-full transition-all text-sm"
+                                                value={formData.socialLinks.youtube}
+                                                onChange={(e) => setFormData({
+                                                    ...formData,
+                                                    socialLinks: { ...formData.socialLinks, youtube: e.target.value }
+                                                })}
+                                                placeholder="e.g. youtube.com/@yourshop"
+                                            />
+                                        </div>
+
+                                        {/* Twitter / X */}
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                                                <Twitter size={14} className="text-slate-800" /> Twitter / X
+                                            </label>
+                                            <input
+                                                type="text"
+                                                className="input py-3.5 px-4 font-bold bg-slate-50 border-none focus:ring-2 focus:ring-slate-500/20 focus:bg-white rounded-2xl w-full transition-all text-sm"
+                                                value={formData.socialLinks.twitter}
+                                                onChange={(e) => setFormData({
+                                                    ...formData,
+                                                    socialLinks: { ...formData.socialLinks, twitter: e.target.value }
+                                                })}
+                                                placeholder="e.g. @yourshop or x.com/yourshop"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Real-time WhatsApp Message Preview */}
+                                    <div className="mt-6 p-5 bg-gradient-to-br from-emerald-50/60 to-teal-50/60 rounded-3xl border border-emerald-100">
+                                        <div className="flex items-center gap-2 mb-2 text-emerald-800 font-black text-xs uppercase tracking-wider">
+                                            <MessageSquare size={14} className="text-emerald-600" />
+                                            WhatsApp Bill Share Message Preview
+                                        </div>
+                                        <p className="text-[11px] text-slate-500 font-medium mb-3">
+                                            When you click "WhatsApp Share" on any bill, the message will include your social media links like this:
+                                        </p>
+                                        <div className="bg-white p-4 rounded-2xl border border-emerald-200/60 shadow-sm text-xs font-mono whitespace-pre-wrap text-slate-700 leading-relaxed">
+                                            {buildWhatsAppBillMessage(
+                                                {
+                                                    customerName: 'Rahul Sharma',
+                                                    invoiceNumber: 'INV-1024',
+                                                    totalAmount: 1450,
+                                                    _id: 'example_id'
+                                                },
+                                                formData.companyName || 'Your Store Name',
+                                                `${window.location.origin}/public-invoice/example_id`,
+                                                formData.socialLinks
+                                            )}
                                         </div>
                                     </div>
                                 </div>

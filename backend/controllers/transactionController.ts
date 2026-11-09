@@ -1316,7 +1316,7 @@ export const getPublicSale = async (req: Request, res: Response) => {
       .populate("items.productId", "name unit mrp purchasePrice hasSubUnit subUnitName subUnitValue subUnitMrp subUnitPurchasePrice subUnitSalePrice")
       .populate(
         "tenantId",
-        "companyName phone address email logoUrl signature upiId billingEmail billingAddress name",
+        "companyName phone address email logoUrl signature upiId billingEmail billingAddress name socialLinks",
       );
 
     if (!sale) {
