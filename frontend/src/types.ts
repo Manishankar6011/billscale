@@ -28,6 +28,7 @@ export interface Tenant {
     isActive: boolean;
   };
   socialLinks?: {
+    whatsapp?: string | undefined;
     instagram?: string | undefined;
     facebook?: string | undefined;
     twitter?: string | undefined;
@@ -65,6 +66,7 @@ export interface User {
   enableInventoryImageUpload?: boolean;
   slug?: string;
   socialLinks?: {
+    whatsapp?: string | undefined;
     instagram?: string | undefined;
     facebook?: string | undefined;
     twitter?: string | undefined;

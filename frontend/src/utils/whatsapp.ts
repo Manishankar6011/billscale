@@ -3,6 +3,7 @@
  */
 
 export interface SocialLinks {
+  whatsapp?: string | undefined;
   instagram?: string | undefined;
   facebook?: string | undefined;
   twitter?: string | undefined;
@@ -63,6 +64,16 @@ export function formatSocialUrl(value: string | undefined | null, platform: stri
 
   const cleanHandle = trimmed.replace(/^@/, "");
   switch (platform) {
+    case "whatsapp": {
+      if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+        return trimmed;
+      }
+      if (trimmed.includes("chat.whatsapp.com") || trimmed.includes("wa.me")) {
+        return `https://${trimmed}`;
+      }
+      const formatted = formatWhatsAppPhone(trimmed);
+      return `https://wa.me/${formatted}`;
+    }
     case "instagram":
       return `https://instagram.com/${cleanHandle}`;
     case "facebook":
@@ -96,6 +107,9 @@ export function buildWhatsAppBillMessage(
 
   if (socialLinks) {
     const lines: string[] = [];
+    if (socialLinks.whatsapp?.trim()) {
+      lines.push(`💬 WhatsApp: ${formatSocialUrl(socialLinks.whatsapp, "whatsapp")}`);
+    }
     if (socialLinks.instagram?.trim()) {
       lines.push(`📸 Instagram: ${formatSocialUrl(socialLinks.instagram, "instagram")}`);
     }

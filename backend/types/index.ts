@@ -39,6 +39,7 @@ export interface ITenant extends Document {
   };
   customCategories?: string[];
   socialLinks?: {
+    whatsapp?: string;
     instagram?: string;
     facebook?: string;
     twitter?: string;

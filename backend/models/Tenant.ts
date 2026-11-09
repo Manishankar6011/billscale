@@ -140,6 +140,7 @@ const tenantSchema: Schema = new mongoose.Schema({
         default: []
     },
     socialLinks: {
+        whatsapp: { type: String, trim: true, default: '' },
         instagram: { type: String, trim: true, default: '' },
         facebook: { type: String, trim: true, default: '' },
         twitter: { type: String, trim: true, default: '' },
