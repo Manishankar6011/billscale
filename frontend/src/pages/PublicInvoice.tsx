@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import PrintableInvoice from '../components/PrintableInvoice';
-import { ArrowLeft, Download, Loader2 } from 'lucide-react';
+import { ArrowLeft, Download, Loader2, MessageCircle } from 'lucide-react';
 import { generateInvoice } from '../utils/invoiceGenerator';
+import { buildWhatsAppBillMessage, getWhatsAppShareUrl } from '../utils/whatsapp';
 
 const PublicInvoice = () => {
     const { id } = useParams();
@@ -69,12 +70,25 @@ const PublicInvoice = () => {
                         <div className="w-10 h-10 bg-primary-600 text-white rounded-xl flex items-center justify-center font-black">B</div>
                         <h1 className="font-bold text-slate-800 truncate">{businessName}</h1>
                     </div>
-                    <button 
-                        onClick={() => generateInvoice(sale, businessName, ownerName, companyLogo, companyAddress, companyPhone, companyEmail, signature, upiId)}
-                        className="flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"
-                    >
-                        <Download size={14} /> Download PDF
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button 
+                            onClick={() => {
+                                const msg = buildWhatsAppBillMessage(sale, businessName, window.location.href, sale.tenantId?.socialLinks);
+                                const url = getWhatsAppShareUrl(sale.customerPhone, msg);
+                                window.open(url, '_blank');
+                            }}
+                            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
+                            title="Share on WhatsApp"
+                        >
+                            <MessageCircle size={14} fill="currentColor" /> Share
+                        </button>
+                        <button 
+                            onClick={() => generateInvoice(sale, businessName, ownerName, companyLogo, companyAddress, companyPhone, companyEmail, signature, upiId)}
+                            className="flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"
+                        >
+                            <Download size={14} /> Download PDF
+                        </button>
+                    </div>
                 </div>
             </div>
 

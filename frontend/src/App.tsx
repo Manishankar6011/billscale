@@ -96,6 +96,7 @@ const App: React.FC = () => {
           <Route path="/terms" element={<Terms />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/catalog/:slug" element={<Catalog />} />
+          <Route path="/catalog/:slug/item/:productId" element={<Catalog />} />
 
           {/* Protected Dashboard Routes */}
           <Route

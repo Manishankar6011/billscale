@@ -27,6 +27,14 @@ export interface Tenant {
     keyId?: string;
     isActive: boolean;
   };
+  socialLinks?: {
+    instagram?: string | undefined;
+    facebook?: string | undefined;
+    twitter?: string | undefined;
+    youtube?: string | undefined;
+    website?: string | undefined;
+    googleReview?: string | undefined;
+  };
 }
 
 export interface User {
@@ -55,6 +63,15 @@ export interface User {
   stateCode?: string;
   invoiceFormat?: 'thermal' | 'modern' | 'gst';
   enableInventoryImageUpload?: boolean;
+  slug?: string;
+  socialLinks?: {
+    instagram?: string | undefined;
+    facebook?: string | undefined;
+    twitter?: string | undefined;
+    youtube?: string | undefined;
+    website?: string | undefined;
+    googleReview?: string | undefined;
+  };
   permissions?: Record<string, Record<string, boolean>>;
 }
 

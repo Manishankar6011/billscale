@@ -37,7 +37,11 @@ import {
   Image as ImageIcon,
   Upload,
   Check,
+  Share2,
+  MessageCircle,
+  ExternalLink,
 } from "lucide-react";
+import { getWhatsAppShareUrl, buildCatalogItemShareMessage } from "../utils/whatsapp";
 import BarcodeScanner from "../components/BarcodeScanner";
 import JsBarcode from "jsbarcode";
 import axios from "axios";
@@ -379,6 +383,11 @@ const Inventory = () => {
   const [stockValueDisplay, setStockValueDisplay] = useState<"purchase" | "sell">("purchase");
   const [isSmartModalOpen, setIsSmartModalOpen] = useState(false);
   const [smartSelectedData, setSmartSelectedData] = useState<any[]>([]);
+
+  // Share Catalog Item State
+  const [shareCatalogProduct, setShareCatalogProduct] = useState<Product | null>(null);
+  const [shareCustomerPhone, setShareCustomerPhone] = useState("");
+  const [shareCopied, setShareCopied] = useState(false);
 
   const isFormDirty = !!(
     formData.name ||
@@ -1456,6 +1465,17 @@ const Inventory = () => {
                       <Barcode size={16} />
                     </button>
                   )}
+                  <button
+                    onClick={() => {
+                      setShareCatalogProduct(product);
+                      setShareCustomerPhone("");
+                      setShareCopied(false);
+                    }}
+                    className="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
+                    title="Share Catalog Item"
+                  >
+                    <Share2 size={16} />
+                  </button>
                   {can('inventory', 'delete') && (
                     <button
                       onClick={() => handleDelete(product._id!)}
@@ -2835,6 +2855,170 @@ const Inventory = () => {
           onClose={() => setIsSmartModalOpen(false)}
           onSelect={handleSmartSelect}
         />
+      )}
+
+      {/* Share Catalog Item Modal */}
+      {shareCatalogProduct && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-6 sm:p-8 animate-in zoom-in-95 duration-200 relative">
+            <button
+              onClick={() => setShareCatalogProduct(null)}
+              className="absolute top-5 right-5 w-8 h-8 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-full flex items-center justify-center transition-all"
+            >
+              <X size={16} />
+            </button>
+
+            <div className="flex items-center gap-4 mb-6 border-b border-slate-100 pb-4">
+              <div className="w-12 h-12 bg-teal-50 text-teal-600 rounded-2xl flex items-center justify-center shrink-0">
+                <Share2 size={24} />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-slate-800">
+                  Share Catalog Item
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  Send this direct item link to customers via WhatsApp or copy it
+                </p>
+              </div>
+            </div>
+
+            {/* Product Summary */}
+            <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 mb-6">
+              {shareCatalogProduct.imageUrl ? (
+                <img
+                  src={shareCatalogProduct.imageUrl}
+                  alt={shareCatalogProduct.name}
+                  className="w-16 h-16 rounded-xl object-cover bg-white border border-slate-200 shrink-0"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-xl bg-white text-slate-400 flex items-center justify-center border border-slate-200 shrink-0">
+                  <Box size={24} />
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] font-black uppercase tracking-wider text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full inline-block mb-1">
+                  {shareCatalogProduct.category || "General"}
+                </span>
+                <h4 className="font-black text-slate-800 text-sm truncate">
+                  {shareCatalogProduct.name}
+                </h4>
+                <div className="flex items-center gap-3 text-xs font-bold text-slate-600 mt-1">
+                  <span className="text-emerald-600 font-black">₹{shareCatalogProduct.pricePerUnit}</span>
+                  {shareCatalogProduct.mrp && Number(shareCatalogProduct.mrp) > Number(shareCatalogProduct.pricePerUnit) && (
+                    <span className="text-slate-400 line-through text-[11px]">₹{shareCatalogProduct.mrp}</span>
+                  )}
+                  <span className="text-slate-400">| Stock: {shareCatalogProduct.stock} {shareCatalogProduct.unit}</span>
+                </div>
+              </div>
+            </div>
+
+            {(() => {
+              const slug = user?.slug || (user?.tenantId as any)?.slug;
+              const customDomain = (user?.tenantId as any)?.customDomain;
+              const itemUrl = customDomain
+                ? `https://${customDomain}/?item=${shareCatalogProduct._id}`
+                : slug
+                ? `${window.location.origin}/catalog/${slug}?item=${shareCatalogProduct._id}`
+                : "";
+
+              if (!itemUrl) {
+                return (
+                  <div className="p-5 bg-amber-50 rounded-2xl border border-amber-200 text-amber-900 space-y-3">
+                    <div className="flex items-center gap-2 font-black text-sm">
+                      <AlertCircle size={18} className="text-amber-600" />
+                      Digital Catalog Link Not Configured
+                    </div>
+                    <p className="text-xs text-amber-800">
+                      You haven't set up your store's catalog slug yet. Create your store link in Settings to enable direct item sharing.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/dashboard/settings")}
+                      className="px-4 py-2 bg-amber-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-amber-700 transition-all"
+                    >
+                      Configure Digital Catalog
+                    </button>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-5">
+                  {/* Direct Link Box */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                      Direct Catalog Item Link
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={itemUrl}
+                        className="input font-mono text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 flex-1 truncate select-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(itemUrl);
+                          setShareCopied(true);
+                          setTimeout(() => setShareCopied(false), 2000);
+                        }}
+                        className="px-4 py-2.5 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-800 transition-all flex items-center gap-1.5 shrink-0"
+                      >
+                        {shareCopied ? <Check size={14} className="text-emerald-400" /> : <Share2 size={14} />}
+                        {shareCopied ? "Copied!" : "Copy Link"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Share on WhatsApp */}
+                  <div className="space-y-2 pt-2 border-t border-slate-100">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                      Customer WhatsApp Number (Optional)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="tel"
+                        value={shareCustomerPhone}
+                        onChange={(e) => setShareCustomerPhone(e.target.value)}
+                        placeholder="e.g. 9876543210 (Auto-adds +91 if missing)"
+                        className="input px-4 py-3 font-bold bg-slate-50 border border-slate-200 rounded-2xl w-full text-sm"
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-400 ml-1">
+                      Leave empty to open WhatsApp contact selector.
+                    </p>
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const msg = buildCatalogItemShareMessage(
+                          {
+                            name: shareCatalogProduct.name,
+                            pricePerUnit: Number(shareCatalogProduct.pricePerUnit),
+                            mrp: shareCatalogProduct.mrp ? Number(shareCatalogProduct.mrp) : undefined,
+                            unit: shareCatalogProduct.unit,
+                          },
+                          user?.companyName || "Our Store",
+                          itemUrl
+                        );
+                        const url = getWhatsAppShareUrl(shareCustomerPhone, msg);
+                        window.open(url, "_blank");
+                        setShareCatalogProduct(null);
+                      }}
+                      className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-100 flex items-center justify-center gap-2 transition-all active:scale-95"
+                    >
+                      <MessageCircle size={18} />
+                      Share on WhatsApp
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
       )}
     </div>
   );

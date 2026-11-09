@@ -128,7 +128,7 @@ export const getProfile = async (req: AuthRequest, res: Response, next: NextFunc
 };
 
 export const updateProfile = async (req: AuthRequest, res: Response, next: NextFunction) => {
-    const { name, companyName, address, phone, billingEmail, billingAddress, logoUrl, signature, upiId, slug, gstin, pan, stateName, stateCode, invoiceFormat, enableInventoryImageUpload } = req.body;
+    const { name, companyName, address, phone, billingEmail, billingAddress, logoUrl, signature, upiId, slug, gstin, pan, stateName, stateCode, invoiceFormat, enableInventoryImageUpload, socialLinks } = req.body;
 
     try {
         const user = await User.findById(req.user?._id);
@@ -156,6 +156,17 @@ export const updateProfile = async (req: AuthRequest, res: Response, next: NextF
                 if (enableInventoryImageUpload !== undefined) {
                     tenant.enableInventoryImageUpload = Boolean(enableInventoryImageUpload);
                     tenant.markModified('enableInventoryImageUpload');
+                }
+                if (socialLinks !== undefined && typeof socialLinks === 'object') {
+                    tenant.socialLinks = {
+                        instagram: (socialLinks.instagram || '').trim(),
+                        facebook: (socialLinks.facebook || '').trim(),
+                        twitter: (socialLinks.twitter || '').trim(),
+                        youtube: (socialLinks.youtube || '').trim(),
+                        website: (socialLinks.website || '').trim(),
+                        googleReview: (socialLinks.googleReview || '').trim(),
+                    };
+                    tenant.markModified('socialLinks');
                 }
                 if (slug) tenant.slug = slugify(slug);
                 

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import axios from "axios";
-import { ShoppingCart, MessageCircle, Phone, MapPin, Search, Package, IndianRupee, Loader2, Plus, Minus, Trash2, X, Share2, Check, CreditCard, CheckCircle2, Sparkles, Truck } from "lucide-react";
+import { ShoppingCart, MessageCircle, Phone, MapPin, Search, Package, IndianRupee, Loader2, Plus, Minus, Trash2, X, Share2, Check, CreditCard, CheckCircle2, Sparkles, Truck, Instagram, Facebook, Twitter, Youtube, Globe, Star } from "lucide-react";
 import { createPortal } from "react-dom";
 import { Helmet } from "react-helmet-async";
+import { formatWhatsAppPhone, getWhatsAppShareUrl, formatSocialUrl, buildCatalogItemShareMessage, type SocialLinks } from "../utils/whatsapp";
 
 interface CatalogProduct {
   _id: string;
@@ -28,6 +29,7 @@ interface CatalogData {
   address?: string;
   phone?: string;
   logoUrl?: string;
+  socialLinks?: SocialLinks;
   products: CatalogProduct[];
   paymentGateway?: {
     provider: string;
@@ -41,12 +43,13 @@ interface CatalogProps {
 }
 
 const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
-  const { slug } = useParams<{ slug: string }>();
+  const { slug, productId: routeProductId } = useParams<{ slug: string; productId?: string }>();
   const [data, setData] = useState<CatalogData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
+  const directItemId = routeProductId || searchParams.get("item") || searchParams.get("product") || searchParams.get("productId");
   const [selectedCategory, setSelectedCategory] = useState(searchParams.get("category") || "All");
   const [isCopied, setIsCopied] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -57,6 +60,9 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<{ orderNumber: string; totalAmount: number; isPaid: boolean; paymentMethod: 'online' | 'cod'; paymentId?: string } | null>(null);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'online' | 'cod'>('online');
+  const [spotlightProduct, setSpotlightProduct] = useState<CatalogProduct | null>(null);
+  const [shareModalProduct, setShareModalProduct] = useState<CatalogProduct | null>(null);
+  const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
 
   const loadRazorpayScript = () => {
     return new Promise((resolve) => {
@@ -120,6 +126,53 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
       localStorage.setItem(cartKey, JSON.stringify(cart));
     }
   }, [cart, slug, data, customDomainMode]);
+
+  const getProductShareUrl = (productId: string) => {
+    const origin = window.location.origin;
+    if (customDomainMode) {
+      return `${origin}/?item=${productId}`;
+    }
+    return `${origin}/catalog/${slug || data?.slug}?item=${productId}`;
+  };
+
+  const handleShareProduct = async (product: CatalogProduct) => {
+    const itemUrl = getProductShareUrl(product._id);
+    const shop = data?.shopName || "Our Store";
+    const shareText = buildCatalogItemShareMessage(product, shop, itemUrl);
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `${product.name} - ${shop}`,
+          text: shareText,
+          url: itemUrl,
+        });
+        return;
+      } catch (err: any) {
+        if (err.name === 'AbortError') return;
+      }
+    }
+
+    setShareModalProduct(product);
+  };
+
+  useEffect(() => {
+    if (data && directItemId) {
+      const found = data.products.find(p => p._id === directItemId);
+      if (found) {
+        setSpotlightProduct(found);
+        if (found.category && selectedCategory !== "All" && selectedCategory !== found.category) {
+          setSelectedCategory(found.category);
+        }
+        setTimeout(() => {
+          const el = document.getElementById(`product-${directItemId}`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 400);
+      }
+    }
+  }, [data, directItemId]);
 
   if (loading) {
     return (
@@ -237,14 +290,7 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
     message += `--------------------------\n\n`;
     message += `Please confirm my order. Thank you!`;
 
-    let targetNumber = (data?.phone || "").replace(/\D/g, "");
-    if (targetNumber.length === 10) {
-      targetNumber = "91" + targetNumber;
-    } else if (targetNumber.length === 11 && targetNumber.startsWith("0")) {
-      targetNumber = "91" + targetNumber.substring(1);
-    }
-
-    const whatsappUrl = `https://wa.me/${targetNumber}?text=${encodeURIComponent(message)}`;
+    const whatsappUrl = getWhatsAppShareUrl(data?.phone, message);
     window.open(whatsappUrl, "_blank");
 
     if (createdOrder) {
@@ -389,9 +435,26 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
       <Helmet>
-        <title>{data.shopName} - Digital Catalog</title>
-        <meta name="description" content={`Browse products from ${data.shopName} and place your orders online.`} />
-        <meta property="og:title" content={`${data.shopName} - Digital Catalog`} />
+        <title>
+          {spotlightProduct 
+            ? `${spotlightProduct.name} (₹${spotlightProduct.pricePerUnit}) - ${data.shopName}` 
+            : `${data.shopName} - Digital Catalog`}
+        </title>
+        <meta 
+          name="description" 
+          content={spotlightProduct 
+            ? `Buy ${spotlightProduct.name} for ₹${spotlightProduct.pricePerUnit} at ${data.shopName}. Order online or via WhatsApp!`
+            : `Browse products from ${data.shopName} and place your orders online.`} 
+        />
+        <meta 
+          property="og:title" 
+          content={spotlightProduct 
+            ? `${spotlightProduct.name} - ₹${spotlightProduct.pricePerUnit} | ${data.shopName}`
+            : `${data.shopName} - Digital Catalog`} 
+        />
+        {spotlightProduct?.imageUrl && (
+          <meta property="og:image" content={spotlightProduct.imageUrl} />
+        )}
       </Helmet>
 
       {/* Header */}
@@ -521,13 +584,21 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredProducts.map(product => (
+            {filteredProducts.map(product => {
+              const isHighlighted = spotlightProduct?._id === product._id || directItemId === product._id;
+              return (
               <div 
                 key={product._id} 
-                className="bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 group flex flex-col h-full"
+                id={`product-${product._id}`}
+                className={`bg-white rounded-[2rem] border overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 group flex flex-col h-full relative ${
+                  isHighlighted ? 'border-primary-500 ring-4 ring-primary-500/20 shadow-xl' : 'border-slate-100'
+                }`}
               >
                 {/* Image Placeholder or Image */}
-                <div className="aspect-square bg-slate-100 relative overflow-hidden">
+                <div 
+                  onClick={() => setSpotlightProduct(product)}
+                  className="aspect-square bg-slate-100 relative overflow-hidden cursor-pointer"
+                >
                   {product.imageUrl ? (
                     <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                   ) : (
@@ -541,10 +612,22 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
                       {product.category || "General"}
                     </span>
                   </div>
+                  {/* Share Direct Item Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleShareProduct(product);
+                    }}
+                    className="absolute top-4 right-4 w-9 h-9 bg-white/95 backdrop-blur-md text-slate-700 hover:text-primary-600 hover:bg-white rounded-full flex items-center justify-center shadow-md transition-all active:scale-90 z-10"
+                    title="Share direct product"
+                  >
+                    <Share2 size={15} />
+                  </button>
                 </div>
 
                 <div className="p-6 flex flex-col flex-grow">
-                  <div className="mb-4 flex-grow">
+                  <div className="mb-4 flex-grow cursor-pointer" onClick={() => setSpotlightProduct(product)}>
                     <h3 className="text-lg font-black text-slate-800 leading-snug mb-1 group-hover:text-primary-600 transition-colors">{product.name}</h3>
                     {product.description && (
                       <p className="text-slate-500 text-xs font-medium line-clamp-2 mb-2 leading-relaxed">{product.description}</p>
@@ -599,7 +682,8 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>
@@ -619,8 +703,72 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
         </div>
       )}
 
-      {/* Footer Branding */}
+      {/* Footer Branding & Social Links */}
       <footer className="mt-20 py-12 bg-white border-t border-slate-100 text-center">
+        {data.socialLinks && Object.values(data.socialLinks).some(Boolean) && (
+          <div className="mb-6 flex flex-wrap items-center justify-center gap-2.5 max-w-xl mx-auto px-4">
+            {data.socialLinks.instagram && (
+              <a
+                href={formatSocialUrl(data.socialLinks.instagram, 'instagram')}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-pink-50 text-pink-600 hover:bg-pink-100 text-xs font-bold transition-all shadow-sm"
+              >
+                <Instagram size={14} /> Instagram
+              </a>
+            )}
+            {data.socialLinks.facebook && (
+              <a
+                href={formatSocialUrl(data.socialLinks.facebook, 'facebook')}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs font-bold transition-all shadow-sm"
+              >
+                <Facebook size={14} /> Facebook
+              </a>
+            )}
+            {data.socialLinks.website && (
+              <a
+                href={formatSocialUrl(data.socialLinks.website, 'website')}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-50 text-teal-600 hover:bg-teal-100 text-xs font-bold transition-all shadow-sm"
+              >
+                <Globe size={14} /> Website
+              </a>
+            )}
+            {data.socialLinks.googleReview && (
+              <a
+                href={formatSocialUrl(data.socialLinks.googleReview, 'googleReview')}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100 text-xs font-bold transition-all shadow-sm"
+              >
+                <Star size={14} className="fill-amber-500 text-amber-500" /> Google Review
+              </a>
+            )}
+            {data.socialLinks.youtube && (
+              <a
+                href={formatSocialUrl(data.socialLinks.youtube, 'youtube')}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 text-xs font-bold transition-all shadow-sm"
+              >
+                <Youtube size={14} /> YouTube
+              </a>
+            )}
+            {data.socialLinks.twitter && (
+              <a
+                href={formatSocialUrl(data.socialLinks.twitter, 'twitter')}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 text-slate-800 hover:bg-slate-200 text-xs font-bold transition-all shadow-sm"
+              >
+                <Twitter size={14} /> Twitter / X
+              </a>
+            )}
+          </div>
+        )}
         <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">Powered by</p>
         <div className="flex items-center justify-center gap-2">
            <div className="w-8 h-8 bg-primary-600 rounded-xl flex items-center justify-center text-white font-black text-sm">B</div>
@@ -675,11 +823,8 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
               <button
                 type="button"
                 onClick={() => {
-                  let targetNumber = (data?.phone || "").replace(/\D/g, "");
-                  if (targetNumber.length === 10) targetNumber = "91" + targetNumber;
-                  else if (targetNumber.length === 11 && targetNumber.startsWith("0")) targetNumber = "91" + targetNumber.substring(1);
                   const msg = `Hello ${data?.shopName}, I have placed order #${orderSuccess.orderNumber} for ₹${orderSuccess.totalAmount} (${orderSuccess.isPaid ? 'Paid Online' : 'Cash on Delivery'}). Please confirm delivery.`;
-                  window.open(`https://wa.me/${targetNumber}?text=${encodeURIComponent(msg)}`, '_blank');
+                  window.open(getWhatsAppShareUrl(data?.phone, msg), '_blank');
                 }}
                 className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-100 transition-all flex items-center justify-center gap-2 active:scale-95"
               >
@@ -693,6 +838,194 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
               >
                 Continue Browsing
               </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Share Catalog Item Modal */}
+      {shareModalProduct && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2.5rem] p-6 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-200 relative">
+            <button
+              onClick={() => setShareModalProduct(null)}
+              className="absolute top-5 right-5 w-8 h-8 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-full flex items-center justify-center transition-all"
+            >
+              <X size={16} />
+            </button>
+            <div className="flex items-center gap-3">
+              {shareModalProduct.imageUrl ? (
+                <img src={shareModalProduct.imageUrl} alt={shareModalProduct.name} className="w-16 h-16 rounded-2xl object-cover border border-slate-100 shrink-0" />
+              ) : (
+                <div className="w-16 h-16 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center shrink-0">
+                  <Package size={24} />
+                </div>
+              )}
+              <div className="min-w-0">
+                <span className="text-[10px] font-black uppercase tracking-wider text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full inline-block mb-1">
+                  {shareModalProduct.category || "General"}
+                </span>
+                <h3 className="font-black text-slate-800 text-base leading-snug truncate">{shareModalProduct.name}</h3>
+                <p className="text-xs font-black text-slate-900 mt-0.5">₹{shareModalProduct.pricePerUnit}</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const url = getProductShareUrl(shareModalProduct._id);
+                  const msg = buildCatalogItemShareMessage(shareModalProduct, data?.shopName || 'Our Store', url);
+                  window.open(getWhatsAppShareUrl(null, msg), '_blank');
+                  setShareModalProduct(null);
+                }}
+                className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-100 active:scale-95"
+              >
+                <MessageCircle size={16} /> Share on WhatsApp
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const url = getProductShareUrl(shareModalProduct._id);
+                  navigator.clipboard.writeText(url);
+                  setCopiedItemId(shareModalProduct._id);
+                  setTimeout(() => setCopiedItemId(null), 2000);
+                }}
+                className="w-full py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95"
+              >
+                {copiedItemId === shareModalProduct._id ? <Check size={16} className="text-emerald-600" /> : <Share2 size={16} />}
+                {copiedItemId === shareModalProduct._id ? "Direct Link Copied!" : "Copy Direct Item Link"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Spotlight / Quick View Modal for Direct Catalog Item */}
+      {spotlightProduct && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+          <div className="bg-white rounded-[2.5rem] p-6 sm:p-8 max-w-lg w-full shadow-2xl space-y-6 animate-in zoom-in-95 duration-200 relative my-8">
+            <button
+              onClick={() => {
+                setSpotlightProduct(null);
+                const newParams = new URLSearchParams(searchParams);
+                newParams.delete("item");
+                newParams.delete("product");
+                newParams.delete("productId");
+                setSearchParams(newParams, { replace: true });
+              }}
+              className="absolute top-5 right-5 w-9 h-9 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-full flex items-center justify-center transition-all z-10"
+              title="Close"
+            >
+              <X size={18} />
+            </button>
+
+            {/* Product Image */}
+            <div className="aspect-square bg-slate-50 rounded-3xl overflow-hidden relative border border-slate-100">
+              {spotlightProduct.imageUrl ? (
+                <img src={spotlightProduct.imageUrl} alt={spotlightProduct.name} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
+                  <Package size={64} strokeWidth={1.5} />
+                  <span className="text-xs font-black uppercase tracking-widest mt-2">No Image</span>
+                </div>
+              )}
+              <div className="absolute top-4 left-4">
+                <span className="bg-white/95 backdrop-blur-md px-3.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest text-slate-700 shadow-sm border border-slate-100">
+                  {spotlightProduct.category || "General"}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <h2 className="text-2xl font-black text-slate-800 leading-tight mb-2">{spotlightProduct.name}</h2>
+              {spotlightProduct.description && (
+                <p className="text-slate-500 text-sm font-medium leading-relaxed mb-4">{spotlightProduct.description}</p>
+              )}
+              <div className="flex items-center justify-between">
+                <div>
+                  {spotlightProduct.mrp > spotlightProduct.pricePerUnit && (
+                    <span className="text-slate-400 text-xs line-through font-bold decoration-rose-500/50 decoration-2">
+                      ₹{spotlightProduct.mrp}
+                    </span>
+                  )}
+                  <div className="flex items-center gap-1 text-3xl font-black text-slate-800">
+                    <IndianRupee size={22} className="text-emerald-500" />
+                    {spotlightProduct.pricePerUnit}
+                    <span className="text-xs text-slate-400 font-bold ml-1">/ {spotlightProduct.unit}</span>
+                  </div>
+                </div>
+                {spotlightProduct.mrp > spotlightProduct.pricePerUnit && (
+                  <div className="bg-emerald-50 text-emerald-600 px-3.5 py-1.5 rounded-xl text-xs font-black uppercase tracking-widest">
+                    {Math.round(((spotlightProduct.mrp - spotlightProduct.pricePerUnit) / spotlightProduct.mrp) * 100)}% Off
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Cart or Quantity */}
+            <div className="space-y-3 pt-2 border-t border-slate-100">
+              {cart.find(item => item._id === spotlightProduct._id) ? (
+                <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-2xl border border-slate-100">
+                  <button 
+                    onClick={() => {
+                      const item = cart.find(i => i._id === spotlightProduct._id);
+                      if (item?.quantity === 1) removeFromCart(spotlightProduct._id);
+                      else updateQuantity(spotlightProduct._id, -1);
+                    }}
+                    className="w-12 h-12 bg-white text-slate-600 rounded-xl flex items-center justify-center hover:bg-rose-50 hover:text-rose-500 transition-all shadow-sm"
+                  >
+                    <Minus size={18} />
+                  </button>
+                  <div className="flex-grow text-center font-black text-slate-800 text-lg">
+                    {cart.find(item => item._id === spotlightProduct._id)?.quantity} in Cart
+                  </div>
+                  <button 
+                    onClick={() => updateQuantity(spotlightProduct._id, 1)}
+                    className="w-12 h-12 bg-primary-600 text-white rounded-xl flex items-center justify-center hover:bg-primary-700 transition-all shadow-lg shadow-primary-100"
+                  >
+                    <Plus size={18} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => addToCart(spotlightProduct)}
+                  className="w-full bg-slate-900 hover:bg-slate-800 text-white py-4 rounded-2xl flex items-center justify-center gap-3 font-black text-xs uppercase tracking-widest shadow-lg shadow-slate-100 transition-all active:scale-95"
+                >
+                  <ShoppingCart size={18} />
+                  Add to Cart
+                </button>
+              )}
+
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const itemUrl = getProductShareUrl(spotlightProduct._id);
+                    const msg = buildCatalogItemShareMessage(spotlightProduct, data?.shopName || 'Store', itemUrl);
+                    window.open(getWhatsAppShareUrl(data?.phone, msg), '_blank');
+                  }}
+                  className="py-3 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-2xl font-black text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                >
+                  <MessageCircle size={15} /> Order on WhatsApp
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const itemUrl = getProductShareUrl(spotlightProduct._id);
+                    navigator.clipboard.writeText(itemUrl);
+                    setCopiedItemId(spotlightProduct._id);
+                    setTimeout(() => setCopiedItemId(null), 2000);
+                  }}
+                  className="py-3 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-2xl font-black text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                >
+                  {copiedItemId === spotlightProduct._id ? <Check size={15} className="text-emerald-600" /> : <Share2 size={15} />}
+                  {copiedItemId === spotlightProduct._id ? "Copied!" : "Share Link"}
+                </button>
+              </div>
             </div>
           </div>
         </div>,
