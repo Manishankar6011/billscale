@@ -80,7 +80,7 @@ export interface User {
 export interface StaffPermissions {
   dashboard?: { view?: boolean };
   inventory?: { view?: boolean; create?: boolean; edit?: boolean; delete?: boolean };
-  sales?: { view?: boolean; create?: boolean; edit?: boolean; delete?: boolean; viewProfit?: boolean };
+  sales?: { view?: boolean; create?: boolean; edit?: boolean; delete?: boolean; viewProfit?: boolean; editInvoiceDate?: boolean };
   purchases?: { view?: boolean; create?: boolean; edit?: boolean; delete?: boolean };
   customers?: { view?: boolean; create?: boolean; edit?: boolean; delete?: boolean };
   staff?: { view?: boolean; create?: boolean; edit?: boolean; delete?: boolean };
@@ -95,7 +95,7 @@ export interface StaffPermissions {
 export const DEFAULT_STAFF_PERMISSIONS: StaffPermissions = {
   dashboard: { view: true },
   inventory: { view: true, create: true, edit: true, delete: false },
-  sales: { view: true, create: true, edit: false, delete: false, viewProfit: false },
+  sales: { view: true, create: true, edit: false, delete: false, viewProfit: false, editInvoiceDate: false },
   purchases: { view: true, create: true, edit: false, delete: false },
   customers: { view: true, create: true, edit: true, delete: false },
   staff: { view: false, create: false, edit: false, delete: false },

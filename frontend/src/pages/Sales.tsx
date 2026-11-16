@@ -44,6 +44,7 @@ import {
   EyeOff,
   Zap,
   ChevronDown,
+  Lock,
 } from "lucide-react";
 import BarcodeScanner from "../components/BarcodeScanner";
 import CustomerSearch from "../components/CustomerSearch";
@@ -615,7 +616,8 @@ const Sales = () => {
     }
   }, [user?.invoiceFormat]);
 
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const canEditInvoiceDate = can("sales", "editInvoiceDate");
+  const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
   // Round-off & change calculator
   const [roundOff, setRoundOff] = useState(false);
@@ -683,6 +685,13 @@ const Sales = () => {
   const [selectedSaleForEdit, setSelectedSaleForEdit] = useState<Sale | null>(
     null,
   );
+
+  // Ensure date resets to today when opening modal for a new sale
+  useEffect(() => {
+    if (isModalOpen && !selectedSaleForEdit) {
+      setDate(format(new Date(), "yyyy-MM-dd"));
+    }
+  }, [isModalOpen, selectedSaleForEdit]);
   const scannerInputRef = useRef<HTMLInputElement>(null);
 
   // Leave warning
@@ -781,6 +790,7 @@ const Sales = () => {
     setSpecialDiscountAmount("");
     setSpecialDiscountPercent("");
     setRemoveItemDiscounts(false);
+    setDate(format(new Date(), "yyyy-MM-dd"));
     setIsAdditionalChargesOpen(false);
     setIsDirectSaleOpen(false);
   };
@@ -1181,9 +1191,15 @@ const Sales = () => {
 
       paymentMode,
       date: (() => {
+        if (!canEditInvoiceDate) {
+          if (selectedSaleForEdit) {
+            return selectedSaleForEdit.date;
+          }
+          return new Date().toISOString();
+        }
         const now = new Date();
-        const selectedDateStr = (date || now.toISOString().split("T")[0]) as string;
-        const isToday = selectedDateStr === now.toISOString().split("T")[0];
+        const selectedDateStr = (date || format(now, "yyyy-MM-dd")) as string;
+        const isToday = selectedDateStr === format(now, "yyyy-MM-dd");
         
         if (isToday && !selectedSaleForEdit) {
           return now.toISOString();
@@ -1845,7 +1861,7 @@ const Sales = () => {
     setCustomerStateCode(sale.customerStateCode || "");
     setCustomerId(sale.customerId || null);
     setPaymentMode(sale.paymentMode as any);
-    setDate(new Date(sale.date).toISOString().split("T")[0]);
+    setDate(format(new Date(sale.date), "yyyy-MM-dd"));
     setAmountReceived(sale.amountPaid.toString());
     setRoundOff(sale.roundOffAmount !== 0);
     setCart(
@@ -2077,7 +2093,11 @@ const Sales = () => {
             </button>
             {can('sales', 'create') && (
               <button
-                onClick={() => setIsModalOpen(true)}
+                onClick={() => {
+                  setSelectedSaleForEdit(null);
+                  resetForm();
+                  setIsModalOpen(true);
+                }}
                 className="btn-primary flex items-center gap-2"
               >
                 <Plus size={20} /> {t("billing.new_sale")}
@@ -2759,14 +2779,27 @@ const Sales = () => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
-                      {t("billing.invoice_date")}
-                    </label>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-xs font-black uppercase tracking-widest text-slate-400">
+                        {t("billing.invoice_date")}
+                      </label>
+                      {!canEditInvoiceDate && (
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-200/80 px-2 py-0.5 rounded-md select-none">
+                          <Lock size={10} /> {selectedSaleForEdit ? "Locked" : "Today (Locked)"}
+                        </span>
+                      )}
+                    </div>
                     <input
                       type="date"
-                      className="w-full bg-slate-50 border-none rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-primary-500 transition-all font-bold text-sm"
-                      value={date}
-                      onChange={(e) => setDate(e.target.value)}
+                      disabled={!canEditInvoiceDate}
+                      className={`w-full border-none rounded-2xl p-4 transition-all font-bold text-sm ${
+                        !canEditInvoiceDate
+                          ? "bg-slate-100 text-slate-500 cursor-not-allowed select-none opacity-80"
+                          : "bg-slate-50 text-slate-800 focus:ring-2 focus:ring-primary-500"
+                      }`}
+                      value={!canEditInvoiceDate && !selectedSaleForEdit ? format(new Date(), "yyyy-MM-dd") : date}
+                      onChange={(e) => canEditInvoiceDate && setDate(e.target.value)}
+                      title={!canEditInvoiceDate ? "Invoice date is locked to today's date. Admin permission required to edit." : ""}
                     />
                   </div>
                   <div>

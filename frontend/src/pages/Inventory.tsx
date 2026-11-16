@@ -1278,13 +1278,20 @@ const Inventory = () => {
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
-          <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
+          <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center shrink-0">
             <Box size={28} />
           </div>
           <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              {t("common.total")} {t("common.items")}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                {searchTerm.trim() ? "Matching Products" : `${t("common.total")} ${t("common.items")}`}
+              </p>
+              {searchTerm.trim() && (
+                <span className="text-[9px] font-bold px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full border border-blue-100">
+                  Search Result
+                </span>
+              )}
+            </div>
             <h4 className="text-2xl font-black text-slate-800">
               {totalItems}{" "}
               <span className="text-sm font-medium text-slate-400">
@@ -1295,21 +1302,33 @@ const Inventory = () => {
         </div>
         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
+            <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center shrink-0">
               <div className="text-xl font-black italic">₹</div>
             </div>
             <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                {stockValueDisplay === "purchase" ? "Purchase" : "Selling"} {t("common.stock_value")}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  {stockValueDisplay === "purchase" ? "Purchase" : "Selling"} {t("common.stock_value")}
+                </p>
+                {searchTerm.trim() && (
+                  <span className="text-[9px] font-bold px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-200">
+                    For Searched Item
+                  </span>
+                )}
+              </div>
               <h4 className="text-2xl font-black text-emerald-600">
                 ₹{totalStockValue.toLocaleString()}
               </h4>
+              <p className="text-xs font-bold text-slate-400 mt-0.5">
+                {stockValueDisplay === "purchase" 
+                  ? `Selling Value: ₹${totalSellingValue.toLocaleString()}` 
+                  : `Purchase Value: ₹${totalPurchaseValue.toLocaleString()}`}
+              </p>
             </div>
           </div>
           <button
             onClick={() => setStockValueDisplay(stockValueDisplay === "purchase" ? "sell" : "purchase")}
-            className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border border-slate-100 flex items-center gap-2"
+            className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border border-slate-100 flex items-center gap-2 shrink-0"
           >
             <RefreshCw size={12} className={stockValueDisplay === "sell" ? "rotate-180 transition-transform" : "transition-transform"} />
             {stockValueDisplay === "purchase" ? "Switch to Sell" : "Switch to Purchase"}

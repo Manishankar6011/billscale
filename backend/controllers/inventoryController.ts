@@ -49,46 +49,32 @@ export const getProducts = async (req: AuthRequest, res: Response) => {
         else if (sortBy === 'stock-asc') sort = { stock: 1 };
         else if (sortBy === 'stock-desc') sort = { stock: -1 };
 
-        const needStats = !search && req.query.skipStats !== 'true';
+        const needStats = req.query.skipStats !== 'true';
 
         let products: any[] = [];
         let totalCount = 0;
         let totalStats: any[] = [];
 
-        if (search) {
-            products = await Product.find(query)
+        [products, totalCount, totalStats] = await Promise.all([
+            Product.find(query)
                 .sort(sort)
                 .skip(skip)
                 .limit(limit)
-                .lean();
-
-            if (page === 1 && products.length < limit) {
-                totalCount = products.length;
-            } else {
-                totalCount = await Product.countDocuments(query);
-            }
-        } else {
-            [products, totalCount, totalStats] = await Promise.all([
-                Product.find(query)
-                    .sort(sort)
-                    .skip(skip)
-                    .limit(limit)
-                    .lean(),
-                Product.countDocuments(query),
-                needStats
-                    ? Product.aggregate([
-                        { $match: query },
-                        { 
-                            $group: { 
-                                _id: null, 
+                .lean(),
+            Product.countDocuments(query),
+            needStats
+                ? Product.aggregate([
+                    { $match: query },
+                    { 
+                        $group: { 
+                            _id: null, 
                             totalPurchaseValue: { $sum: { $multiply: ["$stock", "$purchasePrice"] } },
                             totalSellingValue: { $sum: { $multiply: ["$stock", "$pricePerUnit"] } }
                         } 
                     }
                 ])
                 : Promise.resolve([])
-            ]);
-        }
+        ]);
 
         res.status(200).json({
             products,

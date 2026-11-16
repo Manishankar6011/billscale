@@ -4,7 +4,7 @@ import { AuthRequest } from './auth';
 export const DEFAULT_STAFF_PERMISSIONS: Record<string, Record<string, boolean>> = {
     dashboard: { view: true },
     inventory: { view: true, create: true, edit: true, delete: false },
-    sales: { view: true, create: true, edit: false, delete: false, viewProfit: false },
+    sales: { view: true, create: true, edit: false, delete: false, viewProfit: false, editInvoiceDate: false },
     purchases: { view: true, create: true, edit: false, delete: false },
     customers: { view: true, create: true, edit: true, delete: false },
     staff: { view: false, create: false, edit: false, delete: false },
@@ -13,6 +13,53 @@ export const DEFAULT_STAFF_PERMISSIONS: Record<string, Record<string, boolean>> 
     ledger: { view: false },
     reports: { view: false },
     settings: { view: false },
+};
+
+/**
+ * Helper to check granular permission on a user object without HTTP response.
+ * Useful directly in controller actions.
+ */
+export const hasUserPermission = (user: any, module: string, action: string = 'view'): boolean => {
+    if (!user) return false;
+
+    // Owners and Super-admins have unrestricted access
+    if (user.role === 'owner' || user.role === 'super-admin') {
+        return true;
+    }
+
+    // Accountants have access to financial, billing, inventory and reporting modules
+    if (user.role === 'accountant') {
+        const allowedModules = [
+            'dashboard',
+            'sales',
+            'inventory',
+            'purchases',
+            'customers',
+            'reports',
+            'ledger',
+            'gst-reports'
+        ];
+        return allowedModules.includes(module);
+    }
+
+    // Staff Access Control
+    if (user.role === 'staff') {
+        const userPermissions = user.permissions && Object.keys(user.permissions).length > 0
+            ? user.permissions
+            : DEFAULT_STAFF_PERMISSIONS;
+
+        const modulePerms = userPermissions[module];
+        if (modulePerms && typeof modulePerms[action] === 'boolean') {
+            return modulePerms[action];
+        }
+
+        const defaultModule = DEFAULT_STAFF_PERMISSIONS[module];
+        if (defaultModule && typeof defaultModule[action] === 'boolean') {
+            return defaultModule[action];
+        }
+    }
+
+    return false;
 };
 
 /**
