@@ -488,7 +488,7 @@ const Settings = () => {
             newPerms = {
                 dashboard: { view: true },
                 inventory: { view: true, create: false, edit: false, delete: false },
-                sales: { view: true, create: true, edit: false, delete: false, viewProfit: false },
+                sales: { view: true, create: true, edit: false, delete: false, viewProfit: false, editInvoiceDate: false },
                 purchases: { view: false, create: false, edit: false, delete: false },
                 customers: { view: true, create: true, edit: false, delete: false },
                 staff: { view: false, create: false, edit: false, delete: false },
@@ -502,7 +502,7 @@ const Settings = () => {
             newPerms = {
                 dashboard: { view: true },
                 inventory: { view: true, create: true, edit: true, delete: false },
-                sales: { view: true, create: false, edit: false, delete: false, viewProfit: false },
+                sales: { view: true, create: false, edit: false, delete: false, viewProfit: false, editInvoiceDate: false },
                 purchases: { view: true, create: true, edit: true, delete: false },
                 customers: { view: false, create: false, edit: false, delete: false },
                 staff: { view: false, create: false, edit: false, delete: false },
@@ -516,7 +516,7 @@ const Settings = () => {
             newPerms = {
                 dashboard: { view: true },
                 inventory: { view: true, create: true, edit: true, delete: true },
-                sales: { view: true, create: true, edit: true, delete: true, viewProfit: true },
+                sales: { view: true, create: true, edit: true, delete: true, viewProfit: true, editInvoiceDate: true },
                 purchases: { view: true, create: true, edit: true, delete: true },
                 customers: { view: true, create: true, edit: true, delete: true },
                 staff: { view: true, create: true, edit: true, delete: false },
@@ -530,7 +530,7 @@ const Settings = () => {
             newPerms = {
                 dashboard: { view: true },
                 inventory: { view: true, create: false, edit: false, delete: false },
-                sales: { view: true, create: false, edit: false, delete: false, viewProfit: false },
+                sales: { view: true, create: false, edit: false, delete: false, viewProfit: false, editInvoiceDate: false },
                 purchases: { view: true, create: false, edit: false, delete: false },
                 customers: { view: true, create: false, edit: false, delete: false },
                 staff: { view: false, create: false, edit: false, delete: false },
@@ -1105,6 +1105,7 @@ const Settings = () => {
                                                 ? s.permissions
                                                 : DEFAULT_STAFF_PERMISSIONS;
                                             const hasProfit = Boolean(staffPerms.sales?.viewProfit);
+                                            const hasDateEdit = Boolean(staffPerms.sales?.editInvoiceDate);
 
                                             return (
                                                 <div key={s._id} className="p-6 bg-slate-50/50 rounded-3xl flex flex-col justify-between group/item hover:bg-white hover:shadow-xl hover:shadow-slate-100 transition-all border border-transparent hover:border-slate-100 gap-4">
@@ -1167,6 +1168,15 @@ const Settings = () => {
                                                         ) : (
                                                             <span className="px-2.5 py-1 bg-slate-100 text-slate-400 text-[9px] font-bold uppercase tracking-wider rounded-lg">
                                                                 Profit Hidden
+                                                            </span>
+                                                        )}
+                                                        {hasDateEdit ? (
+                                                            <span className="px-2.5 py-1 bg-blue-50 text-blue-700 text-[9px] font-black uppercase tracking-wider rounded-lg border border-blue-100 flex items-center gap-1">
+                                                                📅 Date Edit ON
+                                                            </span>
+                                                        ) : (
+                                                            <span className="px-2.5 py-1 bg-slate-100 text-slate-400 text-[9px] font-bold uppercase tracking-wider rounded-lg">
+                                                                Date Locked
                                                             </span>
                                                         )}
                                                     </div>
@@ -1858,6 +1868,30 @@ const Settings = () => {
                                                         </span>
                                                         <span className="text-[10px] text-slate-500 leading-tight block mt-0.5">
                                                             Displays the Net Profit summary card and Cost Price / Profit / Margin % columns in the Sales list. (Hidden by default for staff)
+                                                        </span>
+                                                    </div>
+                                                </label>
+                                            </div>
+
+                                            {/* Allow Custom Invoice Date */}
+                                            <div className={`p-3 rounded-xl border transition-all ${
+                                                staffFormData.permissions.sales?.editInvoiceDate 
+                                                    ? 'bg-blue-50/80 border-blue-200 text-blue-900' 
+                                                    : 'bg-slate-100/80 border-slate-200 text-slate-600'
+                                            }`}>
+                                                <label className="flex items-start gap-3 cursor-pointer select-none">
+                                                    <input 
+                                                        type="checkbox"
+                                                        checked={Boolean(staffFormData.permissions.sales?.editInvoiceDate)}
+                                                        onChange={() => togglePermission('sales', 'editInvoiceDate')}
+                                                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 mt-0.5"
+                                                    />
+                                                    <div>
+                                                        <span className="text-xs font-black uppercase tracking-tight block">
+                                                            📅 Allow Custom Invoice Date
+                                                        </span>
+                                                        <span className="text-[10px] text-slate-500 leading-tight block mt-0.5">
+                                                            Allows staff to select custom or past/future invoice dates in sale modal. If disabled, invoice date is locked to today's date.
                                                         </span>
                                                     </div>
                                                 </label>

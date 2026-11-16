@@ -158,7 +158,7 @@ export const getSalesByHour = async (req: AuthRequest, res: Response) => {
 export const getItemSalesByDateRange = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = new mongoose.Types.ObjectId(req.tenantId as string);
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, search } = req.query;
 
     if (!startDate || !endDate) {
       return res.status(400).json({ message: "Start date and end date are required" });
@@ -168,7 +168,11 @@ export const getItemSalesByDateRange = async (req: AuthRequest, res: Response) =
     const start = new Date(`${startDate}T00:00:00+05:30`);
     const end = new Date(`${endDate}T23:59:59.999+05:30`);
 
-    const itemSales = await Sale.aggregate([
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return res.status(400).json({ message: "Invalid date format" });
+    }
+
+    const pipeline: any[] = [
       {
         $match: {
           tenantId,
@@ -177,6 +181,11 @@ export const getItemSalesByDateRange = async (req: AuthRequest, res: Response) =
       },
       {
         $project: {
+          invoiceNumber: 1,
+          date: 1,
+          customerName: 1,
+          customerPhone: 1,
+          paymentMode: 1,
           allItems: {
             $concatArrays: [
               {
@@ -230,6 +239,19 @@ export const getItemSalesByDateRange = async (req: AuthRequest, res: Response) =
               ],
             },
           },
+          sales: {
+            $push: {
+              saleId: "$_id",
+              invoiceNumber: "$invoiceNumber",
+              date: "$date",
+              customerName: { $ifNull: ["$customerName", "Walk-in Customer"] },
+              customerPhone: { $ifNull: ["$customerPhone", ""] },
+              paymentMode: { $ifNull: ["$paymentMode", "cash"] },
+              quantity: "$allItems.quantity",
+              sellingPrice: "$allItems.sellingPrice",
+              total: { $multiply: ["$allItems.quantity", "$allItems.sellingPrice"] },
+            },
+          },
         },
       },
       {
@@ -244,15 +266,43 @@ export const getItemSalesByDateRange = async (req: AuthRequest, res: Response) =
       {
         $project: {
           _id: 1,
+          productId: 1,
           name: { $ifNull: ["$product.name", { $ifNull: ["$customName", "Custom Item"] }] },
+          barcode: { $ifNull: ["$product.barcode", ""] },
           unit: { $ifNull: ["$product.unit", { $ifNull: ["$itemUnit", "-"] }] },
           totalQuantity: 1,
           totalRevenue: 1,
           totalProfit: 1,
+          sales: 1,
         },
       },
       { $sort: { totalQuantity: -1 } },
-    ]);
+    ];
+
+    if (search && typeof search === "string" && search.trim()) {
+      const trimmed = search.trim();
+      const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const searchRegex = new RegExp(escaped, "i");
+      pipeline.push({
+        $match: {
+          $or: [
+            { name: { $regex: searchRegex } },
+            { barcode: trimmed },
+            { barcode: { $regex: searchRegex } },
+            { "sales.customerName": { $regex: searchRegex } },
+            { "sales.customerPhone": { $regex: searchRegex } },
+          ],
+        },
+      });
+    }
+
+    const itemSales = await Sale.aggregate(pipeline);
+
+    itemSales.forEach((item: any) => {
+      if (Array.isArray(item.sales)) {
+        item.sales.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      }
+    });
 
     res.status(200).json(itemSales);
   } catch (error: any) {

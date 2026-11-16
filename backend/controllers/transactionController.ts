@@ -6,6 +6,7 @@ import Product from "../models/Product";
 import Customer from "../models/Customer";
 import Tenant from "../models/Tenant";
 import mongoose from "mongoose";
+import { hasUserPermission } from "../middleware/permission";
 
 // @desc    Get all sales
 // @route   GET /api/transactions/sales
@@ -415,6 +416,9 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     const tBulk = Date.now();
 
     // 4. Save sale record inside session
+    const canEditInvoiceDate = hasUserPermission(req.user, 'sales', 'editInvoiceDate');
+    const finalSaleDate = (canEditInvoiceDate && date && !isNaN(new Date(date).getTime())) ? new Date(date) : new Date();
+
     const sale = new Sale({
       tenantId: req.tenantId,
       customerId: finalCustomerId,
@@ -437,7 +441,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
       roundOffAmount: finalRoundOff,
       paymentMode,
       status: calculatedStatus,
-      date: date ? new Date(date) : new Date(),
+      date: finalSaleDate,
       showQRCode: !!showQRCode,
       specialDiscount: finalSpecialDiscount,
       specialDiscountPercent: Number(specialDiscountPercent) || 0,
@@ -743,7 +747,10 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
     oldSale.roundOffAmount = finalRoundOff;
     oldSale.paymentMode = paymentMode;
     oldSale.status = calculatedStatus;
-    oldSale.date = date ? new Date(date) : oldSale.date;
+    const canEditInvoiceDate = hasUserPermission(req.user, 'sales', 'editInvoiceDate');
+    if (canEditInvoiceDate && date && !isNaN(new Date(date).getTime())) {
+      oldSale.date = new Date(date);
+    }
     oldSale.showQRCode = !!showQRCode;
     (oldSale as any).specialDiscount = finalSpecialDiscount;
     (oldSale as any).specialDiscountPercent = Number(specialDiscountPercent) || 0;
