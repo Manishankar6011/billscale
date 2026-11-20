@@ -630,7 +630,7 @@ const Sales = () => {
           });
           if (isCancelled) return;
           if (res.data && res.data.length > 0) {
-            const matched = res.data.find((c: any) => c.phone === cleanedPhone || c.phone === customerPhone) || res.data[0];
+            const matched = res.data.find((c: any) => c.phone === cleanedPhone || c.phone === customerPhone);
             if (matched && !isCancelled) {
               activeCustomerIdRef.current = matched._id;
               setCustomerId(matched._id);
@@ -640,6 +640,10 @@ const Sales = () => {
               setCustomerName(prev => !prev.trim() && matched.name ? matched.name : prev);
               setCustomerAddress(prev => !prev && matched.address ? matched.address : prev);
               setCustomerGSTIN(prev => !prev && matched.gstin ? matched.gstin : prev);
+            } else if (!matched) {
+              activeCustomerIdRef.current = null;
+              setCustomerId(null);
+              setCustomerPreviousDue(0);
             }
           } else {
             activeCustomerIdRef.current = null;
@@ -655,7 +659,7 @@ const Sales = () => {
         clearTimeout(timer);
       };
     } else if (cleanedPhone.length > 0 && cleanedPhone.length < 10) {
-      if (customerId && !customerName) {
+      if (customerId) {
         activeCustomerIdRef.current = null;
         setCustomerId(null);
         setCustomerPreviousDue(0);
@@ -947,8 +951,9 @@ const Sales = () => {
     const pct = ((val / rawTotal) * 100).toFixed(2);
     setSpecialDiscountPercent(pct);
   };
+  const totalPayableWithDue = grandTotal + (customerPreviousDue > 0 ? customerPreviousDue : 0);
   const changeAmount =
-    amountReceived !== "" ? Number(amountReceived) - grandTotal : null;
+    amountReceived !== "" ? Number(amountReceived) - totalPayableWithDue : null;
 
   // Auto-sync amountReceived for cash sales
   useEffect(() => {

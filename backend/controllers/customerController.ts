@@ -19,7 +19,8 @@ export const isDummyPhone = (phone?: string | null): boolean => {
 export const calculateCustomerDue = async (
     tenantIdInput: any, 
     customer: { _id?: any; phone?: string; name?: string },
-    excludeSaleId?: any
+    excludeSaleId?: any,
+    beforeDate?: Date
 ): Promise<number> => {
     if (!tenantIdInput) return 0;
     const tenantId = typeof tenantIdInput === 'string' ? new mongoose.Types.ObjectId(tenantIdInput) : tenantIdInput;
@@ -44,11 +45,16 @@ export const calculateCustomerDue = async (
         const excludeObjId = typeof excludeSaleId === 'string' ? new mongoose.Types.ObjectId(excludeSaleId) : excludeSaleId;
         salesQuery._id = { $ne: excludeObjId };
     }
+    if (beforeDate && !isNaN(beforeDate.getTime())) {
+        salesQuery.date = { $lt: beforeDate };
+    }
     if (custId) {
         const objId = typeof custId === 'string' ? new mongoose.Types.ObjectId(custId) : custId;
         salesQuery.$or.push({ customerId: objId });
-    }
-    if (custPhone && !isDummyPhone(custPhone)) {
+        if (custPhone && !isDummyPhone(custPhone)) {
+            salesQuery.$or.push({ customerPhone: custPhone, customerId: { $in: [null, undefined, objId] } });
+        }
+    } else if (custPhone && !isDummyPhone(custPhone)) {
         salesQuery.$or.push({ customerPhone: custPhone });
     }
     // Only match by name if customer has neither _id nor valid phone, and ensure regex is escaped
@@ -65,10 +71,14 @@ export const calculateCustomerDue = async (
     }
 
     const custObjId = custId ? (typeof custId === 'string' ? new mongoose.Types.ObjectId(custId) : custId) : null;
+    const paymentsQuery: any = custObjId ? { tenantId, customerId: custObjId } : null;
+    if (paymentsQuery && beforeDate && !isNaN(beforeDate.getTime())) {
+        paymentsQuery.paymentDate = { $lt: beforeDate };
+    }
 
     const [sales, payments] = await Promise.all([
         Sale.find(salesQuery).select('totalAmount downPayment amountPaid balanceDue').lean(),
-        custObjId ? CustomerPayment.find({ tenantId, customerId: custObjId }).select('amount').lean() : []
+        paymentsQuery ? CustomerPayment.find(paymentsQuery).select('amount').lean() : []
     ]);
 
     // Outstanding balance on invoices (s.balanceDue accurately reflects unpaid portion of each bill)
@@ -101,8 +111,9 @@ export const calculateCustomerDue = async (
     totalPaymentsAbsorbed = Math.min(totalPaymentsReceived, totalPaymentsAbsorbed);
 
     const unallocatedAdvance = Math.max(0, totalPaymentsReceived - totalPaymentsAbsorbed);
-    const finalDue = Math.max(0, Math.round((totalSalesDue - unallocatedAdvance) * 100) / 100);
-    return finalDue;
+    // Return signed net due: positive means outstanding dues, negative means advance credit (Jama)
+    const netDue = Math.round((totalSalesDue - unallocatedAdvance) * 100) / 100;
+    return netDue;
 };
 
 // @desc    Search customers by name or phone
@@ -135,7 +146,10 @@ export const searchCustomers = async (req: AuthRequest, res: Response) => {
         // Batch fetch sales and customer payments for all customers in 2 queries instead of 2 * N queries
         const salesOrConditions: any[] = [{ customerId: { $in: customerIds } }];
         if (customerPhones.length > 0) {
-            salesOrConditions.push({ customerPhone: { $in: customerPhones } });
+            salesOrConditions.push({ 
+                customerPhone: { $in: customerPhones },
+                customerId: { $in: [null, undefined, ...customerIds] }
+            });
         }
 
         const [sales, payments] = await Promise.all([
@@ -276,6 +290,8 @@ export const getCustomers = async (req: AuthRequest, res: Response) => {
                                                     $and: [
                                                         { $eq: [{ $ifNull: ['$customerId', null] }, null] },
                                                         { $ne: [{ $ifNull: ['$$custPhone', ""] }, ""] }, 
+                                                        { $gt: [{ $strLenCP: { $ifNull: ['$$custPhone', ""] } }, 9] },
+                                                        { $not: { $in: ['$$custPhone', ['0000000000', '1234567890', '9999999999', '1111111111']] } },
                                                         { $eq: ['$customerPhone', '$$custPhone'] }
                                                     ] 
                                                 },
@@ -283,6 +299,7 @@ export const getCustomers = async (req: AuthRequest, res: Response) => {
                                                     $and: [
                                                         { $eq: [{ $ifNull: ['$customerId', null] }, null] },
                                                         { $eq: [{ $ifNull: ['$$custPhone', ""] }, ""] }, 
+                                                        { $ne: [{ $toLower: { $ifNull: ['$$custName', ""] } }, "cash sale"] },
                                                         { $eq: [{ $toLower: { $ifNull: ['$customerName', ""] } }, { $toLower: { $ifNull: ['$$custName', ""] } }] }
                                                     ] 
                                                 }
@@ -425,8 +442,8 @@ export const getCustomerLedger = async (req: AuthRequest, res: Response) => {
 
         // For backward compatibility with older records before customerId was added
         if (customer.phone && !isDummyPhone(customer.phone)) {
-            salesQuery.$or.push({ customerPhone: customer.phone });
-        } else if (customer.name) {
+            salesQuery.$or.push({ customerPhone: customer.phone, customerId: { $in: [null, undefined, customer._id] } });
+        } else if (customer.name && customer.name.trim().toLowerCase() !== 'cash sale') {
             salesQuery.$or.push({ 
                 customerName: { $regex: new RegExp(`^${escapeRegex(customer.name.trim())}$`, 'i') },
                 customerId: { $exists: false },
@@ -445,61 +462,69 @@ export const getCustomerLedger = async (req: AuthRequest, res: Response) => {
         // Calculate total payments received for this customer
         const totalCustomerPayments = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
+        // Track sequential payment pool to resolve down payments for legacy records without double counting
+        let unallocatedPaymentsPool = totalCustomerPayments;
+        const ledgerSales = sales.map(s => {
+            let dp = 0;
+            if (s.downPayment != null) {
+                dp = Number(s.downPayment);
+            } else if (unallocatedPaymentsPool <= 0) {
+                dp = Number(s.amountPaid || 0);
+            } else {
+                const total = Number(s.totalAmount) || 0;
+                const curBal = s.balanceDue != null ? Number(s.balanceDue) : Math.max(0, total - (Number(s.amountPaid) || 0));
+                const totalPaidSoFar = Math.max(0, total - curBal);
+                const creditedFromPayments = Math.min(unallocatedPaymentsPool, totalPaidSoFar);
+                unallocatedPaymentsPool = Math.max(0, unallocatedPaymentsPool - creditedFromPayments);
+                dp = Math.max(0, totalPaidSoFar - creditedFromPayments);
+            }
+            const due = Math.max(0, Math.round(((Number(s.totalAmount) || 0) - dp) * 100) / 100);
+
+            // Detailed item list for this bill
+            const billItems = [
+                ...(s.items || []).map((item: any) => ({
+                    name: item.productId?.name || item.name || 'Product',
+                    quantity: item.quantity,
+                    unit: item.unit || item.productId?.unit || '',
+                    price: item.sellingPrice,
+                    mrp: item.mrpAtTime || item.productId?.mrp || item.sellingPrice,
+                    total: Number(item.quantity || 1) * Number(item.sellingPrice || 0)
+                })),
+                ...(s.customItems || []).map((ci: any) => ({
+                    name: ci.name || 'Direct Item',
+                    quantity: ci.quantity || 1,
+                    unit: '',
+                    price: ci.price,
+                    mrp: ci.mrp || ci.price,
+                    total: Number(ci.quantity || 1) * Number(ci.price || 0)
+                })),
+                ...(s.additionalItems || []).map((ai: any) => ({
+                    name: ai.name || 'Additional Charge',
+                    quantity: 1,
+                    unit: '',
+                    price: ai.price,
+                    mrp: ai.price,
+                    total: Number(ai.price || 0)
+                }))
+            ];
+
+            return {
+                id: s._id,
+                type: 'sale' as const,
+                date: s.date || s.createdAt,
+                amount: s.totalAmount,
+                paid: dp,
+                due: due,
+                invoiceNumber: s.invoiceNumber,
+                paymentMode: s.paymentMode,
+                items: billItems,
+                status: s.status
+            };
+        });
+
         // Merge and sort
         const ledger = [
-            ...sales.map(s => {
-                // Initial down payment at time of sale
-                let dp = 0;
-                if (s.downPayment !== undefined && s.downPayment !== null) {
-                    dp = Number(s.downPayment);
-                } else if (totalCustomerPayments === 0) {
-                    dp = Number(s.amountPaid || 0);
-                } else {
-                    dp = Math.max(0, Number(s.amountPaid || 0) - totalCustomerPayments);
-                }
-                const due = Math.max(0, Math.round(((Number(s.totalAmount) || 0) - dp) * 100) / 100);
-
-                // Detailed item list for this bill
-                const billItems = [
-                    ...(s.items || []).map((item: any) => ({
-                        name: item.productId?.name || item.name || 'Product',
-                        quantity: item.quantity,
-                        unit: item.unit || item.productId?.unit || '',
-                        price: item.sellingPrice,
-                        mrp: item.mrpAtTime || item.productId?.mrp || item.sellingPrice,
-                        total: Number(item.quantity || 1) * Number(item.sellingPrice || 0)
-                    })),
-                    ...(s.customItems || []).map((ci: any) => ({
-                        name: ci.name || 'Direct Item',
-                        quantity: ci.quantity || 1,
-                        unit: '',
-                        price: ci.price,
-                        mrp: ci.mrp || ci.price,
-                        total: Number(ci.quantity || 1) * Number(ci.price || 0)
-                    })),
-                    ...(s.additionalItems || []).map((ai: any) => ({
-                        name: ai.name || 'Additional Charge',
-                        quantity: 1,
-                        unit: '',
-                        price: ai.price,
-                        mrp: ai.price,
-                        total: Number(ai.price || 0)
-                    }))
-                ];
-
-                return {
-                    id: s._id,
-                    type: 'sale' as const,
-                    date: s.date || s.createdAt,
-                    amount: s.totalAmount,
-                    paid: dp,
-                    due: due,
-                    invoiceNumber: s.invoiceNumber,
-                    paymentMode: s.paymentMode,
-                    items: billItems,
-                    status: s.status
-                };
-            }),
+            ...ledgerSales,
             ...payments.map(p => ({
                 id: p._id,
                 type: 'payment' as const,
@@ -581,8 +606,8 @@ export const addCustomerPayment = async (req: AuthRequest, res: Response) => {
 
         // For backward compatibility
         if (customer.phone && !isDummyPhone(customer.phone)) {
-            salesQuery.$or.push({ customerPhone: customer.phone });
-        } else if (customer.name) {
+            salesQuery.$or.push({ customerPhone: customer.phone, customerId: { $in: [null, undefined, customer._id] } });
+        } else if (customer.name && customer.name.trim().toLowerCase() !== 'cash sale') {
             salesQuery.$or.push({ 
                 customerName: { $regex: new RegExp(`^${escapeRegex(customer.name.trim())}$`, 'i') },
                 customerId: { $exists: false },
@@ -638,7 +663,7 @@ export const deleteCustomer = async (req: AuthRequest, res: Response) => {
         // Check if customer has sales or payments
         const salesOr: any[] = [{ customerId }];
         if (customer.phone && !isDummyPhone(customer.phone)) {
-            salesOr.push({ customerPhone: customer.phone });
+            salesOr.push({ customerPhone: customer.phone, customerId: { $in: [null, undefined, customerId] } });
         }
         const salesCount = await Sale.countDocuments({ 
             tenantId, 
@@ -682,8 +707,8 @@ export const getCustomerReport = async (req: AuthRequest, res: Response) => {
         };
 
         if (customer.phone && !isDummyPhone(customer.phone)) {
-            salesQuery.$or.push({ customerPhone: customer.phone });
-        } else if (customer.name) {
+            salesQuery.$or.push({ customerPhone: customer.phone, customerId: { $in: [null, undefined, customer._id] } });
+        } else if (customer.name && customer.name.trim().toLowerCase() !== 'cash sale') {
             salesQuery.$or.push({ 
                 customerName: { $regex: new RegExp(`^${escapeRegex(customer.name.trim())}$`, 'i') },
                 customerId: { $exists: false },
@@ -713,14 +738,20 @@ export const getCustomerReport = async (req: AuthRequest, res: Response) => {
                 const priorSalesTotal = priorSales.reduce((acc, s) => acc + (Number(s.totalAmount) || 0), 0);
                 const priorPaymentsTotal = priorPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
 
+                let priorPaymentsPool = priorPaymentsTotal;
                 const priorSalesPaid = priorSales.reduce((acc, s) => {
                     let paid = 0;
-                    if (s.downPayment !== undefined && s.downPayment !== null) {
+                    if (s.downPayment != null) {
                         paid = Number(s.downPayment);
-                    } else if (priorPaymentsTotal === 0) {
+                    } else if (priorPaymentsPool <= 0) {
                         paid = Number(s.amountPaid || 0);
                     } else {
-                        paid = Math.max(0, Number(s.amountPaid || 0) - priorPaymentsTotal);
+                        const total = Number(s.totalAmount) || 0;
+                        const curBal = s.balanceDue != null ? Number(s.balanceDue) : Math.max(0, total - (Number(s.amountPaid) || 0));
+                        const totalPaidSoFar = Math.max(0, total - curBal);
+                        const creditedFromPayments = Math.min(priorPaymentsPool, totalPaidSoFar);
+                        priorPaymentsPool = Math.max(0, priorPaymentsPool - creditedFromPayments);
+                        paid = Math.max(0, totalPaidSoFar - creditedFromPayments);
                     }
                     return acc + paid;
                 }, 0);
@@ -751,17 +782,23 @@ export const getCustomerReport = async (req: AuthRequest, res: Response) => {
             .sort({ paymentDate: 1 })
             .lean();
 
-        // Combine and sort
+        // Combine and sort with zero double-counting
+        const totalCustomerPaymentsInReport = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+        let paymentsPoolInReport = totalCustomerPaymentsInReport;
         const transactions = [
             ...sales.map(s => {
                 let dp = 0;
-                if (s.downPayment !== undefined && s.downPayment !== null) {
+                if (s.downPayment != null) {
                     dp = Number(s.downPayment);
-                } else if (payments.length === 0) {
+                } else if (paymentsPoolInReport <= 0) {
                     dp = Number(s.amountPaid || 0);
                 } else {
-                    const totalPayments = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-                    dp = Math.max(0, Number(s.amountPaid || 0) - totalPayments);
+                    const total = Number(s.totalAmount) || 0;
+                    const curBal = s.balanceDue != null ? Number(s.balanceDue) : Math.max(0, total - (Number(s.amountPaid) || 0));
+                    const totalPaidSoFar = Math.max(0, total - curBal);
+                    const creditedFromPayments = Math.min(paymentsPoolInReport, totalPaidSoFar);
+                    paymentsPoolInReport = Math.max(0, paymentsPoolInReport - creditedFromPayments);
+                    dp = Math.max(0, totalPaidSoFar - creditedFromPayments);
                 }
                 return {
                     id: s._id,
@@ -803,7 +840,7 @@ export const getCustomerReport = async (req: AuthRequest, res: Response) => {
 
         // Summary
         const periodSalesTotal = sales.reduce((acc, s) => acc + s.totalAmount, 0);
-        const periodSalesPaid = sales.reduce((acc, s) => acc + (s.downPayment !== undefined ? s.downPayment : s.amountPaid), 0);
+        const periodSalesPaid = sales.reduce((acc, s) => acc + (s.downPayment != null ? Number(s.downPayment) : Number(s.amountPaid || 0)), 0);
         const periodPaymentsTotal = payments.reduce((acc, p) => acc + p.amount, 0);
         
         const summary = {

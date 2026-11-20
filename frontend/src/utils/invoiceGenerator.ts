@@ -228,8 +228,8 @@ export const generateInvoice = async (
             doc.text(`Status: FULLY PAID`, pageWidth - 20, finalY, { align: 'right' });
         }
 
-        // Previous Dues - only if customer has previous dues
-        if (Number(sale.previousBalance || 0) > 0) {
+        // Previous Dues / Advance
+        if (Number(sale.previousBalance || 0) !== 0) {
             const prevBal = Number(sale.previousBalance || 0);
             const curBill = Number(sale.totalAmount || 0);
             const paidToday = Number(sale.amountReceivedAtBilling ?? sale.amountPaid ?? 0);
@@ -238,8 +238,13 @@ export const generateInvoice = async (
             finalY += 7;
             doc.setFontSize(9);
             doc.setFont('helvetica', 'bold');
-            doc.setTextColor(220, 38, 38);
-            doc.text(`Previous Dues (Pichla Bakaya): Rs.${prevBal.toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' });
+            if (prevBal > 0) {
+                doc.setTextColor(220, 38, 38);
+                doc.text(`Previous Dues (Pichla Bakaya): Rs.${prevBal.toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' });
+            } else {
+                doc.setTextColor(16, 185, 129); // emerald-500
+                doc.text(`Previous Advance (Jama): Rs.${Math.abs(prevBal).toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' });
+            }
             finalY += 5;
             if (netRemaining >= 0) {
                 doc.text(`Total Outstanding: Rs.${netRemaining.toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' });

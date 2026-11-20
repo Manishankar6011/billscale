@@ -277,7 +277,10 @@ const Customers = () => {
       setPaymentAmount("");
       setPaymentNotes("");
       queryClient.invalidateQueries({ queryKey: ["customers"] });
-      const updatedCustomer = { ...selected, totalDue: selected.totalDue - Number(paymentAmount), totalPaid: selected.totalPaid + Number(paymentAmount) };
+      const curDue = Number(selected.totalDue) || 0;
+      const curPaid = Number(selected.totalPaid) || 0;
+      const payAmount = Number(paymentAmount) || 0;
+      const updatedCustomer = { ...selected, totalDue: curDue - payAmount, totalPaid: curPaid + payAmount };
       handleSelectCustomer(updatedCustomer);
     } catch (err: any) {
       showToast(err.response?.data?.message || "Failed to record payment", "error");
@@ -339,27 +342,18 @@ const Customers = () => {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {selected.phone && (
-                  <>
-                    <a
-                      href={`tel:${selected.phone}`}
-                      className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all"
-                      title="Call Customer"
-                    >
-                      <Phone size={16} />
-                    </a>
-                    <a
-                      href={`https://wa.me/${formatWhatsAppPhone(selected.phone)}?text=${encodeURIComponent(
-                        `Hello ${selected.name},\nYour total outstanding dues amount is: Rs. ${selected.totalDue.toLocaleString()}.\nPlease clear the payment at your earliest convenience.\nThank you,\n${user?.companyName || "BuildMate ERP"}`
-                      )}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="p-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-all shadow-md"
-                      title="Send WhatsApp Dues Reminder"
-                    >
-                      <span className="text-xs font-black px-1">WhatsApp</span>
-                    </a>
-                  </>
+                {selected.phone && (Number(selected.totalDue) || 0) > 0 && (
+                  <a
+                    href={`https://wa.me/${formatWhatsAppPhone(selected.phone)}?text=${encodeURIComponent(
+                      `Hello ${selected.name},\nYour total outstanding dues amount is: Rs. ${(Number(selected.totalDue) || 0).toLocaleString()}.\nPlease clear the payment at your earliest convenience.\nThank you,\n${user?.companyName || "BuildMate ERP"}`
+                    )}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-all shadow-md"
+                    title="Send WhatsApp Dues Reminder"
+                  >
+                    <span className="text-xs font-black px-1">WhatsApp</span>
+                  </a>
                 )}
                 <button
                   onClick={() => setSelected(null)}
@@ -412,7 +406,7 @@ const Customers = () => {
                     <TrendingUp size={16} className="text-primary-600" />
                   </div>
                   <p className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">
-                    ₹{selected.totalAmount.toLocaleString()}
+                    ₹{Number(selected.totalAmount || 0).toLocaleString()}
                   </p>
                   <p className="text-[11px] font-bold text-slate-500 mt-1">
                     Total {selected.invoiceCount} invoices generated
@@ -428,7 +422,7 @@ const Customers = () => {
                     <IndianRupee size={16} className="text-emerald-600" />
                   </div>
                   <p className="text-2xl sm:text-3xl font-black text-emerald-600 tracking-tight">
-                    ₹{selected.totalPaid.toLocaleString()}
+                    ₹{Number(selected.totalPaid || 0).toLocaleString()}
                   </p>
                   <p className="text-[11px] font-bold text-slate-500 mt-1">
                     {selected.lastSaleDate

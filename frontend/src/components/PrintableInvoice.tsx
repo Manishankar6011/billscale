@@ -301,8 +301,8 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                     </div>
                 )}
 
-                {/* Previous Dues Section - only shown if customer has previous dues */}
-                {Number(sale.previousBalance || 0) > 0 && (() => {
+                {/* Previous Dues Section - shown if customer has previous dues or advance credit */}
+                {Number(sale.previousBalance || 0) !== 0 && (() => {
                     const prevBal = Number(sale.previousBalance || 0);
                     const curBill = Number(sale.totalAmount || 0);
                     const paidToday = Number(sale.amountReceivedAtBilling ?? sale.amountPaid ?? 0);
@@ -310,8 +310,10 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                     return (
                         <div className="border-2 border-black border-dashed p-1.5 my-2 space-y-1 bg-gray-50 text-[11px]">
                             <div className="flex justify-between items-center font-bold">
-                                <span>Previous Dues:</span>
-                                <span className="font-black">₹{prevBal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                <span>{prevBal > 0 ? "Previous Dues:" : "Previous Advance:"}</span>
+                                <span className={prevBal > 0 ? "font-black" : "font-black text-emerald-700"}>
+                                    ₹{Math.abs(prevBal).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
                             </div>
                             <div className="flex justify-between items-center font-bold">
                                 <span>Current Bill:</span>
@@ -336,7 +338,7 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                 {changeAmount !== undefined && changeAmount > 0 && (
                     <div className="flex justify-between items-center text-[12px] font-bold pt-1">
                         <span>Received Amount:</span>
-                        <span className="font-black">₹{(sale.amountPaid || (sale.totalAmount + changeAmount)).toLocaleString()}</span>
+                        <span className="font-black">₹{((sale.amountReceivedAtBilling || sale.amountPaid || (sale.totalAmount + changeAmount))).toLocaleString()}</span>
                     </div>
                 )}
                 {changeAmount !== undefined && changeAmount > 0 && (

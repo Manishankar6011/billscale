@@ -639,7 +639,7 @@ const GSTInvoice: React.FC<GSTInvoiceProps> = ({
 
         {/* Bottom Section */}
         <div className="border-t border-black p-1">
-          {Number(sale.previousBalance || 0) > 0 && (() => {
+          {Number(sale.previousBalance || 0) !== 0 && (() => {
             const prevBal = Number(sale.previousBalance || 0);
             const curBill = Number(sale.totalAmount || 0);
             const paidToday = Number(sale.amountReceivedAtBilling ?? sale.amountPaid ?? 0);
@@ -647,8 +647,10 @@ const GSTInvoice: React.FC<GSTInvoiceProps> = ({
             return (
               <div className="mb-2 p-2 border border-black border-dashed bg-gray-50 flex justify-between items-center text-[10px]">
                 <div>
-                  <span className="font-bold uppercase">Previous Dues: </span>
-                  <span className="font-black text-red-600">₹{prevBal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span className="font-bold uppercase">{prevBal > 0 ? "Previous Dues: " : "Previous Advance: "}</span>
+                  <span className={`font-black ${prevBal > 0 ? "text-red-600" : "text-emerald-700"}`}>
+                    ₹{Math.abs(prevBal).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
                 </div>
                 <div>
                   <span className="font-bold uppercase">Current Bill: </span>

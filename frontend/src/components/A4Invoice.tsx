@@ -341,8 +341,8 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                         </div>
                     )}
 
-                    {/* Previous Dues Section - only shown if customer has previous dues */}
-                    {Number(sale.previousBalance || 0) > 0 && (() => {
+                    {/* Previous Dues Section - shown if customer has previous dues or advance */}
+                    {Number(sale.previousBalance || 0) !== 0 && (() => {
                         const prevBal = Number(sale.previousBalance || 0);
                         const curBill = Number(sale.totalAmount || 0);
                         const paidToday = Number(sale.amountReceivedAtBilling ?? sale.amountPaid ?? 0);
@@ -353,8 +353,10 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                                     Customer Account Summary
                                 </div>
                                 <div className="flex justify-between text-sm font-bold text-black">
-                                    <span>Previous Dues</span>
-                                    <span className="font-black text-rose-600">₹{prevBal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    <span>{prevBal > 0 ? "Previous Dues" : "Previous Advance Credit"}</span>
+                                    <span className={`font-black ${prevBal > 0 ? "text-rose-600" : "text-emerald-700"}`}>
+                                        ₹{Math.abs(prevBal).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
                                 </div>
                                 <div className="flex justify-between text-sm font-bold text-black">
                                     <span>Current Bill</span>
