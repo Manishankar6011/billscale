@@ -83,17 +83,22 @@ export const calculateCustomerDue = async (
     const totalPaymentsReceived = (payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
     
     // Amount absorbed by sales: difference between initial unpaid at checkout and current balanceDue
-    const totalPaymentsAbsorbed = sales.reduce((sum, s) => {
+    let totalPaymentsAbsorbed = 0;
+    sales.forEach(s => {
         const total = Number(s.totalAmount) || 0;
-        const initialPaid = s.downPayment !== undefined && s.downPayment !== null 
-            ? Number(s.downPayment) 
-            : Math.max(0, total - (Number(s.balanceDue) || 0));
-        const currentBalance = s.balanceDue !== undefined && s.balanceDue !== null 
-            ? Number(s.balanceDue) 
-            : Math.max(0, total - initialPaid);
-        const paymentsCreditedToSale = Math.max(0, (total - initialPaid) - currentBalance);
-        return sum + paymentsCreditedToSale;
-    }, 0);
+        const curBal = s.balanceDue !== undefined && s.balanceDue !== null ? Number(s.balanceDue) : 0;
+        if (s.downPayment !== undefined && s.downPayment !== null) {
+            const initialPaid = Number(s.downPayment);
+            const credited = Math.max(0, (total - initialPaid) - curBal);
+            totalPaymentsAbsorbed += credited;
+        } else {
+            // For legacy records without downPayment, credit is difference between total and remaining due
+            const totalPaidOnSale = Math.max(0, total - curBal);
+            totalPaymentsAbsorbed += totalPaidOnSale;
+        }
+    });
+    // Absorbed payments cannot exceed total payments received
+    totalPaymentsAbsorbed = Math.min(totalPaymentsReceived, totalPaymentsAbsorbed);
 
     const unallocatedAdvance = Math.max(0, totalPaymentsReceived - totalPaymentsAbsorbed);
     const finalDue = Math.max(0, Math.round((totalSalesDue - unallocatedAdvance) * 100) / 100);
@@ -188,17 +193,20 @@ export const searchCustomers = async (req: AuthRequest, res: Response) => {
             }, 0);
 
             const totalPaymentsReceived = paymentsMap.get(cid) || 0;
-            const totalPaymentsAbsorbed = matchedSales.reduce((sum, s) => {
+            let totalPaymentsAbsorbed = 0;
+            matchedSales.forEach(s => {
                 const total = Number(s.totalAmount) || 0;
-                const initialPaid = s.downPayment !== undefined && s.downPayment !== null 
-                    ? Number(s.downPayment) 
-                    : Math.max(0, total - (Number(s.balanceDue) || 0));
-                const currentBalance = s.balanceDue !== undefined && s.balanceDue !== null 
-                    ? Number(s.balanceDue) 
-                    : Math.max(0, total - initialPaid);
-                const paymentsCreditedToSale = Math.max(0, (total - initialPaid) - currentBalance);
-                return sum + paymentsCreditedToSale;
-            }, 0);
+                const curBal = s.balanceDue !== undefined && s.balanceDue !== null ? Number(s.balanceDue) : 0;
+                if (s.downPayment !== undefined && s.downPayment !== null) {
+                    const initialPaid = Number(s.downPayment);
+                    const credited = Math.max(0, (total - initialPaid) - curBal);
+                    totalPaymentsAbsorbed += credited;
+                } else {
+                    const totalPaidOnSale = Math.max(0, total - curBal);
+                    totalPaymentsAbsorbed += totalPaidOnSale;
+                }
+            });
+            totalPaymentsAbsorbed = Math.min(totalPaymentsReceived, totalPaymentsAbsorbed);
 
             const unallocatedAdvance = Math.max(0, totalPaymentsReceived - totalPaymentsAbsorbed);
             const totalDue = Math.max(0, Math.round((totalSalesDue - unallocatedAdvance) * 100) / 100);
@@ -441,9 +449,14 @@ export const getCustomerLedger = async (req: AuthRequest, res: Response) => {
         const ledger = [
             ...sales.map(s => {
                 // Initial down payment at time of sale
-                const dp = s.downPayment !== undefined && s.downPayment !== null 
-                    ? Number(s.downPayment) 
-                    : (totalCustomerPayments === 0 ? Number(s.amountPaid || 0) : Math.max(0, (Number(s.totalAmount) || 0) - (Number(s.balanceDue) || 0)));
+                let dp = 0;
+                if (s.downPayment !== undefined && s.downPayment !== null) {
+                    dp = Number(s.downPayment);
+                } else if (totalCustomerPayments === 0) {
+                    dp = Number(s.amountPaid || 0);
+                } else {
+                    dp = Math.max(0, Number(s.amountPaid || 0) - totalCustomerPayments);
+                }
                 const due = Math.max(0, Math.round(((Number(s.totalAmount) || 0) - dp) * 100) / 100);
 
                 // Detailed item list for this bill
@@ -701,9 +714,14 @@ export const getCustomerReport = async (req: AuthRequest, res: Response) => {
                 const priorPaymentsTotal = priorPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
 
                 const priorSalesPaid = priorSales.reduce((acc, s) => {
-                    const paid = s.downPayment !== undefined && s.downPayment !== null 
-                        ? Number(s.downPayment) 
-                        : (priorPaymentsTotal === 0 ? Number(s.amountPaid || 0) : Math.max(0, (Number(s.totalAmount) || 0) - (Number(s.balanceDue) || 0)));
+                    let paid = 0;
+                    if (s.downPayment !== undefined && s.downPayment !== null) {
+                        paid = Number(s.downPayment);
+                    } else if (priorPaymentsTotal === 0) {
+                        paid = Number(s.amountPaid || 0);
+                    } else {
+                        paid = Math.max(0, Number(s.amountPaid || 0) - priorPaymentsTotal);
+                    }
                     return acc + paid;
                 }, 0);
 
@@ -736,7 +754,15 @@ export const getCustomerReport = async (req: AuthRequest, res: Response) => {
         // Combine and sort
         const transactions = [
             ...sales.map(s => {
-                const dp = s.downPayment !== undefined ? s.downPayment : s.amountPaid;
+                let dp = 0;
+                if (s.downPayment !== undefined && s.downPayment !== null) {
+                    dp = Number(s.downPayment);
+                } else if (payments.length === 0) {
+                    dp = Number(s.amountPaid || 0);
+                } else {
+                    const totalPayments = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+                    dp = Math.max(0, Number(s.amountPaid || 0) - totalPayments);
+                }
                 return {
                     id: s._id,
                     type: 'sale',

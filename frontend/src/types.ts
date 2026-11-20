@@ -233,6 +233,7 @@ export interface Sale {
   totalAmount: number;
   totalProfit: number;
   amountPaid: number;
+  amountReceivedAtBilling?: number;
   balanceDue: number;
   previousBalance?: number;
   roundOffAmount: number;

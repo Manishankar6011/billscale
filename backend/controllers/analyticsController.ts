@@ -221,6 +221,7 @@ export const getItemSalesByDateRange = async (req: AuthRequest, res: Response) =
         },
       },
       { $unwind: "$allItems" },
+      { $sort: { date: -1 } },
       {
         $group: {
           _id: {

@@ -303,8 +303,8 @@ const Customers = () => {
   });
 
   const totalCustomers = customers.length;
-  const totalRevenue = customers.reduce((a, c) => a + c.totalAmount, 0);
-  const totalDueAll = customers.reduce((a, c) => a + c.totalDue, 0);
+  const totalRevenue = customers.reduce((a, c) => a + (Number(c.totalAmount) || 0), 0);
+  const totalDueAll = customers.reduce((a, c) => a + Math.max(0, Number(c.totalDue) || 0), 0);
 
   if (loading) return <Skeleton count={5} />;
 
@@ -376,26 +376,30 @@ const Customers = () => {
                 {/* Total Dues Card */}
                 <div
                   className={`p-4 rounded-2xl border ${
-                    selected.totalDue > 0
+                    (selected.totalDue || 0) > 0
                       ? "bg-rose-50 border-rose-200 text-rose-900"
                       : "bg-emerald-50 border-emerald-200 text-emerald-900"
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-[10px] font-black uppercase tracking-wider opacity-70">
-                      {selected.totalDue > 0 ? "Total Outstanding Due" : "Account Status"}
+                      {(selected.totalDue || 0) > 0 
+                        ? "Total Outstanding Due" 
+                        : ((selected.totalDue || 0) < 0 ? "Advance Credit (Jama)" : "Account Status")}
                     </span>
-                    {selected.totalDue > 0 ? (
+                    {(selected.totalDue || 0) > 0 ? (
                       <AlertCircle size={16} className="text-rose-600" />
                     ) : (
                       <CheckCircle2 size={16} className="text-emerald-600" />
                     )}
                   </div>
                   <p className="text-2xl sm:text-3xl font-black tracking-tight">
-                    ₹{selected.totalDue.toLocaleString()}
+                    ₹{Math.abs(selected.totalDue || 0).toLocaleString()}
                   </p>
                   <p className="text-[11px] font-bold mt-1 opacity-80">
-                    {selected.totalDue > 0 ? "Pending payment from customer" : "All cleared (No Dues)"}
+                    {(selected.totalDue || 0) > 0 
+                      ? "Pending payment from customer" 
+                      : ((selected.totalDue || 0) < 0 ? "Advance credit deposited with merchant" : "All cleared (No Dues)")}
                   </p>
                 </div>
 

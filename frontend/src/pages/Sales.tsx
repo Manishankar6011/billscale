@@ -622,7 +622,7 @@ const Sales = () => {
   useEffect(() => {
     let isCancelled = false;
     const cleanedPhone = customerPhone.replace(/\D/g, "");
-    if (cleanedPhone.length === 10 && !customerId) {
+    if (cleanedPhone.length === 10) {
       const timer = setTimeout(async () => {
         try {
           const res = await axios.get(`/api/customers/search?query=${cleanedPhone}`, {
@@ -641,6 +641,10 @@ const Sales = () => {
               setCustomerAddress(prev => !prev && matched.address ? matched.address : prev);
               setCustomerGSTIN(prev => !prev && matched.gstin ? matched.gstin : prev);
             }
+          } else {
+            activeCustomerIdRef.current = null;
+            setCustomerId(null);
+            setCustomerPreviousDue(0);
           }
         } catch (e) {
           // ignore lookup error
@@ -650,8 +654,14 @@ const Sales = () => {
         isCancelled = true;
         clearTimeout(timer);
       };
+    } else if (cleanedPhone.length > 0 && cleanedPhone.length < 10) {
+      if (customerId && !customerName) {
+        activeCustomerIdRef.current = null;
+        setCustomerId(null);
+        setCustomerPreviousDue(0);
+      }
     }
-  }, [customerPhone, customerId, user?.token]);
+  }, [customerPhone, user?.token]);
 
   const canEditInvoiceDate = can("sales", "editInvoiceDate");
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
@@ -4902,7 +4912,13 @@ const Sales = () => {
                     className="w-full bg-slate-50 border-none rounded-[1.5rem] py-4 pl-12 pr-4 text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all"
                     placeholder="10-digit mobile number"
                     value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCustomerPhone(val);
+                      activeCustomerIdRef.current = null;
+                      setCustomerId(null);
+                      setCustomerPreviousDue(0);
+                    }}
                     maxLength={10}
                   />
                 </div>

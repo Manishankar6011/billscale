@@ -305,7 +305,7 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                 {Number(sale.previousBalance || 0) > 0 && (() => {
                     const prevBal = Number(sale.previousBalance || 0);
                     const curBill = Number(sale.totalAmount || 0);
-                    const paidToday = Number(sale.amountPaid || 0);
+                    const paidToday = Number(sale.amountReceivedAtBilling ?? sale.amountPaid ?? 0);
                     const netRemaining = Math.round((prevBal + curBill - paidToday) * 100) / 100;
                     return (
                         <div className="border-2 border-black border-dashed p-1.5 my-2 space-y-1 bg-gray-50 text-[11px]">

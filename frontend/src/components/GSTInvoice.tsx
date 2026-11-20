@@ -642,7 +642,7 @@ const GSTInvoice: React.FC<GSTInvoiceProps> = ({
           {Number(sale.previousBalance || 0) > 0 && (() => {
             const prevBal = Number(sale.previousBalance || 0);
             const curBill = Number(sale.totalAmount || 0);
-            const paidToday = Number(sale.amountPaid || 0);
+            const paidToday = Number(sale.amountReceivedAtBilling ?? sale.amountPaid ?? 0);
             const netRemaining = Math.round((prevBal + curBill - paidToday) * 100) / 100;
             return (
               <div className="mb-2 p-2 border border-black border-dashed bg-gray-50 flex justify-between items-center text-[10px]">

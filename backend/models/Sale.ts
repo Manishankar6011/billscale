@@ -114,6 +114,9 @@ const saleSchema: Schema = new mongoose.Schema({
     downPayment: {
         type: Number
     },
+    amountReceivedAtBilling: {
+        type: Number
+    },
     balanceDue: {
         type: Number,
         default: 0
