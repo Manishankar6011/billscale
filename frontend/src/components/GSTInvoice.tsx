@@ -643,8 +643,7 @@ const GSTInvoice: React.FC<GSTInvoiceProps> = ({
             const prevBal = Number(sale.previousBalance || 0);
             const curBill = Number(sale.totalAmount || 0);
             const paidToday = Number(sale.amountPaid || 0);
-            const curDue = sale.balanceDue !== undefined ? Number(sale.balanceDue) : Math.max(0, curBill - paidToday);
-            const totalOutstanding = Math.round((prevBal + curDue) * 100) / 100;
+            const netRemaining = Math.round((prevBal + curBill - paidToday) * 100) / 100;
             return (
               <div className="mb-2 p-2 border border-black border-dashed bg-gray-50 flex justify-between items-center text-[10px]">
                 <div>
@@ -662,9 +661,9 @@ const GSTInvoice: React.FC<GSTInvoiceProps> = ({
                   </div>
                 )}
                 <div className="border-l border-black pl-2">
-                  <span className="font-black uppercase">Total Outstanding: </span>
-                  <span className="font-black text-red-700">
-                    ₹{totalOutstanding.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  <span className="font-black uppercase">{netRemaining >= 0 ? "Total Outstanding: " : "Advance Credit: "}</span>
+                  <span className={netRemaining > 0 ? "font-black text-red-700" : "font-black text-emerald-700"}>
+                    ₹{Math.abs(netRemaining).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>

@@ -425,15 +425,9 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     const canEditInvoiceDate = hasUserPermission(req.user, 'sales', 'editInvoiceDate');
     const finalSaleDate = (canEditInvoiceDate && date && !isNaN(new Date(date).getTime())) ? new Date(date) : new Date();
 
-    // Auto-resolve previous dues if not passed or 0
+    // Resolve customer previous dues directly from database ledger (authoritative server source of truth)
     let resolvedPreviousBalance = 0;
-    if (previousBalance !== undefined && previousBalance !== null && previousBalance !== "") {
-      const parsed = Number(previousBalance);
-      if (!isNaN(parsed)) {
-        resolvedPreviousBalance = parsed;
-      }
-    }
-    if (resolvedPreviousBalance === 0 && (finalCustomerId || customerPhone)) {
+    if (finalCustomerId || customerPhone) {
       try {
         resolvedPreviousBalance = await calculateCustomerDue(req.tenantId, {
           _id: finalCustomerId,
@@ -442,6 +436,12 @@ export const processSale = async (req: AuthRequest, res: Response) => {
         });
       } catch (e) {
         console.error("Error calculating customer previous due in processSale:", e);
+        if (previousBalance !== undefined && previousBalance !== null && previousBalance !== "") {
+          const parsed = Number(previousBalance);
+          if (!isNaN(parsed)) {
+            resolvedPreviousBalance = Math.max(0, parsed);
+          }
+        }
       }
     }
 
@@ -779,12 +779,27 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
     oldSale.roundOffAmount = finalRoundOff;
     oldSale.paymentMode = paymentMode;
     oldSale.status = calculatedStatus;
-    if (previousBalance !== undefined && previousBalance !== null && previousBalance !== "") {
-      const parsedPrevBal = Number(previousBalance);
-      if (!isNaN(parsedPrevBal)) {
-        (oldSale as any).previousBalance = parsedPrevBal;
+    
+    // Recalculate customer previous dues from ledger excluding this sale to avoid circular balance counting
+    let updatedPreviousBalance = Number(oldSale.previousBalance) || 0;
+    if (finalCustomerId || customerPhone) {
+      try {
+        updatedPreviousBalance = await calculateCustomerDue(
+          req.tenantId,
+          { _id: finalCustomerId, phone: customerPhone, name: customerName },
+          oldSale._id
+        );
+      } catch (e) {
+        if (previousBalance !== undefined && previousBalance !== null && previousBalance !== "") {
+          const parsedPrevBal = Number(previousBalance);
+          if (!isNaN(parsedPrevBal)) {
+            updatedPreviousBalance = Math.max(0, parsedPrevBal);
+          }
+        }
       }
     }
+    (oldSale as any).previousBalance = updatedPreviousBalance;
+
     const canEditInvoiceDate = hasUserPermission(req.user, 'sales', 'editInvoiceDate');
     if (canEditInvoiceDate && date && !isNaN(new Date(date).getTime())) {
       oldSale.date = new Date(date);
@@ -1358,7 +1373,7 @@ export const deletePurchase = async (req: AuthRequest, res: Response) => {
 export const getPublicSale = async (req: Request, res: Response) => {
   try {
     const sale = await Sale.findById(req.params.id)
-      .populate("items.productId", "name unit mrp purchasePrice hasSubUnit subUnitName subUnitValue subUnitMrp subUnitPurchasePrice subUnitSalePrice")
+      .populate("items.productId", "name unit mrp hasSubUnit subUnitName subUnitValue subUnitMrp subUnitSalePrice")
       .populate(
         "tenantId",
         "companyName phone address email logoUrl signature upiId billingEmail billingAddress name socialLinks",
@@ -1368,7 +1383,39 @@ export const getPublicSale = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Invoice not found" });
     }
 
-    res.status(200).json(sale);
+    // Sanitize public payload: strictly protect merchant's internal purchase costs and profit margins
+    const saleObj: any = sale.toObject();
+    delete saleObj.totalProfit;
+    if (Array.isArray(saleObj.items)) {
+      saleObj.items = saleObj.items.map((it: any) => {
+        delete it.purchasePriceAtTime;
+        delete it.profitPercent;
+        delete it.profitAmount;
+        if (it.productId && typeof it.productId === 'object') {
+          delete it.productId.purchasePrice;
+          delete it.productId.subUnitPurchasePrice;
+        }
+        return it;
+      });
+    }
+    if (Array.isArray(saleObj.customItems)) {
+      saleObj.customItems = saleObj.customItems.map((ci: any) => {
+        delete ci.purchasePrice;
+        delete ci.profitPercent;
+        delete ci.profitAmount;
+        return ci;
+      });
+    }
+    if (Array.isArray(saleObj.additionalItems)) {
+      saleObj.additionalItems = saleObj.additionalItems.map((ai: any) => {
+        delete ai.purchasePrice;
+        delete ai.profitPercent;
+        delete ai.profitAmount;
+        return ai;
+      });
+    }
+
+    res.status(200).json(saleObj);
   } catch (err: any) {
     res.status(500).json({ message: err.message });
   }

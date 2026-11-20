@@ -346,8 +346,7 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                         const prevBal = Number(sale.previousBalance || 0);
                         const curBill = Number(sale.totalAmount || 0);
                         const paidToday = Number(sale.amountPaid || 0);
-                        const curDue = sale.balanceDue !== undefined ? Number(sale.balanceDue) : Math.max(0, curBill - paidToday);
-                        const totalOutstanding = Math.round((prevBal + curDue) * 100) / 100;
+                        const netRemaining = Math.round((prevBal + curBill - paidToday) * 100) / 100;
                         return (
                             <div className="mt-3 p-3 border-2 border-black border-dashed rounded-xl bg-slate-50 space-y-1.5">
                                 <div className="text-[11px] font-black uppercase tracking-wider text-slate-700">
@@ -368,9 +367,9 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                                     </div>
                                 )}
                                 <div className="flex justify-between text-lg font-black text-black border-t-2 border-black pt-1.5">
-                                    <span>Total Outstanding Due</span>
-                                    <span className="text-rose-700">
-                                        ₹{totalOutstanding.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    <span>{netRemaining >= 0 ? "Total Outstanding Due" : "Advance Credit (Jama)"}</span>
+                                    <span className={netRemaining > 0 ? "text-rose-700" : "text-emerald-700"}>
+                                        ₹{Math.abs(netRemaining).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </span>
                                 </div>
                             </div>

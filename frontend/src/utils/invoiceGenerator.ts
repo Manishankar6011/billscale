@@ -233,8 +233,7 @@ export const generateInvoice = async (
             const prevBal = Number(sale.previousBalance || 0);
             const curBill = Number(sale.totalAmount || 0);
             const paidToday = Number(sale.amountPaid || 0);
-            const curDue = sale.balanceDue !== undefined ? Number(sale.balanceDue) : Math.max(0, curBill - paidToday);
-            const totalOut = Math.round((prevBal + curDue) * 100) / 100;
+            const netRemaining = Math.round((prevBal + curBill - paidToday) * 100) / 100;
 
             finalY += 7;
             doc.setFontSize(9);
@@ -242,7 +241,12 @@ export const generateInvoice = async (
             doc.setTextColor(220, 38, 38);
             doc.text(`Previous Dues (Pichla Bakaya): Rs.${prevBal.toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' });
             finalY += 5;
-            doc.text(`Total Outstanding: Rs.${totalOut.toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' });
+            if (netRemaining >= 0) {
+                doc.text(`Total Outstanding: Rs.${netRemaining.toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' });
+            } else {
+                doc.setTextColor(16, 185, 129); // emerald-500
+                doc.text(`Advance Credit (Jama): Rs.${Math.abs(netRemaining).toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' });
+            }
             doc.setTextColor(0, 0, 0);
         }
 

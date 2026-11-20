@@ -306,8 +306,7 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                     const prevBal = Number(sale.previousBalance || 0);
                     const curBill = Number(sale.totalAmount || 0);
                     const paidToday = Number(sale.amountPaid || 0);
-                    const curDue = sale.balanceDue !== undefined ? Number(sale.balanceDue) : Math.max(0, curBill - paidToday);
-                    const totalOutstanding = Math.round((prevBal + curDue) * 100) / 100;
+                    const netRemaining = Math.round((prevBal + curBill - paidToday) * 100) / 100;
                     return (
                         <div className="border-2 border-black border-dashed p-1.5 my-2 space-y-1 bg-gray-50 text-[11px]">
                             <div className="flex justify-between items-center font-bold">
@@ -325,8 +324,10 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                                 </div>
                             )}
                             <div className="flex justify-between items-center text-[13px] font-black border-t border-black pt-1">
-                                <span>Total Outstanding:</span>
-                                <span>₹{totalOutstanding.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                <span>{netRemaining >= 0 ? "Total Outstanding:" : "Advance Credit:"}</span>
+                                <span className={netRemaining > 0 ? "text-rose-700 font-black" : "text-emerald-700 font-black"}>
+                                    ₹{Math.abs(netRemaining).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
                             </div>
                         </div>
                     );

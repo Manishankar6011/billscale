@@ -202,5 +202,7 @@ saleSchema.index({ tenantId: 1, invoiceNumber: 1 }, { unique: true });
 saleSchema.index({ tenantId: 1, date: -1 });
 saleSchema.index({ tenantId: 1, status: 1 });
 saleSchema.index({ tenantId: 1, createdAt: -1 });
+saleSchema.index({ tenantId: 1, customerId: 1, date: -1 });
+saleSchema.index({ tenantId: 1, customerPhone: 1, date: -1 });
 
 export default mongoose.model<ISale>('Sale', saleSchema);

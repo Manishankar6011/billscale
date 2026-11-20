@@ -4044,24 +4044,34 @@ const Sales = () => {
                 </div>
 
                 {/* Customer Previous Dues summary if dues exist */}
-                {customerPreviousDue > 0 && (
-                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl space-y-1.5">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="font-bold text-slate-600">Previous Dues:</span>
-                      <span className="font-black text-rose-600">₹{customerPreviousDue.toLocaleString()}</span>
+                {customerPreviousDue > 0 && (() => {
+                  const paid = Number(amountReceived) || 0;
+                  const netDue = (customerPreviousDue + grandTotal) - paid;
+                  return (
+                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl space-y-1.5">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-slate-600">Previous Dues:</span>
+                        <span className="font-black text-rose-600">₹{customerPreviousDue.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-slate-600">Current Bill:</span>
+                        <span className="font-black text-slate-800">₹{grandTotal.toLocaleString()}</span>
+                      </div>
+                      {paid > 0 && (
+                        <div className="flex justify-between items-center text-xs font-bold text-emerald-700">
+                          <span>Paid Today:</span>
+                          <span>-₹{paid.toLocaleString()}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center text-sm font-black pt-1 border-t border-rose-200">
+                        <span className="text-slate-800">{netDue >= 0 ? "Net Total Due:" : "Advance Credit:"}</span>
+                        <span className={netDue > 0 ? "text-rose-700" : "text-emerald-700"}>
+                          ₹{Math.abs(netDue).toLocaleString()}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="font-bold text-slate-600">Current Bill:</span>
-                      <span className="font-black text-slate-800">₹{grandTotal.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm font-black pt-1 border-t border-rose-200">
-                      <span className="text-slate-800">Net Total Due:</span>
-                      <span className="text-rose-700">
-                        ₹{(customerPreviousDue + Math.max(0, grandTotal - (Number(amountReceived) || 0))).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Amount Received / Change Calculator */}
                 <div className="space-y-2">
@@ -4085,38 +4095,38 @@ const Sales = () => {
                       {t("billing.exact_amount")}
                     </button>
                   </div>
-                  {changeAmount !== null && (
-                    <div
-                      className={`flex items-center justify-between p-3 rounded-2xl ${changeAmount >= 0 ? "bg-emerald-50 border border-emerald-100" : "bg-rose-50 border border-rose-100"}`}
-                    >
-                      <div>
-                        <p
-                          className={`text-xs font-black uppercase tracking-widest ${changeAmount >= 0 ? "text-emerald-600" : "text-rose-600"}`}
-                        >
-                          {changeAmount >= 0
-                            ? t("billing.change_to_return")
-                            : (customerPreviousDue > 0 ? "Current Bill Due" : t("billing.balance_due"))}
-                        </p>
-                        {customerPreviousDue > 0 && changeAmount < 0 && (
-                          <p className="text-[10px] font-bold text-rose-500 mt-0.5">
-                            + ₹{customerPreviousDue.toLocaleString()} (Pichla Bakaya)
+                  {changeAmount !== null && (() => {
+                    const received = Number(amountReceived) || 0;
+                    const totalPayable = customerPreviousDue > 0 ? (customerPreviousDue + grandTotal) : grandTotal;
+                    const netDiff = received - totalPayable;
+                    return (
+                      <div
+                        className={`flex items-center justify-between p-3 rounded-2xl ${netDiff >= 0 ? "bg-emerald-50 border border-emerald-100" : "bg-rose-50 border border-rose-100"}`}
+                      >
+                        <div>
+                          <p
+                            className={`text-xs font-black uppercase tracking-widest ${netDiff >= 0 ? "text-emerald-600" : "text-rose-600"}`}
+                          >
+                            {netDiff >= 0
+                              ? t("billing.change_to_return")
+                              : (customerPreviousDue > 0 ? "Net Total Due Remaining" : t("billing.balance_due"))}
                           </p>
-                        )}
-                      </div>
-                      <div className="text-right">
-                        <p
-                          className={`text-xl font-black ${changeAmount >= 0 ? "text-emerald-600" : "text-rose-600"}`}
-                        >
-                          ₹{Math.abs(changeAmount).toLocaleString()}
-                        </p>
-                        {customerPreviousDue > 0 && changeAmount < 0 && (
-                          <p className="text-[10px] font-black text-rose-700">
-                            = ₹{(customerPreviousDue + Math.abs(changeAmount)).toLocaleString()} Total
+                          {customerPreviousDue > 0 && netDiff < 0 && (
+                            <p className="text-[10px] font-bold text-rose-500 mt-0.5">
+                              (Current: ₹{grandTotal.toLocaleString()} + Pichla: ₹{customerPreviousDue.toLocaleString()})
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <p
+                            className={`text-xl font-black ${netDiff >= 0 ? "text-emerald-600" : "text-rose-600"}`}
+                          >
+                            ₹{Math.abs(netDiff).toLocaleString()}
                           </p>
-                        )}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               </div>
 
