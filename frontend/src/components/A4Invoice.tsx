@@ -340,6 +340,35 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                             </div>
                         </div>
                     )}
+
+                    {/* Previous Dues Section - only shown if customer has previous dues */}
+                    {Number(sale.previousBalance || 0) > 0 && (
+                        <div className="mt-3 p-3 border-2 border-black border-dashed rounded-xl bg-slate-50 space-y-1.5">
+                            <div className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                                Customer Account Summary
+                            </div>
+                            <div className="flex justify-between text-sm font-bold text-black">
+                                <span>Previous Dues</span>
+                                <span className="font-black text-rose-600">₹{Number(sale.previousBalance).toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between text-sm font-bold text-black">
+                                <span>Current Bill</span>
+                                <span>₹{(sale.totalAmount || 0).toLocaleString()}</span>
+                            </div>
+                            {sale.amountPaid !== undefined && sale.amountPaid > 0 && (
+                                <div className="flex justify-between text-sm font-bold text-emerald-700">
+                                    <span>Paid Today</span>
+                                    <span>-₹{(sale.amountPaid || 0).toLocaleString()}</span>
+                                </div>
+                            )}
+                            <div className="flex justify-between text-lg font-black text-black border-t-2 border-black pt-1.5">
+                                <span>Total Outstanding Due</span>
+                                <span className="text-rose-700">
+                                    ₹{(Number(sale.previousBalance) + (sale.balanceDue !== undefined ? sale.balanceDue : (sale.totalAmount - (sale.amountPaid || 0)))).toLocaleString()}
+                                </span>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 

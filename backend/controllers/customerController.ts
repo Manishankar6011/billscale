@@ -5,6 +5,62 @@ import Customer from '../models/Customer';
 import CustomerPayment from '../models/CustomerPayment';
 import Sale from '../models/Sale';
 
+// Calculate customer's outstanding dues across all sales and payments
+export const calculateCustomerDue = async (tenantIdInput: any, customer: { _id?: any; phone?: string; name?: string }): Promise<number> => {
+    if (!tenantIdInput) return 0;
+    const tenantId = typeof tenantIdInput === 'string' ? new mongoose.Types.ObjectId(tenantIdInput) : tenantIdInput;
+    
+    let custId = customer._id;
+    let custPhone = customer.phone;
+    let custName = customer.name;
+
+    if (!custId && custPhone) {
+        const found = await Customer.findOne({ tenantId, phone: custPhone }).select('_id phone name').lean();
+        if (found) {
+            custId = found._id;
+            custName = found.name;
+        }
+    }
+
+    const salesQuery: any = {
+        tenantId,
+        $or: []
+    };
+    if (custId) {
+        const objId = typeof custId === 'string' ? new mongoose.Types.ObjectId(custId) : custId;
+        salesQuery.$or.push({ customerId: objId });
+    }
+    if (custPhone) {
+        salesQuery.$or.push({ customerPhone: custPhone });
+    }
+    if (salesQuery.$or.length === 0 && custName && custName.trim().toLowerCase() !== 'cash sale') {
+        salesQuery.$or.push({ customerName: { $regex: new RegExp(`^${custName.trim()}$`, 'i') } });
+    }
+
+    if (salesQuery.$or.length === 0) {
+        return 0;
+    }
+
+    const custObjId = custId ? (typeof custId === 'string' ? new mongoose.Types.ObjectId(custId) : custId) : null;
+
+    const [sales, payments] = await Promise.all([
+        Sale.find(salesQuery).select('totalAmount downPayment amountPaid').lean(),
+        custObjId ? CustomerPayment.find({ tenantId, customerId: custObjId }).select('amount').lean() : []
+    ]);
+
+    const totalSalesAmount = sales.reduce((sum, s) => sum + (Number(s.totalAmount) || 0), 0);
+    const totalPaidFromSales = sales.reduce((sum, s) => {
+        const paid = s.downPayment !== undefined && s.downPayment !== null 
+            ? Number(s.downPayment) 
+            : Number(s.amountPaid || 0);
+        return sum + paid;
+    }, 0);
+    const totalPaidFromPayments = (payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+    const finalDue = Math.max(0, Math.round((totalSalesAmount - (totalPaidFromSales + totalPaidFromPayments)) * 100) / 100);
+    return finalDue;
+};
+
 // @desc    Search customers by name or phone
 // @route   GET /api/customers/search
 // @access  Private
@@ -13,20 +69,57 @@ export const searchCustomers = async (req: AuthRequest, res: Response) => {
         const { query } = req.query;
         const tenantId = req.tenantId;
         
-        if (!query) {
-            const recentCustomers = await Customer.find({ tenantId }).sort({ createdAt: -1 }).limit(10);
-            return res.status(200).json(recentCustomers);
-        }
-
-        const customers = await Customer.find({
-            tenantId,
-            $or: [
+        let filter: any = { tenantId };
+        if (query) {
+            filter.$or = [
                 { name: { $regex: query as string, $options: 'i' } },
                 { phone: { $regex: query as string, $options: 'i' } }
-            ]
-        }).limit(10);
+            ];
+        }
 
-        res.status(200).json(customers);
+        const customers = await Customer.find(filter).sort({ createdAt: -1 }).limit(10).lean();
+
+        if (customers.length === 0) {
+            return res.status(200).json([]);
+        }
+
+        const customersWithDues = await Promise.all(
+            customers.map(async (c) => {
+                const totalDue = await calculateCustomerDue(tenantId, c);
+                return {
+                    ...c,
+                    totalDue
+                };
+            })
+        );
+
+        res.status(200).json(customersWithDues);
+    } catch (err: any) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
+// @desc    Get single customer balance / dues
+// @route   GET /api/customers/:id/dues
+// @access  Private
+export const getCustomerBalance = async (req: AuthRequest, res: Response) => {
+    try {
+        const tenantId = req.tenantId;
+        const customerId = req.params.id;
+
+        const customer = await Customer.findOne({ _id: customerId, tenantId }).lean();
+        if (!customer) {
+            return res.status(404).json({ message: 'Customer not found' });
+        }
+
+        const totalDue = await calculateCustomerDue(tenantId, customer);
+
+        res.status(200).json({
+            customerId: customer._id,
+            name: customer.name,
+            phone: customer.phone,
+            totalDue
+        });
     } catch (err: any) {
         res.status(500).json({ message: err.message });
     }
@@ -216,7 +309,10 @@ export const getCustomerLedger = async (req: AuthRequest, res: Response) => {
             });
         }
 
-        const sales = await Sale.find(salesQuery).sort({ date: 1 }).lean();
+        const sales = await Sale.find(salesQuery)
+            .populate('items.productId', 'name unit mrp')
+            .sort({ date: 1 })
+            .lean();
 
         // Fetch payments
         const payments = await CustomerPayment.find({ tenantId, customerId }).sort({ paymentDate: 1 }).lean();
@@ -224,24 +320,61 @@ export const getCustomerLedger = async (req: AuthRequest, res: Response) => {
         // Merge and sort
         const ledger = [
             ...sales.map(s => {
-                const dp = s.downPayment !== undefined ? s.downPayment : s.amountPaid;
+                const dp = s.downPayment !== undefined && s.downPayment !== null ? s.downPayment : (s.amountPaid || 0);
+                const due = Math.max(0, (s.totalAmount || 0) - dp);
+
+                // Detailed item list for this bill
+                const billItems = [
+                    ...(s.items || []).map((item: any) => ({
+                        name: item.productId?.name || item.name || 'Product',
+                        quantity: item.quantity,
+                        unit: item.unit || item.productId?.unit || '',
+                        price: item.sellingPrice,
+                        mrp: item.mrpAtTime || item.productId?.mrp || item.sellingPrice,
+                        total: Number(item.quantity || 1) * Number(item.sellingPrice || 0)
+                    })),
+                    ...(s.customItems || []).map((ci: any) => ({
+                        name: ci.name || 'Direct Item',
+                        quantity: ci.quantity || 1,
+                        unit: '',
+                        price: ci.price,
+                        mrp: ci.mrp || ci.price,
+                        total: Number(ci.quantity || 1) * Number(ci.price || 0)
+                    })),
+                    ...(s.additionalItems || []).map((ai: any) => ({
+                        name: ai.name || 'Additional Charge',
+                        quantity: 1,
+                        unit: '',
+                        price: ai.price,
+                        mrp: ai.price,
+                        total: Number(ai.price || 0)
+                    }))
+                ];
+
                 return {
                     id: s._id,
-                    type: 'sale',
-                    date: s.date,
+                    type: 'sale' as const,
+                    date: s.date || s.createdAt,
                     amount: s.totalAmount,
                     paid: dp,
-                    due: s.totalAmount - dp,
-                    invoiceNumber: s.invoiceNumber
+                    due: due,
+                    invoiceNumber: s.invoiceNumber,
+                    paymentMode: s.paymentMode,
+                    items: billItems,
+                    status: s.status
                 };
             }),
             ...payments.map(p => ({
                 id: p._id,
-                type: 'payment',
-                date: p.paymentDate,
+                type: 'payment' as const,
+                date: p.paymentDate || p.createdAt,
                 amount: p.amount,
+                paid: p.amount,
+                due: 0,
+                invoiceNumber: undefined,
                 paymentMode: p.paymentMode,
-                notes: p.notes
+                notes: p.notes,
+                items: []
             }))
         ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
@@ -249,14 +382,18 @@ export const getCustomerLedger = async (req: AuthRequest, res: Response) => {
         let runningBalance = 0;
         const ledgerWithBalance = ledger.map(entry => {
             if (entry.type === 'sale') {
-                runningBalance += (entry.amount - ((entry as any).paid || 0));
+                runningBalance += entry.due;
             } else {
                 runningBalance -= entry.amount;
             }
-            return { ...entry, runningBalance };
+            return {
+                ...entry,
+                runningBalance: Math.max(0, Math.round(runningBalance * 100) / 100)
+            };
         });
 
-        res.status(200).json(ledgerWithBalance);
+        // Return latest first so user sees recent purchases and dues first
+        res.status(200).json([...ledgerWithBalance].reverse());
     } catch (err: any) {
         res.status(500).json({ message: err.message });
     }

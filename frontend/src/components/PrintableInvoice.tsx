@@ -301,6 +301,30 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                     </div>
                 )}
 
+                {/* Previous Dues Section - only shown if customer has previous dues */}
+                {Number(sale.previousBalance || 0) > 0 && (
+                    <div className="border-2 border-black border-dashed p-1.5 my-2 space-y-1 bg-gray-50 text-[11px]">
+                        <div className="flex justify-between items-center font-bold">
+                            <span>Previous Dues:</span>
+                            <span className="font-black">₹{Number(sale.previousBalance).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between items-center font-bold">
+                            <span>Current Bill:</span>
+                            <span className="font-black">₹{(sale.totalAmount || 0).toLocaleString()}</span>
+                        </div>
+                        {sale.amountPaid !== undefined && sale.amountPaid > 0 && (
+                            <div className="flex justify-between items-center font-bold text-emerald-800">
+                                <span>Paid Today:</span>
+                                <span className="font-black">-₹{(sale.amountPaid || 0).toLocaleString()}</span>
+                            </div>
+                        )}
+                        <div className="flex justify-between items-center text-[13px] font-black border-t border-black pt-1">
+                            <span>Total Outstanding:</span>
+                            <span>₹{(Number(sale.previousBalance) + (sale.balanceDue !== undefined ? sale.balanceDue : (sale.totalAmount - (sale.amountPaid || 0)))).toLocaleString()}</span>
+                        </div>
+                    </div>
+                )}
+
                 {changeAmount !== undefined && changeAmount > 0 && (
                     <div className="flex justify-between items-center text-[12px] font-bold pt-1">
                         <span>Received Amount:</span>

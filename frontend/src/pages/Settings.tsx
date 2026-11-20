@@ -1536,12 +1536,11 @@ const Settings = () => {
                                     <div className="space-y-3">
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('landing.choose_lang')}</label>
                                         <select 
-                                            className="input py-4 font-black bg-slate-50 border-none rounded-2xl cursor-pointer hover:bg-slate-100 transition-all outline-none focus:ring-2 focus:ring-orange-500/20 w-full" 
-                                            value={i18n.language} 
-                                            onChange={(e) => i18n.changeLanguage(e.target.value)}
+                                            className="input py-4 font-black bg-slate-50 border-none rounded-2xl transition-all outline-none focus:ring-2 focus:ring-orange-500/20 w-full cursor-not-allowed opacity-80" 
+                                            value="en" 
+                                            disabled
                                         >
-                                            <option value="en">{t('settings.english_lang')}</option>
-                                            <option value="hi">{t('settings.hindi_lang')}</option>
+                                            <option value="en">English (Default)</option>
                                         </select>
                                     </div>
                                     <div className="space-y-3">

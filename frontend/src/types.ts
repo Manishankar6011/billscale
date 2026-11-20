@@ -191,6 +191,9 @@ export interface Customer {
   gstin?: string;
   state?: string;
   stateCode?: string;
+  totalDue?: number;
+  totalAmount?: number;
+  totalPaid?: number;
 }
 
 export interface Staff {
@@ -231,6 +234,7 @@ export interface Sale {
   totalProfit: number;
   amountPaid: number;
   balanceDue: number;
+  previousBalance?: number;
   roundOffAmount: number;
   specialDiscount?: number;
   specialDiscountPercent?: number;

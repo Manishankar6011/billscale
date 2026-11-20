@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { ArrowUpRight, ArrowDownLeft, Search, Filter } from "lucide-react";
 import axios from "axios";
 import type { Sale, Purchase } from "../types";
@@ -12,6 +13,7 @@ import { format } from "date-fns";
 const Ledger = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   // Queries
   const { data: sales = [], isLoading: salesLoading } = useQuery<Sale[]>({
@@ -148,15 +150,25 @@ const Ledger = () => {
                 ? sales.map((sale) => (
                     <tr
                       key={sale._id}
-                      className="hover:bg-slate-50/50 transition-colors"
+                      onClick={() => {
+                        if (sale.customerId) {
+                          navigate(`/dashboard/customers?id=${sale.customerId}`);
+                        }
+                      }}
+                      className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
                     >
                       <td className="px-8 py-5 text-sm text-slate-500 font-medium">
                         {format(new Date(sale.date), "dd MMM yyyy")}
                       </td>
                       <td className="px-8 py-5">
-                        <p className="font-bold text-slate-800">
+                        <p className="font-bold text-slate-800 group-hover:text-primary-600 transition-colors">
                           {sale.customerName}
                         </p>
+                        {sale.customerId && (
+                          <span className="text-[10px] font-bold text-primary-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                            View Statement →
+                          </span>
+                        )}
                       </td>
                       <td className="px-8 py-5">
                         <div className="flex flex-col gap-1">

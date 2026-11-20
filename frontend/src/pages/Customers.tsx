@@ -1,5 +1,6 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import axios from "axios";
 import {
   Users,
@@ -17,7 +18,11 @@ import {
   Edit2,
   Trash2,
   Plus,
-  PackageSearch
+  PackageSearch,
+  Receipt,
+  CheckCircle2,
+  AlertCircle,
+  Calendar
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -37,6 +42,15 @@ interface CustomerItem {
   lastPurchaseDate: string;
 }
 
+interface LedgerItem {
+  name: string;
+  quantity: number;
+  unit: string;
+  price: number;
+  mrp?: number;
+  total: number;
+}
+
 interface LedgerEntry {
   id: string;
   type: 'sale' | 'payment';
@@ -47,7 +61,9 @@ interface LedgerEntry {
   invoiceNumber?: string;
   paymentMode?: string;
   notes?: string;
+  items?: LedgerItem[];
   runningBalance: number;
+  status?: string;
 }
 
 interface CustomerData {
@@ -81,6 +97,18 @@ const Customers = () => {
 
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<CustomerData | null>(null);
+  const [searchParams] = useSearchParams();
+  const [transactionFilter, setTransactionFilter] = useState<'all' | 'sales' | 'payments'>('all');
+
+  useEffect(() => {
+    const custId = searchParams.get('id');
+    if (custId && customers.length > 0 && !selected) {
+      const found = customers.find(c => c._id === custId);
+      if (found) {
+        handleSelectCustomer(found);
+      }
+    }
+  }, [searchParams, customers]);
 
   const queryClient = useQueryClient();
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
@@ -284,227 +312,442 @@ const Customers = () => {
     <div className="space-y-6">
       {/* Customer Detail side panel */}
       {selected && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-2xl max-h-[90vh] rounded-3xl shadow-2xl flex flex-col animate-in zoom-in duration-300">
-            <div className="flex items-center justify-between p-6 border-b border-slate-100">
-              <div>
-                <h3 className="text-xl font-black text-slate-800">
-                  {selected.name}
-                </h3>
-                <p className="text-sm text-slate-400 font-medium">
-                  {selected.phone || "No phone"}
-                </p>
-              </div>
-              <button
-                onClick={() => setSelected(null)}
-                className="p-2 hover:bg-slate-100 rounded-xl transition-all"
-              >
-                <X size={20} className="text-slate-400" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6 space-y-5">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-primary-50 rounded-2xl p-4">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-primary-600 mb-1">
-                    Total Business
-                  </p>
-                  <p className="text-2xl font-black text-slate-800">
-                    ₹{selected.totalAmount.toLocaleString()}
-                  </p>
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-4xl max-h-[92vh] rounded-[2rem] shadow-2xl flex flex-col overflow-hidden border border-slate-100 animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="p-5 sm:p-6 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="w-12 h-12 bg-primary-600 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-primary-900/50">
+                  {(selected.name || "C").charAt(0).toUpperCase()}
                 </div>
-                <div
-                  className={`${selected.totalDue > 0 ? "bg-rose-50" : "bg-emerald-50"} rounded-2xl p-4`}
+                <div>
+                  <h3 className="text-lg sm:text-xl font-black tracking-tight flex items-center gap-2">
+                    {selected.name}
+                  </h3>
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300 font-medium mt-0.5">
+                    {selected.phone && (
+                      <span className="flex items-center gap-1">
+                        <Phone size={12} className="text-slate-400" /> {selected.phone}
+                      </span>
+                    )}
+                    {selected.address && (
+                      <span className="flex items-center gap-1 max-w-xs truncate">
+                        <MapPin size={12} className="text-slate-400" /> {selected.address}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {selected.phone && (
+                  <>
+                    <a
+                      href={`tel:${selected.phone}`}
+                      className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all"
+                      title="Call Customer"
+                    >
+                      <Phone size={16} />
+                    </a>
+                    <a
+                      href={`https://wa.me/${formatWhatsAppPhone(selected.phone)}?text=${encodeURIComponent(
+                        `Hello ${selected.name},\nYour total outstanding dues amount is: Rs. ${selected.totalDue.toLocaleString()}.\nPlease clear the payment at your earliest convenience.\nThank you,\n${user?.companyName || "BuildMate ERP"}`
+                      )}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-all shadow-md"
+                      title="Send WhatsApp Dues Reminder"
+                    >
+                      <span className="text-xs font-black px-1">WhatsApp</span>
+                    </a>
+                  </>
+                )}
+                <button
+                  onClick={() => setSelected(null)}
+                  className="p-2.5 bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white rounded-xl transition-all"
                 >
-                  <p
-                    className={`text-[10px] font-black uppercase tracking-widest ${selected.totalDue > 0 ? "text-rose-600" : "text-emerald-600"} mb-1`}
-                  >
-                    Amount Due
-                  </p>
-                  <p className={`text-2xl font-black text-slate-800`}>
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Dues and Business Summary Cards */}
+            <div className="p-4 sm:p-6 bg-slate-50 border-b border-slate-100">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                {/* Total Dues Card */}
+                <div
+                  className={`p-4 rounded-2xl border ${
+                    selected.totalDue > 0
+                      ? "bg-rose-50 border-rose-200 text-rose-900"
+                      : "bg-emerald-50 border-emerald-200 text-emerald-900"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider opacity-70">
+                      {selected.totalDue > 0 ? "Total Outstanding Due" : "Account Status"}
+                    </span>
+                    {selected.totalDue > 0 ? (
+                      <AlertCircle size={16} className="text-rose-600" />
+                    ) : (
+                      <CheckCircle2 size={16} className="text-emerald-600" />
+                    )}
+                  </div>
+                  <p className="text-2xl sm:text-3xl font-black tracking-tight">
                     ₹{selected.totalDue.toLocaleString()}
                   </p>
+                  <p className="text-[11px] font-bold mt-1 opacity-80">
+                    {selected.totalDue > 0 ? "Pending payment from customer" : "All cleared (No Dues)"}
+                  </p>
                 </div>
-              </div>
-              <div className="bg-slate-50 rounded-2xl p-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-500 font-medium">Invoices</span>
-                  <span className="font-black text-slate-800">
-                    {selected.invoiceCount}
-                  </span>
+
+                {/* Total Business Card */}
+                <div className="p-4 rounded-2xl bg-white border border-slate-200 text-slate-800 shadow-sm">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      Total Business
+                    </span>
+                    <TrendingUp size={16} className="text-primary-600" />
+                  </div>
+                  <p className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">
+                    ₹{selected.totalAmount.toLocaleString()}
+                  </p>
+                  <p className="text-[11px] font-bold text-slate-500 mt-1">
+                    Total {selected.invoiceCount} invoices generated
+                  </p>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-500 font-medium">Total Paid</span>
-                  <span className="font-black text-emerald-600">
+
+                {/* Total Paid Card */}
+                <div className="p-4 rounded-2xl bg-white border border-slate-200 text-slate-800 shadow-sm">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      Total Paid
+                    </span>
+                    <IndianRupee size={16} className="text-emerald-600" />
+                  </div>
+                  <p className="text-2xl sm:text-3xl font-black text-emerald-600 tracking-tight">
                     ₹{selected.totalPaid.toLocaleString()}
-                  </span>
+                  </p>
+                  <p className="text-[11px] font-bold text-slate-500 mt-1">
+                    {selected.lastSaleDate
+                      ? `Last Invoice: ${format(new Date(selected.lastSaleDate), "dd MMM yyyy")}`
+                      : "New Account"}
+                  </p>
                 </div>
-                {selected.lastSaleDate && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-500 font-medium">
-                      Last Sale
-                    </span>
-                    <span className="font-black text-slate-800">
-                      {format(new Date(selected.lastSaleDate), "dd MMM yyyy")}
-                    </span>
-                  </div>
-                )}
-                {selected.address && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-500 font-medium">Address</span>
-                    <span className="font-black text-slate-800 text-right max-w-[60%]">
-                      {selected.address}
-                    </span>
-                  </div>
-                )}
               </div>
 
-              {/* Tabs for Ledger / Items */}
-              <div className="mt-6">
-                <div className="flex items-center gap-4 border-b border-slate-100 mb-4">
+              {/* Action Buttons */}
+              <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-3 border-t border-slate-200/60">
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => setActiveTab('ledger')}
-                    className={`pb-3 text-sm font-black uppercase tracking-widest transition-colors relative ${activeTab === 'ledger' ? 'text-primary-600' : 'text-slate-400 hover:text-slate-600'}`}
+                    className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+                      activeTab === 'ledger'
+                        ? "bg-slate-900 text-white shadow"
+                        : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                    }`}
                   >
-                    <div className="flex items-center gap-2">
-                      <FileText size={16} />
-                      Ledger History
+                    <div className="flex items-center gap-1.5">
+                      <Receipt size={14} /> Date-Wise Invoices & Items
                     </div>
-                    {activeTab === 'ledger' && (
-                      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-600 rounded-t-full" />
-                    )}
                   </button>
                   <button
                     onClick={() => setActiveTab('items')}
-                    className={`pb-3 text-sm font-black uppercase tracking-widest transition-colors relative ${activeTab === 'items' ? 'text-primary-600' : 'text-slate-400 hover:text-slate-600'}`}
+                    className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+                      activeTab === 'items'
+                        ? "bg-slate-900 text-white shadow"
+                        : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                    }`}
                   >
-                    <div className="flex items-center gap-2">
-                      <PackageSearch size={16} />
-                      Items Purchased
+                    <div className="flex items-center gap-1.5">
+                      <PackageSearch size={14} /> Items Summary
                     </div>
-                    {activeTab === 'items' && (
-                      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-600 rounded-t-full" />
-                    )}
                   </button>
                 </div>
 
-                {activeTab === 'ledger' ? (
-                  <div>
-                    <div className="flex items-center justify-end mb-4 gap-2">
-                      <button
-                        onClick={() => setShowReportModal(true)}
-                        className="flex items-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors"
-                      >
-                        <ArrowDownToLine size={14} />
-                        Report
-                      </button>
-                      <button
-                        onClick={() => setShowPaymentModal(true)}
-                        className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-primary-700 transition-colors shadow-lg shadow-primary-200"
-                      >
-                        <IndianRupee size={14} />
-                        Receive Payment
-                      </button>
-                    </div>
-                    
-                    <div className="bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden">
-                      {loadingLedger ? (
-                        <div className="p-8 flex justify-center">
-                          <Loader2 size={24} className="text-primary-500 animate-spin" />
-                        </div>
-                      ) : ledger.length === 0 ? (
-                        <div className="p-8 text-center text-slate-400 text-sm font-medium">
-                          No transactions found
-                        </div>
-                      ) : (
-                        <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto">
-                          {ledger.map((entry, idx) => (
-                            <div key={idx} className="p-4 flex items-center justify-between hover:bg-white transition-colors">
-                              <div className="flex items-center gap-3">
-                                <div className={`p-2 rounded-xl ${entry.type === 'sale' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                                  {entry.type === 'sale' ? <ArrowDownToLine size={16} /> : <ArrowUpFromLine size={16} />}
-                                </div>
-                                <div>
-                                  <p className="text-sm font-bold text-slate-800">
-                                    {entry.type === 'sale' ? 'Invoice ' + (entry.invoiceNumber || '') : 'Payment Received'}
-                                  </p>
-                                  <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mt-0.5">
-                                    {format(new Date(entry.date), "dd MMM yyyy, p")}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <p className={`text-sm font-black ${entry.type === 'sale' ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                  ₹{entry.amount.toLocaleString()}
-                                </p>
-                                <p className="text-[10px] text-slate-400 font-medium mt-0.5">
-                                  {entry.type === 'sale' ? 'Bill Amount' : 'Received'} • Bal: ₹{entry.runningBalance.toLocaleString()}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <div className="flex items-center justify-end mb-4 gap-2">
-                      <button
-                        onClick={handleDownloadItems}
-                        className="flex items-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors"
-                      >
-                        <ArrowDownToLine size={14} />
-                        Download List
-                      </button>
-                    </div>
-
-                    <div className="bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden">
-                      {loadingItems ? (
-                        <div className="p-8 flex justify-center">
-                          <Loader2 size={24} className="text-primary-500 animate-spin" />
-                        </div>
-                      ) : customerItems.length === 0 ? (
-                        <div className="p-8 text-center text-slate-400 text-sm font-medium">
-                          No items purchased yet
-                        </div>
-                      ) : (
-                        <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto">
-                          {customerItems.map((item, idx) => (
-                            <div key={idx} className="p-4 flex items-center justify-between hover:bg-white transition-colors">
-                              <div>
-                                <p className="text-sm font-bold text-slate-800">
-                                  {item.name}
-                                </p>
-                                <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mt-0.5">
-                                  Last: {format(new Date(item.lastPurchaseDate), "dd MMM yy")}
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-sm font-black text-slate-800">
-                                  {item.totalQuantity} {item.unit}
-                                </p>
-                                <p className="text-[10px] text-primary-600 font-black mt-0.5">
-                                  ₹{item.totalAmount.toLocaleString()}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowReportModal(true)}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-100 transition-colors shadow-sm"
+                  >
+                    <ArrowDownToLine size={14} /> PDF Statement
+                  </button>
+                  <button
+                    onClick={() => setShowPaymentModal(true)}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-black hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-200"
+                  >
+                    <IndianRupee size={14} /> Receive Payment
+                  </button>
+                </div>
               </div>
+            </div>
 
-              {selected.phone && (
-                <a
-                  href={`https://wa.me/${formatWhatsAppPhone(selected.phone)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="w-full flex items-center justify-center gap-2 py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100 mt-4"
-                >
-                  WhatsApp {selected.name}
-                </a>
+            {/* Content Area */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+              {activeTab === 'ledger' ? (
+                <div>
+                  {/* Transaction Filter Chips */}
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-black uppercase tracking-wider text-slate-500">
+                      Transaction & Items History (Date-Wise):
+                    </p>
+                    <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-xl text-[10px] font-bold">
+                      <button
+                        onClick={() => setTransactionFilter('all')}
+                        className={`px-3 py-1 rounded-lg transition-all ${
+                          transactionFilter === 'all'
+                            ? "bg-white text-slate-900 shadow-sm font-black"
+                            : "text-slate-500 hover:text-slate-800"
+                        }`}
+                      >
+                        All ({ledger.length})
+                      </button>
+                      <button
+                        onClick={() => setTransactionFilter('sales')}
+                        className={`px-3 py-1 rounded-lg transition-all ${
+                          transactionFilter === 'sales'
+                            ? "bg-white text-rose-600 shadow-sm font-black"
+                            : "text-slate-500 hover:text-slate-800"
+                        }`}
+                      >
+                        Invoices & Items ({ledger.filter(e => e.type === 'sale').length})
+                      </button>
+                      <button
+                        onClick={() => setTransactionFilter('payments')}
+                        className={`px-3 py-1 rounded-lg transition-all ${
+                          transactionFilter === 'payments'
+                            ? "bg-white text-emerald-600 shadow-sm font-black"
+                            : "text-slate-500 hover:text-slate-800"
+                        }`}
+                      >
+                        Payments Received ({ledger.filter(e => e.type === 'payment').length})
+                      </button>
+                    </div>
+                  </div>
+
+                  {loadingLedger ? (
+                    <div className="p-12 flex flex-col items-center justify-center text-slate-400">
+                      <Loader2 size={32} className="text-primary-600 animate-spin mb-2" />
+                      <p className="text-xs font-bold">Loading ledger history...</p>
+                    </div>
+                  ) : ledger.length === 0 ? (
+                    <div className="p-12 text-center bg-slate-50 rounded-2xl border border-slate-100 text-slate-400 text-sm font-medium">
+                      No transaction records found for this customer.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {ledger
+                        .filter(entry => {
+                          if (transactionFilter === 'sales') return entry.type === 'sale';
+                          if (transactionFilter === 'payments') return entry.type === 'payment';
+                          return true;
+                        })
+                        .map((entry, idx) => {
+                          const isSale = entry.type === 'sale';
+                          const hasDueOnBill = isSale && (entry.due || 0) > 0;
+
+                          return (
+                            <div
+                              key={idx}
+                              className={`p-4 sm:p-5 rounded-2xl border transition-all ${
+                                isSale
+                                  ? hasDueOnBill
+                                    ? "bg-white border-rose-200 hover:border-rose-300 shadow-sm"
+                                    : "bg-white border-slate-200 hover:border-slate-300 shadow-sm"
+                                  : "bg-emerald-50/50 border-emerald-200 hover:border-emerald-300 shadow-sm"
+                              }`}
+                            >
+                              {/* Top Row: Date, Invoice / Payment title, and Amount */}
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
+                                <div className="flex items-center gap-3">
+                                  <div
+                                    className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                                      isSale
+                                        ? hasDueOnBill
+                                          ? "bg-rose-100 text-rose-700"
+                                          : "bg-slate-100 text-slate-700"
+                                        : "bg-emerald-100 text-emerald-700"
+                                    }`}
+                                  >
+                                    {isSale ? <Receipt size={20} /> : <ArrowDownToLine size={20} />}
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <p className="text-sm font-black text-slate-900">
+                                        {isSale
+                                          ? `Invoice #${entry.invoiceNumber || 'INV'}`
+                                          : `Payment Received`}
+                                      </p>
+                                      {isSale && (
+                                        <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                                          {entry.paymentMode || 'cash'}
+                                        </span>
+                                      )}
+                                      {!isSale && entry.paymentMode && (
+                                        <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                                          {entry.paymentMode}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 font-semibold flex items-center gap-1 mt-0.5">
+                                      <Calendar size={12} className="text-slate-400" />
+                                      {format(new Date(entry.date), "dd MMM yyyy, hh:mm a")}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* Amounts Summary */}
+                                <div className="flex items-baseline justify-between sm:justify-end gap-3 sm:gap-6 pt-2 sm:pt-0">
+                                  <div className="text-left sm:text-right">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                                      {isSale ? "Invoice Total" : "Received Amount"}
+                                    </span>
+                                    <span
+                                      className={`text-base font-black ${
+                                        isSale ? "text-slate-900" : "text-emerald-600"
+                                      }`}
+                                    >
+                                      {isSale ? "" : "+ "}₹{entry.amount.toLocaleString()}
+                                    </span>
+                                  </div>
+
+                                  {isSale && (
+                                    <>
+                                      <div className="text-left sm:text-right">
+                                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                                          Amount Paid
+                                        </span>
+                                        <span className="text-sm font-black text-emerald-600">
+                                          ₹{(entry.paid || 0).toLocaleString()}
+                                        </span>
+                                      </div>
+
+                                      <div className="text-left sm:text-right">
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-rose-500 block">
+                                          Due on Bill
+                                        </span>
+                                        <span
+                                          className={`text-sm font-black px-2 py-0.5 rounded-lg inline-block ${
+                                            hasDueOnBill
+                                              ? "bg-rose-100 text-rose-700"
+                                              : "bg-emerald-100 text-emerald-700"
+                                          }`}
+                                        >
+                                          {hasDueOnBill
+                                            ? `₹${(entry.due || 0).toLocaleString()}`
+                                            : "Paid"}
+                                        </span>
+                                      </div>
+                                    </>
+                                  )}
+
+                                  <div className="text-left sm:text-right bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-100">
+                                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
+                                      Balance Due
+                                    </span>
+                                    <span className="text-xs font-black text-slate-800">
+                                      ₹{entry.runningBalance.toLocaleString()}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Purchased Items List: "Kya kya saman liya hai" */}
+                              {isSale && entry.items && entry.items.length > 0 && (
+                                <div className="mt-3 pt-3 bg-slate-50/70 rounded-xl p-3 border border-slate-100">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                                      <PackageSearch size={12} className="text-primary-600" />
+                                      Purchased Items ({entry.items.length} items):
+                                    </span>
+                                  </div>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    {entry.items.map((item, itemIdx) => (
+                                      <div
+                                        key={itemIdx}
+                                        className="bg-white p-2.5 rounded-xl border border-slate-100 flex items-center justify-between text-xs"
+                                      >
+                                        <div>
+                                          <p className="font-bold text-slate-800 leading-tight">
+                                            {item.name}
+                                          </p>
+                                          <p className="text-[10px] font-semibold text-slate-400 mt-0.5">
+                                            Qty: {item.quantity} {item.unit || "pcs"} × ₹{item.price}
+                                          </p>
+                                        </div>
+                                        <p className="font-black text-slate-900 text-sm">
+                                          ₹{item.total.toLocaleString()}
+                                        </p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Payment Notes */}
+                              {!isSale && entry.notes && (
+                                <div className="mt-2 text-xs font-medium text-slate-600 bg-white/60 p-2 rounded-lg border border-emerald-100">
+                                  <span className="font-bold text-slate-500">Notes: </span>
+                                  {entry.notes}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Items Summary Tab */
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-black uppercase tracking-wider text-slate-500">
+                      All Products Purchased to Date (Consolidated):
+                    </p>
+                    <button
+                      onClick={handleDownloadItems}
+                      className="flex items-center gap-1.5 bg-white text-slate-700 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-slate-100 transition-colors"
+                    >
+                      <ArrowDownToLine size={13} /> Download Items PDF
+                    </button>
+                  </div>
+
+                  <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                    {loadingItems ? (
+                      <div className="p-8 flex justify-center">
+                        <Loader2 size={24} className="text-primary-500 animate-spin" />
+                      </div>
+                    ) : customerItems.length === 0 ? (
+                      <div className="p-8 text-center text-slate-400 text-sm font-medium">
+                        No item purchase records found
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
+                        {customerItems.map((item, idx) => (
+                          <div
+                            key={idx}
+                            className="p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
+                          >
+                            <div>
+                              <p className="text-sm font-bold text-slate-800">
+                                {item.name}
+                              </p>
+                              <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                                Last Purchase: {format(new Date(item.lastPurchaseDate), "dd MMM yyyy")}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-black text-slate-800">
+                                {item.totalQuantity} {item.unit || "pcs"}
+                              </p>
+                              <p className="text-[11px] text-primary-600 font-black mt-0.5">
+                                Total: ₹{item.totalAmount.toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           </div>

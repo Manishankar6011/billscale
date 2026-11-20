@@ -604,6 +604,7 @@ const Sales = () => {
   const [customerState, setCustomerState] = useState("");
   const [customerStateCode, setCustomerStateCode] = useState("");
   const [customerId, setCustomerId] = useState<string | null>(null);
+  const [customerPreviousDue, setCustomerPreviousDue] = useState<number>(0);
   const [paymentMode, setPaymentMode] = useState<"cash" | "credit">("cash");
   const [invoiceFormat, setInvoiceFormat] = useState<"thermal" | "modern" | "gst">(
     "thermal",
@@ -615,6 +616,41 @@ const Sales = () => {
       setInvoiceFormat(user.invoiceFormat as any);
     }
   }, [user?.invoiceFormat]);
+
+  // Auto-lookup existing customer and previous dues when 10-digit mobile number is entered
+  useEffect(() => {
+    const cleanedPhone = customerPhone.replace(/\D/g, "");
+    if (cleanedPhone.length === 10 && !customerId) {
+      const timer = setTimeout(async () => {
+        try {
+          const res = await axios.get(`/api/customers/search?query=${cleanedPhone}`, {
+            headers: { Authorization: `Bearer ${user?.token}` }
+          });
+          if (res.data && res.data.length > 0) {
+            const matched = res.data.find((c: any) => c.phone === cleanedPhone || c.phone === customerPhone) || res.data[0];
+            if (matched) {
+              setCustomerId(matched._id);
+              if (matched.totalDue !== undefined) {
+                setCustomerPreviousDue(matched.totalDue);
+              }
+              if (!customerName.trim() && matched.name) {
+                setCustomerName(matched.name);
+              }
+              if (!customerAddress && matched.address) {
+                setCustomerAddress(matched.address);
+              }
+              if (!customerGSTIN && matched.gstin) {
+                setCustomerGSTIN(matched.gstin);
+              }
+            }
+          }
+        } catch (e) {
+          // ignore lookup error
+        }
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [customerPhone, customerId, user?.token, customerName, customerAddress, customerGSTIN]);
 
   const canEditInvoiceDate = can("sales", "editInvoiceDate");
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
@@ -765,6 +801,7 @@ const Sales = () => {
     setCustomerState("");
     setCustomerStateCode("");
     setCustomerId(null);
+    setCustomerPreviousDue(0);
     setCart([]);
     setAdditionalItems([]);
     setCustomItems([]);
@@ -1091,6 +1128,7 @@ const Sales = () => {
       customerGSTIN,
       customerState,
       customerStateCode,
+      previousBalance: customerPreviousDue,
       items: effectiveCart.map((i) => ({
         productId: i.productId,
         quantity: i.quantity,
@@ -1829,7 +1867,7 @@ const Sales = () => {
     showToast("Excel exported!", "success");
   };
 
-  const handleCustomerSelect = (customer: Customer) => {
+  const handleCustomerSelect = async (customer: Customer) => {
     setCustomerName(customer.name);
     setCustomerPhone(customer.phone ?? "");
     setCustomerAddress(customer.address || "");
@@ -1837,9 +1875,26 @@ const Sales = () => {
     setCustomerState(customer.state || "");
     setCustomerStateCode(customer.stateCode || "");
     setCustomerId(customer._id || null);
+
+    if (customer.totalDue !== undefined) {
+      setCustomerPreviousDue(customer.totalDue);
+    }
+    if (customer._id) {
+      try {
+        const res = await axios.get(`/api/customers/${customer._id}/dues`, {
+          headers: { Authorization: `Bearer ${user?.token}` }
+        });
+        if (res.data?.totalDue !== undefined) {
+          setCustomerPreviousDue(res.data.totalDue);
+        }
+      } catch (e) {
+        // keep customer.totalDue
+      }
+    }
   };
   const handleAddNewCustomer = (query: string) => {
     setCustomerId(null);
+    setCustomerPreviousDue(0);
     if (/^\d{10}$/.test(query)) {
       setCustomerPhone(query);
       setCustomerName("");
@@ -2748,32 +2803,45 @@ const Sales = () => {
                     initialValue={customerName}
                   />
                   {(customerName || customerPhone) && (
-                    <div className="mt-2 p-3 bg-primary-50 rounded-2xl border border-primary-100 flex items-center justify-between animate-in slide-in-from-top-1 duration-200">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-white text-primary-600 rounded-lg flex items-center justify-center">
-                          <User size={16} />
+                    <div className="mt-2 p-3 bg-primary-50 rounded-2xl border border-primary-100 flex flex-col gap-2 animate-in slide-in-from-top-1 duration-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-white text-primary-600 rounded-lg flex items-center justify-center">
+                            <User size={16} />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-800">
+                              {customerName}
+                            </p>
+                            <p className="text-[10px] font-medium text-slate-400">
+                              {customerPhone || "No mobile number"}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-xs font-bold text-slate-800">
-                            {customerName}
-                          </p>
-                          <p className="text-[10px] font-medium text-slate-400">
-                            {customerPhone || "No mobile number"}
-                          </p>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomerName("");
+                            setCustomerPhone("");
+                            setCustomerAddress("");
+                            setCustomerId(null);
+                            setCustomerPreviousDue(0);
+                          }}
+                          className="text-slate-300 hover:text-rose-500 transition-colors"
+                        >
+                          <X size={16} />
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCustomerName("");
-                          setCustomerPhone("");
-                          setCustomerAddress("");
-                          setCustomerId(null);
-                        }}
-                        className="text-slate-300 hover:text-rose-500 transition-colors"
-                      >
-                        <X size={16} />
-                      </button>
+                      {customerPreviousDue > 0 && (
+                        <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between">
+                          <span className="text-xs font-black text-rose-800">
+                            ⚠️ Previous Dues:
+                          </span>
+                          <span className="text-xs font-black text-rose-600">
+                            ₹{customerPreviousDue.toLocaleString()}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -3969,6 +4037,26 @@ const Sales = () => {
                   </p>
                 </div>
 
+                {/* Customer Previous Dues summary if dues exist */}
+                {customerPreviousDue > 0 && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl space-y-1.5">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-bold text-slate-600">Previous Dues:</span>
+                      <span className="font-black text-rose-600">₹{customerPreviousDue.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-bold text-slate-600">Current Bill:</span>
+                      <span className="font-black text-slate-800">₹{grandTotal.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm font-black pt-1 border-t border-rose-200">
+                      <span className="text-slate-800">Net Total Due:</span>
+                      <span className="text-rose-700">
+                        ₹{(customerPreviousDue + Math.max(0, grandTotal - (Number(amountReceived) || 0))).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Amount Received / Change Calculator */}
                 <div className="space-y-2">
                   <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -3995,18 +4083,32 @@ const Sales = () => {
                     <div
                       className={`flex items-center justify-between p-3 rounded-2xl ${changeAmount >= 0 ? "bg-emerald-50 border border-emerald-100" : "bg-rose-50 border border-rose-100"}`}
                     >
-                      <p
-                        className={`text-xs font-black uppercase tracking-widest ${changeAmount >= 0 ? "text-emerald-600" : "text-rose-600"}`}
-                      >
-                        {changeAmount >= 0
-                          ? t("billing.change_to_return")
-                          : t("billing.balance_due")}
-                      </p>
-                      <p
-                        className={`text-xl font-black ${changeAmount >= 0 ? "text-emerald-600" : "text-rose-600"}`}
-                      >
-                        ₹{Math.abs(changeAmount).toLocaleString()}
-                      </p>
+                      <div>
+                        <p
+                          className={`text-xs font-black uppercase tracking-widest ${changeAmount >= 0 ? "text-emerald-600" : "text-rose-600"}`}
+                        >
+                          {changeAmount >= 0
+                            ? t("billing.change_to_return")
+                            : (customerPreviousDue > 0 ? "Current Bill Due" : t("billing.balance_due"))}
+                        </p>
+                        {customerPreviousDue > 0 && changeAmount < 0 && (
+                          <p className="text-[10px] font-bold text-rose-500 mt-0.5">
+                            + ₹{customerPreviousDue.toLocaleString()} (Pichla Bakaya)
+                          </p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <p
+                          className={`text-xl font-black ${changeAmount >= 0 ? "text-emerald-600" : "text-rose-600"}`}
+                        >
+                          ₹{Math.abs(changeAmount).toLocaleString()}
+                        </p>
+                        {customerPreviousDue > 0 && changeAmount < 0 && (
+                          <p className="text-[10px] font-black text-rose-700">
+                            = ₹{(customerPreviousDue + Math.abs(changeAmount)).toLocaleString()} Total
+                          </p>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -4102,6 +4204,7 @@ const Sales = () => {
                       totalAmount: grandTotal,
                       amountPaid: Number(amountReceived) || 0,
                       balanceDue: grandTotal - (Number(amountReceived) || 0),
+                      previousBalance: printData?.previousBalance ?? customerPreviousDue,
                       roundOffAmount: roundOffAmount,
                       specialDiscount: specialDiscAmt,
                       specialDiscountPercent: Number(specialDiscountPercent) || 0,
@@ -4155,6 +4258,7 @@ const Sales = () => {
                       totalAmount: grandTotal,
                       amountPaid: Number(amountReceived) || 0,
                       balanceDue: grandTotal - (Number(amountReceived) || 0),
+                      previousBalance: printData?.previousBalance ?? customerPreviousDue,
                       roundOffAmount: roundOffAmount,
                       specialDiscount: specialDiscAmt,
                       specialDiscountPercent: Number(specialDiscountPercent) || 0,
@@ -4210,6 +4314,7 @@ const Sales = () => {
                       totalAmount: grandTotal,
                       amountPaid: Number(amountReceived) || 0,
                       balanceDue: grandTotal - (Number(amountReceived) || 0),
+                      previousBalance: printData?.previousBalance ?? customerPreviousDue,
                       roundOffAmount: roundOffAmount,
                       specialDiscount: specialDiscAmt,
                       specialDiscountPercent: Number(specialDiscountPercent) || 0,

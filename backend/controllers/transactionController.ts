@@ -7,6 +7,7 @@ import Customer from "../models/Customer";
 import Tenant from "../models/Tenant";
 import mongoose from "mongoose";
 import { hasUserPermission } from "../middleware/permission";
+import { calculateCustomerDue } from "./customerController";
 
 // @desc    Get all sales
 // @route   GET /api/transactions/sales
@@ -153,6 +154,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     customerGSTIN,
     customerState,
     customerStateCode,
+    previousBalance,
     specialDiscount,
     specialDiscountPercent,
     specialDiscountLabel,
@@ -419,6 +421,20 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     const canEditInvoiceDate = hasUserPermission(req.user, 'sales', 'editInvoiceDate');
     const finalSaleDate = (canEditInvoiceDate && date && !isNaN(new Date(date).getTime())) ? new Date(date) : new Date();
 
+    // Auto-resolve previous dues if not passed or 0
+    let resolvedPreviousBalance = Number(previousBalance) || 0;
+    if (resolvedPreviousBalance === 0 && (finalCustomerId || customerPhone)) {
+      try {
+        resolvedPreviousBalance = await calculateCustomerDue(req.tenantId, {
+          _id: finalCustomerId,
+          phone: customerPhone,
+          name: customerName,
+        });
+      } catch (e) {
+        console.error("Error calculating customer previous due in processSale:", e);
+      }
+    }
+
     const sale = new Sale({
       tenantId: req.tenantId,
       customerId: finalCustomerId,
@@ -438,6 +454,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
       amountPaid: finalAmountPaid,
       downPayment: finalAmountPaid,
       balanceDue: balanceDue,
+      previousBalance: resolvedPreviousBalance,
       roundOffAmount: finalRoundOff,
       paymentMode,
       status: calculatedStatus,
@@ -519,6 +536,7 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
     customerGSTIN,
     customerState,
     customerStateCode,
+    previousBalance,
     specialDiscount,
     specialDiscountPercent,
     specialDiscountLabel,
@@ -747,6 +765,7 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
     oldSale.roundOffAmount = finalRoundOff;
     oldSale.paymentMode = paymentMode;
     oldSale.status = calculatedStatus;
+    (oldSale as any).previousBalance = Number(previousBalance) !== undefined && !isNaN(Number(previousBalance)) ? Number(previousBalance) : (oldSale as any).previousBalance;
     const canEditInvoiceDate = hasUserPermission(req.user, 'sales', 'editInvoiceDate');
     if (canEditInvoiceDate && date && !isNaN(new Date(date).getTime())) {
       oldSale.date = new Date(date);

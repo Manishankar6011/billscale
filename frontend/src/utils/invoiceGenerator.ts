@@ -228,6 +228,19 @@ export const generateInvoice = async (
             doc.text(`Status: FULLY PAID`, pageWidth - 20, finalY, { align: 'right' });
         }
 
+        // Previous Dues - only if customer has previous dues
+        if (Number(sale.previousBalance || 0) > 0) {
+            finalY += 7;
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(220, 38, 38);
+            doc.text(`Previous Dues (Pichla Bakaya): Rs.${Number(sale.previousBalance).toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' });
+            finalY += 5;
+            const totalOut = Number(sale.previousBalance) + (sale.balanceDue !== undefined ? sale.balanceDue : (sale.totalAmount - (sale.amountPaid || 0)));
+            doc.text(`Total Outstanding: Rs.${totalOut.toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' });
+            doc.setTextColor(0, 0, 0);
+        }
+
         // QR Code and Signature Section
         let qrAndSigY = finalY + 10;
 
