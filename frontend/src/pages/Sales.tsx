@@ -605,6 +605,7 @@ const Sales = () => {
   const [customerStateCode, setCustomerStateCode] = useState("");
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [customerPreviousDue, setCustomerPreviousDue] = useState<number>(0);
+  const activeCustomerIdRef = useRef<string | null>(null);
   const [paymentMode, setPaymentMode] = useState<"cash" | "credit">("cash");
   const [invoiceFormat, setInvoiceFormat] = useState<"thermal" | "modern" | "gst">(
     "thermal",
@@ -619,6 +620,7 @@ const Sales = () => {
 
   // Auto-lookup existing customer and previous dues when 10-digit mobile number is entered
   useEffect(() => {
+    let isCancelled = false;
     const cleanedPhone = customerPhone.replace(/\D/g, "");
     if (cleanedPhone.length === 10 && !customerId) {
       const timer = setTimeout(async () => {
@@ -626,31 +628,30 @@ const Sales = () => {
           const res = await axios.get(`/api/customers/search?query=${cleanedPhone}`, {
             headers: { Authorization: `Bearer ${user?.token}` }
           });
+          if (isCancelled) return;
           if (res.data && res.data.length > 0) {
             const matched = res.data.find((c: any) => c.phone === cleanedPhone || c.phone === customerPhone) || res.data[0];
-            if (matched) {
+            if (matched && !isCancelled) {
+              activeCustomerIdRef.current = matched._id;
               setCustomerId(matched._id);
               if (matched.totalDue !== undefined) {
                 setCustomerPreviousDue(matched.totalDue);
               }
-              if (!customerName.trim() && matched.name) {
-                setCustomerName(matched.name);
-              }
-              if (!customerAddress && matched.address) {
-                setCustomerAddress(matched.address);
-              }
-              if (!customerGSTIN && matched.gstin) {
-                setCustomerGSTIN(matched.gstin);
-              }
+              setCustomerName(prev => !prev.trim() && matched.name ? matched.name : prev);
+              setCustomerAddress(prev => !prev && matched.address ? matched.address : prev);
+              setCustomerGSTIN(prev => !prev && matched.gstin ? matched.gstin : prev);
             }
           }
         } catch (e) {
           // ignore lookup error
         }
       }, 350);
-      return () => clearTimeout(timer);
+      return () => {
+        isCancelled = true;
+        clearTimeout(timer);
+      };
     }
-  }, [customerPhone, customerId, user?.token, customerName, customerAddress, customerGSTIN]);
+  }, [customerPhone, customerId, user?.token]);
 
   const canEditInvoiceDate = can("sales", "editInvoiceDate");
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
@@ -1868,23 +1869,26 @@ const Sales = () => {
   };
 
   const handleCustomerSelect = async (customer: Customer) => {
+    const selectedId = customer._id || null;
+    activeCustomerIdRef.current = selectedId;
     setCustomerName(customer.name);
     setCustomerPhone(customer.phone ?? "");
     setCustomerAddress(customer.address || "");
     setCustomerGSTIN(customer.gstin || "");
     setCustomerState(customer.state || "");
     setCustomerStateCode(customer.stateCode || "");
-    setCustomerId(customer._id || null);
+    setCustomerId(selectedId);
 
     if (customer.totalDue !== undefined) {
       setCustomerPreviousDue(customer.totalDue);
     }
     if (customer._id) {
+      const requestedId = customer._id;
       try {
-        const res = await axios.get(`/api/customers/${customer._id}/dues`, {
+        const res = await axios.get(`/api/customers/${requestedId}/dues`, {
           headers: { Authorization: `Bearer ${user?.token}` }
         });
-        if (res.data?.totalDue !== undefined) {
+        if (activeCustomerIdRef.current === requestedId && res.data?.totalDue !== undefined) {
           setCustomerPreviousDue(res.data.totalDue);
         }
       } catch (e) {
@@ -1893,6 +1897,7 @@ const Sales = () => {
     }
   };
   const handleAddNewCustomer = (query: string) => {
+    activeCustomerIdRef.current = null;
     setCustomerId(null);
     setCustomerPreviousDue(0);
     if (/^\d{10}$/.test(query)) {
@@ -2821,6 +2826,7 @@ const Sales = () => {
                         <button
                           type="button"
                           onClick={() => {
+                            activeCustomerIdRef.current = null;
                             setCustomerName("");
                             setCustomerPhone("");
                             setCustomerAddress("");

@@ -641,10 +641,12 @@ const Customers = () => {
 
                                   <div className="text-left sm:text-right bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-100">
                                     <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
-                                      Balance Due
+                                      {entry.runningBalance < 0 ? "Advance Credit" : "Balance Due"}
                                     </span>
-                                    <span className="text-xs font-black text-slate-800">
-                                      ₹{entry.runningBalance.toLocaleString()}
+                                    <span className={`text-xs font-black ${entry.runningBalance < 0 ? "text-emerald-600" : "text-slate-800"}`}>
+                                      {entry.runningBalance < 0
+                                        ? `₹${Math.abs(entry.runningBalance).toLocaleString()} (Cr)`
+                                        : `₹${entry.runningBalance.toLocaleString()}`}
                                     </span>
                                   </div>
                                 </div>

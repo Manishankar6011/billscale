@@ -422,7 +422,13 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     const finalSaleDate = (canEditInvoiceDate && date && !isNaN(new Date(date).getTime())) ? new Date(date) : new Date();
 
     // Auto-resolve previous dues if not passed or 0
-    let resolvedPreviousBalance = Number(previousBalance) || 0;
+    let resolvedPreviousBalance = 0;
+    if (previousBalance !== undefined && previousBalance !== null && previousBalance !== "") {
+      const parsed = Number(previousBalance);
+      if (!isNaN(parsed)) {
+        resolvedPreviousBalance = parsed;
+      }
+    }
     if (resolvedPreviousBalance === 0 && (finalCustomerId || customerPhone)) {
       try {
         resolvedPreviousBalance = await calculateCustomerDue(req.tenantId, {
@@ -765,7 +771,12 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
     oldSale.roundOffAmount = finalRoundOff;
     oldSale.paymentMode = paymentMode;
     oldSale.status = calculatedStatus;
-    (oldSale as any).previousBalance = Number(previousBalance) !== undefined && !isNaN(Number(previousBalance)) ? Number(previousBalance) : (oldSale as any).previousBalance;
+    if (previousBalance !== undefined && previousBalance !== null && previousBalance !== "") {
+      const parsedPrevBal = Number(previousBalance);
+      if (!isNaN(parsedPrevBal)) {
+        (oldSale as any).previousBalance = parsedPrevBal;
+      }
+    }
     const canEditInvoiceDate = hasUserPermission(req.user, 'sales', 'editInvoiceDate');
     if (canEditInvoiceDate && date && !isNaN(new Date(date).getTime())) {
       oldSale.date = new Date(date);

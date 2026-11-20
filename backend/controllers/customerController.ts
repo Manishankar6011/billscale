@@ -5,6 +5,8 @@ import Customer from '../models/Customer';
 import CustomerPayment from '../models/CustomerPayment';
 import Sale from '../models/Sale';
 
+const escapeRegex = (text: string) => text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+
 // Calculate customer's outstanding dues across all sales and payments
 export const calculateCustomerDue = async (tenantIdInput: any, customer: { _id?: any; phone?: string; name?: string }): Promise<number> => {
     if (!tenantIdInput) return 0;
@@ -33,8 +35,13 @@ export const calculateCustomerDue = async (tenantIdInput: any, customer: { _id?:
     if (custPhone) {
         salesQuery.$or.push({ customerPhone: custPhone });
     }
+    // Only match by name if customer has neither _id nor phone, and ensure regex is escaped
     if (salesQuery.$or.length === 0 && custName && custName.trim().toLowerCase() !== 'cash sale') {
-        salesQuery.$or.push({ customerName: { $regex: new RegExp(`^${custName.trim()}$`, 'i') } });
+        const escaped = escapeRegex(custName.trim());
+        salesQuery.$or.push({
+            customerName: { $regex: new RegExp(`^${escaped}$`, 'i') },
+            customerPhone: { $in: ["", null, undefined] }
+        });
     }
 
     if (salesQuery.$or.length === 0) {
@@ -67,13 +74,15 @@ export const calculateCustomerDue = async (tenantIdInput: any, customer: { _id?:
 export const searchCustomers = async (req: AuthRequest, res: Response) => {
     try {
         const { query } = req.query;
-        const tenantId = req.tenantId;
+        const tenantIdStr = req.tenantId as string;
+        const tenantId = new mongoose.Types.ObjectId(tenantIdStr);
         
         let filter: any = { tenantId };
         if (query) {
+            const escaped = escapeRegex((query as string).trim());
             filter.$or = [
-                { name: { $regex: query as string, $options: 'i' } },
-                { phone: { $regex: query as string, $options: 'i' } }
+                { name: { $regex: escaped, $options: 'i' } },
+                { phone: { $regex: escaped, $options: 'i' } }
             ];
         }
 
@@ -83,15 +92,78 @@ export const searchCustomers = async (req: AuthRequest, res: Response) => {
             return res.status(200).json([]);
         }
 
-        const customersWithDues = await Promise.all(
-            customers.map(async (c) => {
-                const totalDue = await calculateCustomerDue(tenantId, c);
-                return {
-                    ...c,
-                    totalDue
-                };
-            })
-        );
+        const customerIds = customers.map(c => c._id);
+        const customerPhones = customers.map(c => c.phone).filter(Boolean);
+
+        // Batch fetch sales and customer payments for all customers in 2 queries instead of 2 * N queries
+        const salesOrConditions: any[] = [{ customerId: { $in: customerIds } }];
+        if (customerPhones.length > 0) {
+            salesOrConditions.push({ customerPhone: { $in: customerPhones } });
+        }
+
+        const [sales, payments] = await Promise.all([
+            Sale.find({
+                tenantId,
+                $or: salesOrConditions
+            }).select('customerId customerPhone totalAmount downPayment amountPaid').lean(),
+            CustomerPayment.find({
+                tenantId,
+                customerId: { $in: customerIds }
+            }).select('customerId amount').lean()
+        ]);
+
+        // Build in-memory lookup maps
+        const paymentsMap = new Map<string, number>();
+        payments.forEach(p => {
+            const cid = p.customerId?.toString();
+            if (cid) {
+                paymentsMap.set(cid, (paymentsMap.get(cid) || 0) + (Number(p.amount) || 0));
+            }
+        });
+
+        // Group sales by customer ID and phone
+        const salesByCustomerId = new Map<string, any[]>();
+        const salesByPhone = new Map<string, any[]>();
+        sales.forEach(s => {
+            if (s.customerId) {
+                const cid = s.customerId.toString();
+                if (!salesByCustomerId.has(cid)) salesByCustomerId.set(cid, []);
+                salesByCustomerId.get(cid)!.push(s);
+            } else if (s.customerPhone) {
+                if (!salesByPhone.has(s.customerPhone)) salesByPhone.set(s.customerPhone, []);
+                salesByPhone.get(s.customerPhone)!.push(s);
+            }
+        });
+
+        const customersWithDues = customers.map(c => {
+            const cid = c._id.toString();
+            const matchedSalesSet = new Set<any>();
+
+            // Add sales matched by customerId
+            (salesByCustomerId.get(cid) || []).forEach(s => matchedSalesSet.add(s));
+
+            // Add legacy sales matched by phone without customerId
+            if (c.phone && salesByPhone.has(c.phone)) {
+                salesByPhone.get(c.phone)!.forEach(s => matchedSalesSet.add(s));
+            }
+
+            const matchedSales = Array.from(matchedSalesSet);
+            const totalSales = matchedSales.reduce((sum, s) => sum + (Number(s.totalAmount) || 0), 0);
+            const totalPaidFromSales = matchedSales.reduce((sum, s) => {
+                const paid = s.downPayment !== undefined && s.downPayment !== null 
+                    ? Number(s.downPayment) 
+                    : Number(s.amountPaid || 0);
+                return sum + paid;
+            }, 0);
+            const totalPayments = paymentsMap.get(cid) || 0;
+
+            const totalDue = Math.max(0, Math.round((totalSales - (totalPaidFromSales + totalPayments)) * 100) / 100);
+
+            return {
+                ...c,
+                totalDue
+            };
+        });
 
         res.status(200).json(customersWithDues);
     } catch (err: any) {
@@ -302,10 +374,11 @@ export const getCustomerLedger = async (req: AuthRequest, res: Response) => {
         // For backward compatibility with older records before customerId was added
         if (customer.phone) {
             salesQuery.$or.push({ customerPhone: customer.phone });
-        } else {
+        } else if (customer.name) {
             salesQuery.$or.push({ 
-                customerName: { $regex: new RegExp(`^${customer.name}$`, 'i') },
-                customerId: { $exists: false }
+                customerName: { $regex: new RegExp(`^${escapeRegex(customer.name.trim())}$`, 'i') },
+                customerId: { $exists: false },
+                customerPhone: { $in: ["", null, undefined] }
             });
         }
 
@@ -388,7 +461,7 @@ export const getCustomerLedger = async (req: AuthRequest, res: Response) => {
             }
             return {
                 ...entry,
-                runningBalance: Math.max(0, Math.round(runningBalance * 100) / 100)
+                runningBalance: Math.round(runningBalance * 100) / 100
             };
         });
 
@@ -436,10 +509,11 @@ export const addCustomerPayment = async (req: AuthRequest, res: Response) => {
         // For backward compatibility
         if (customer.phone) {
             salesQuery.$or.push({ customerPhone: customer.phone });
-        } else {
+        } else if (customer.name) {
             salesQuery.$or.push({ 
-                customerName: { $regex: new RegExp(`^${customer.name}$`, 'i') },
-                customerId: { $exists: false }
+                customerName: { $regex: new RegExp(`^${escapeRegex(customer.name.trim())}$`, 'i') },
+                customerId: { $exists: false },
+                customerPhone: { $in: ["", null, undefined] }
             });
         }
 
@@ -527,10 +601,11 @@ export const getCustomerReport = async (req: AuthRequest, res: Response) => {
 
         if (customer.phone) {
             salesQuery.$or.push({ customerPhone: customer.phone });
-        } else {
+        } else if (customer.name) {
             salesQuery.$or.push({ 
-                customerName: { $regex: new RegExp(`^${customer.name}$`, 'i') },
-                customerId: { $exists: false }
+                customerName: { $regex: new RegExp(`^${escapeRegex(customer.name.trim())}$`, 'i') },
+                customerId: { $exists: false },
+                customerPhone: { $in: ["", null, undefined] }
             });
         }
 
