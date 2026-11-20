@@ -230,13 +230,18 @@ export const generateInvoice = async (
 
         // Previous Dues - only if customer has previous dues
         if (Number(sale.previousBalance || 0) > 0) {
+            const prevBal = Number(sale.previousBalance || 0);
+            const curBill = Number(sale.totalAmount || 0);
+            const paidToday = Number(sale.amountPaid || 0);
+            const curDue = sale.balanceDue !== undefined ? Number(sale.balanceDue) : Math.max(0, curBill - paidToday);
+            const totalOut = Math.round((prevBal + curDue) * 100) / 100;
+
             finalY += 7;
             doc.setFontSize(9);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(220, 38, 38);
-            doc.text(`Previous Dues (Pichla Bakaya): Rs.${Number(sale.previousBalance).toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' });
+            doc.text(`Previous Dues (Pichla Bakaya): Rs.${prevBal.toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' });
             finalY += 5;
-            const totalOut = Number(sale.previousBalance) + (sale.balanceDue !== undefined ? sale.balanceDue : (sale.totalAmount - (sale.amountPaid || 0)));
             doc.text(`Total Outstanding: Rs.${totalOut.toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' });
             doc.setTextColor(0, 0, 0);
         }

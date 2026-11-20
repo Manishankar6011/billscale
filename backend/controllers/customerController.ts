@@ -8,7 +8,11 @@ import Sale from '../models/Sale';
 const escapeRegex = (text: string) => text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
 
 // Calculate customer's outstanding dues across all sales and payments
-export const calculateCustomerDue = async (tenantIdInput: any, customer: { _id?: any; phone?: string; name?: string }): Promise<number> => {
+export const calculateCustomerDue = async (
+    tenantIdInput: any, 
+    customer: { _id?: any; phone?: string; name?: string },
+    excludeSaleId?: any
+): Promise<number> => {
     if (!tenantIdInput) return 0;
     const tenantId = typeof tenantIdInput === 'string' ? new mongoose.Types.ObjectId(tenantIdInput) : tenantIdInput;
     
@@ -28,6 +32,10 @@ export const calculateCustomerDue = async (tenantIdInput: any, customer: { _id?:
         tenantId,
         $or: []
     };
+    if (excludeSaleId) {
+        const excludeObjId = typeof excludeSaleId === 'string' ? new mongoose.Types.ObjectId(excludeSaleId) : excludeSaleId;
+        salesQuery._id = { $ne: excludeObjId };
+    }
     if (custId) {
         const objId = typeof custId === 'string' ? new mongoose.Types.ObjectId(custId) : custId;
         salesQuery.$or.push({ customerId: objId });

@@ -189,6 +189,10 @@ export const processSale = async (req: AuthRequest, res: Response) => {
 
     // 1. Handle Customer Auto-Creation/Linking preparation
     let finalCustomerId = req.body.customerId || null;
+    if (finalCustomerId) {
+      const validCust = await Customer.findOne({ _id: finalCustomerId, tenantId: req.tenantId }).select('_id').lean();
+      if (!validCust) finalCustomerId = null;
+    }
     const isGenericWalkIn = !customerPhone && (!customerName || customerName.trim().toLowerCase() === "cash sale");
     const shouldLookupCustomer = !finalCustomerId && !isGenericWalkIn && (customerPhone || customerName);
 
@@ -597,6 +601,10 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
 
     // 2. Handle Customer
     let finalCustomerId = req.body.customerId || null;
+    if (finalCustomerId) {
+      const validCust = await Customer.findOne({ _id: finalCustomerId, tenantId: req.tenantId }).session(session).select('_id').lean();
+      if (!validCust) finalCustomerId = null;
+    }
 
     if (!finalCustomerId && (customerPhone || customerName)) {
       let existingCustomer;

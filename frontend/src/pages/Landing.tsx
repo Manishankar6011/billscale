@@ -159,6 +159,28 @@ const Landing = () => {
             <div className="h-6 w-px bg-slate-200"></div>
 
             <div className="flex items-center gap-6">
+              {/* Language Switcher */}
+              <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-lg">
+                <button 
+                  onClick={() => changeLanguage('en')}
+                  className={cn(
+                    "px-3 py-1 rounded-md text-[10px] font-black transition-all",
+                    i18n.language === 'en' ? "bg-white text-primary-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                  )}
+                >
+                  EN
+                </button>
+                <button 
+                  onClick={() => changeLanguage('hi')}
+                  className={cn(
+                    "px-3 py-1 rounded-md text-[10px] font-black transition-all",
+                    i18n.language === 'hi' ? "bg-white text-primary-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                  )}
+                >
+                  हिन्दी
+                </button>
+              </div>
+
               <div className="flex items-center gap-4">
                 {user ? (
                   <button
@@ -229,6 +251,22 @@ const Landing = () => {
               >
                 {t("landing.pricing")}
               </a>
+
+              {/* Mobile Language Switcher */}
+              <div className="flex items-center gap-4 pt-4 border-t border-slate-100">
+                <button 
+                  onClick={() => { changeLanguage('en'); setIsMenuOpen(false); }}
+                  className={cn("text-lg font-black", i18n.language === 'en' ? "text-primary-600" : "text-slate-400")}
+                >
+                  English
+                </button>
+                <button 
+                  onClick={() => { changeLanguage('hi'); setIsMenuOpen(false); }}
+                  className={cn("text-lg font-black", i18n.language === 'hi' ? "text-primary-600" : "text-slate-400")}
+                >
+                  हिन्दी
+                </button>
+              </div>
             </div>
             <div className="mt-auto flex flex-col gap-4">
               <button
