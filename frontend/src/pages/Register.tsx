@@ -67,7 +67,7 @@ const Register: React.FC = () => {
                                 <option value="Wholesale">Wholesale / Distribution</option>
                                 <option value="Factory">Factory / Manufacturing</option>
                                 <option value="Construction">Construction / Materials</option>
-                                <option value="Contractor">Thekedar / Contractor (घर बनाने वाले / लेबर ठेकेदार)</option>
+                                <option value="Contractor">Contractor / Builder</option>
                                 <option value="Services">Services / Agency</option>
                                 <option value="Other">Other</option>
                             </select>

@@ -251,7 +251,7 @@ const Landing = () => {
               >
                 {t("landing.pricing")}
               </a>
-              
+
               {/* Mobile Language Switcher */}
               <div className="flex items-center gap-4 pt-4 border-t border-slate-100">
                 <button 

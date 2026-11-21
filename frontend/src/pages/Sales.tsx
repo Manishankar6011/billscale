@@ -604,6 +604,8 @@ const Sales = () => {
   const [customerState, setCustomerState] = useState("");
   const [customerStateCode, setCustomerStateCode] = useState("");
   const [customerId, setCustomerId] = useState<string | null>(null);
+  const [customerPreviousDue, setCustomerPreviousDue] = useState<number>(0);
+  const activeCustomerIdRef = useRef<string | null>(null);
   const [paymentMode, setPaymentMode] = useState<"cash" | "credit">("cash");
   const [invoiceFormat, setInvoiceFormat] = useState<"thermal" | "modern" | "gst">(
     "thermal",
@@ -615,6 +617,55 @@ const Sales = () => {
       setInvoiceFormat(user.invoiceFormat as any);
     }
   }, [user?.invoiceFormat]);
+
+  // Auto-lookup existing customer and previous dues when 10-digit mobile number is entered
+  useEffect(() => {
+    let isCancelled = false;
+    const cleanedPhone = customerPhone.replace(/\D/g, "");
+    if (cleanedPhone.length === 10) {
+      const timer = setTimeout(async () => {
+        try {
+          const res = await axios.get(`/api/customers/search?query=${cleanedPhone}`, {
+            headers: { Authorization: `Bearer ${user?.token}` }
+          });
+          if (isCancelled) return;
+          if (res.data && res.data.length > 0) {
+            const matched = res.data.find((c: any) => c.phone === cleanedPhone || c.phone === customerPhone);
+            if (matched && !isCancelled) {
+              activeCustomerIdRef.current = matched._id;
+              setCustomerId(matched._id);
+              if (matched.totalDue !== undefined) {
+                setCustomerPreviousDue(matched.totalDue);
+              }
+              setCustomerName(prev => !prev.trim() && matched.name ? matched.name : prev);
+              setCustomerAddress(prev => !prev && matched.address ? matched.address : prev);
+              setCustomerGSTIN(prev => !prev && matched.gstin ? matched.gstin : prev);
+            } else if (!matched) {
+              activeCustomerIdRef.current = null;
+              setCustomerId(null);
+              setCustomerPreviousDue(0);
+            }
+          } else {
+            activeCustomerIdRef.current = null;
+            setCustomerId(null);
+            setCustomerPreviousDue(0);
+          }
+        } catch (e) {
+          // ignore lookup error
+        }
+      }, 350);
+      return () => {
+        isCancelled = true;
+        clearTimeout(timer);
+      };
+    } else if (cleanedPhone.length > 0 && cleanedPhone.length < 10) {
+      if (customerId) {
+        activeCustomerIdRef.current = null;
+        setCustomerId(null);
+        setCustomerPreviousDue(0);
+      }
+    }
+  }, [customerPhone, user?.token]);
 
   const canEditInvoiceDate = can("sales", "editInvoiceDate");
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
@@ -765,6 +816,7 @@ const Sales = () => {
     setCustomerState("");
     setCustomerStateCode("");
     setCustomerId(null);
+    setCustomerPreviousDue(0);
     setCart([]);
     setAdditionalItems([]);
     setCustomItems([]);
@@ -899,15 +951,19 @@ const Sales = () => {
     const pct = ((val / rawTotal) * 100).toFixed(2);
     setSpecialDiscountPercent(pct);
   };
+  const totalPayableWithDue = Math.max(0, grandTotal + (customerPreviousDue || 0));
   const changeAmount =
-    amountReceived !== "" ? Number(amountReceived) - grandTotal : null;
+    amountReceived !== "" ? Number(amountReceived) - totalPayableWithDue : null;
 
   // Auto-sync amountReceived for cash sales
   useEffect(() => {
     if (paymentMode === "cash" && isModalOpen && !selectedSaleForEdit) {
-      setAmountReceived(grandTotal.toString());
+      const suggestedAmount = customerPreviousDue < 0
+        ? Math.max(0, grandTotal + customerPreviousDue)
+        : grandTotal;
+      setAmountReceived(suggestedAmount.toString());
     }
-  }, [grandTotal, paymentMode, isModalOpen, selectedSaleForEdit]);
+  }, [grandTotal, customerPreviousDue, paymentMode, isModalOpen, selectedSaleForEdit]);
 
   // Mutations
   const createSaleMutation = useMutation({
@@ -1091,6 +1147,7 @@ const Sales = () => {
       customerGSTIN,
       customerState,
       customerStateCode,
+      previousBalance: customerPreviousDue,
       items: effectiveCart.map((i) => ({
         productId: i.productId,
         quantity: i.quantity,
@@ -1829,17 +1886,38 @@ const Sales = () => {
     showToast("Excel exported!", "success");
   };
 
-  const handleCustomerSelect = (customer: Customer) => {
+  const handleCustomerSelect = async (customer: Customer) => {
+    const selectedId = customer._id || null;
+    activeCustomerIdRef.current = selectedId;
     setCustomerName(customer.name);
     setCustomerPhone(customer.phone ?? "");
     setCustomerAddress(customer.address || "");
     setCustomerGSTIN(customer.gstin || "");
     setCustomerState(customer.state || "");
     setCustomerStateCode(customer.stateCode || "");
-    setCustomerId(customer._id || null);
+    setCustomerId(selectedId);
+
+    if (customer.totalDue !== undefined) {
+      setCustomerPreviousDue(customer.totalDue);
+    }
+    if (customer._id) {
+      const requestedId = customer._id;
+      try {
+        const res = await axios.get(`/api/customers/${requestedId}/dues`, {
+          headers: { Authorization: `Bearer ${user?.token}` }
+        });
+        if (activeCustomerIdRef.current === requestedId && res.data?.totalDue !== undefined) {
+          setCustomerPreviousDue(res.data.totalDue);
+        }
+      } catch (e) {
+        // keep customer.totalDue
+      }
+    }
   };
   const handleAddNewCustomer = (query: string) => {
+    activeCustomerIdRef.current = null;
     setCustomerId(null);
+    setCustomerPreviousDue(0);
     if (/^\d{10}$/.test(query)) {
       setCustomerPhone(query);
       setCustomerName("");
@@ -2748,32 +2826,56 @@ const Sales = () => {
                     initialValue={customerName}
                   />
                   {(customerName || customerPhone) && (
-                    <div className="mt-2 p-3 bg-primary-50 rounded-2xl border border-primary-100 flex items-center justify-between animate-in slide-in-from-top-1 duration-200">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-white text-primary-600 rounded-lg flex items-center justify-center">
-                          <User size={16} />
+                    <div className="mt-2 p-3 bg-primary-50 rounded-2xl border border-primary-100 flex flex-col gap-2 animate-in slide-in-from-top-1 duration-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-white text-primary-600 rounded-lg flex items-center justify-center">
+                            <User size={16} />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-800">
+                              {customerName}
+                            </p>
+                            <p className="text-[10px] font-medium text-slate-400">
+                              {customerPhone || "No mobile number"}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-xs font-bold text-slate-800">
-                            {customerName}
-                          </p>
-                          <p className="text-[10px] font-medium text-slate-400">
-                            {customerPhone || "No mobile number"}
-                          </p>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            activeCustomerIdRef.current = null;
+                            setCustomerName("");
+                            setCustomerPhone("");
+                            setCustomerAddress("");
+                            setCustomerId(null);
+                            setCustomerPreviousDue(0);
+                          }}
+                          className="text-slate-300 hover:text-rose-500 transition-colors"
+                        >
+                          <X size={16} />
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCustomerName("");
-                          setCustomerPhone("");
-                          setCustomerAddress("");
-                          setCustomerId(null);
-                        }}
-                        className="text-slate-300 hover:text-rose-500 transition-colors"
-                      >
-                        <X size={16} />
-                      </button>
+                      {customerPreviousDue > 0 && (
+                        <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between">
+                          <span className="text-xs font-black text-rose-800">
+                            ⚠️ Previous Dues:
+                          </span>
+                          <span className="text-xs font-black text-rose-600">
+                            ₹{customerPreviousDue.toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                      {customerPreviousDue < 0 && (
+                        <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                          <span className="text-xs font-black text-emerald-800">
+                            💰 Previous Advance Credit (Jama):
+                          </span>
+                          <span className="text-xs font-black text-emerald-600">
+                            ₹{Math.abs(customerPreviousDue).toLocaleString()}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -3969,6 +4071,67 @@ const Sales = () => {
                   </p>
                 </div>
 
+                {/* Customer Previous Dues summary if dues exist */}
+                {customerPreviousDue > 0 && (() => {
+                  const paid = Number(amountReceived) || 0;
+                  const netDue = (customerPreviousDue + grandTotal) - paid;
+                  return (
+                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl space-y-1.5">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-slate-600">Previous Dues:</span>
+                        <span className="font-black text-rose-600">₹{customerPreviousDue.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-slate-600">Current Bill:</span>
+                        <span className="font-black text-slate-800">₹{grandTotal.toLocaleString()}</span>
+                      </div>
+                      {paid > 0 && (
+                        <div className="flex justify-between items-center text-xs font-bold text-emerald-700">
+                          <span>Paid Today:</span>
+                          <span>-₹{paid.toLocaleString()}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center text-sm font-black pt-1 border-t border-rose-200">
+                        <span className="text-slate-800">{netDue >= 0 ? "Net Total Due:" : "Advance Credit:"}</span>
+                        <span className={netDue > 0 ? "text-rose-700" : "text-emerald-700"}>
+                          ₹{Math.abs(netDue).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Customer Previous Advance summary if advance exists */}
+                {customerPreviousDue < 0 && (() => {
+                  const advance = Math.abs(customerPreviousDue);
+                  const paid = Number(amountReceived) || 0;
+                  const netDue = (grandTotal - advance) - paid;
+                  return (
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-1.5">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-emerald-800">Previous Advance (Jama):</span>
+                        <span className="font-black text-emerald-600">₹{advance.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-slate-600">Current Bill:</span>
+                        <span className="font-black text-slate-800">₹{grandTotal.toLocaleString()}</span>
+                      </div>
+                      {paid > 0 && (
+                        <div className="flex justify-between items-center text-xs font-bold text-emerald-700">
+                          <span>Paid Today:</span>
+                          <span>-₹{paid.toLocaleString()}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center text-sm font-black pt-1 border-t border-emerald-200">
+                        <span className="text-slate-800">{netDue > 0 ? "Net Total Due Remaining:" : "Remaining Advance Credit:"}</span>
+                        <span className={netDue > 0 ? "text-rose-700" : "text-emerald-700"}>
+                          ₹{Math.abs(netDue).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Amount Received / Change Calculator */}
                 <div className="space-y-2">
                   <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -3985,30 +4148,49 @@ const Sales = () => {
                     />
                     <button
                       type="button"
-                      onClick={() => setAmountReceived(grandTotal.toString())}
+                      onClick={() => setAmountReceived(totalPayableWithDue.toString())}
                       className="px-4 py-3 bg-primary-50 text-primary-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-primary-100 transition-all border border-primary-200 whitespace-nowrap"
                     >
                       {t("billing.exact_amount")}
                     </button>
                   </div>
-                  {changeAmount !== null && (
-                    <div
-                      className={`flex items-center justify-between p-3 rounded-2xl ${changeAmount >= 0 ? "bg-emerald-50 border border-emerald-100" : "bg-rose-50 border border-rose-100"}`}
-                    >
-                      <p
-                        className={`text-xs font-black uppercase tracking-widest ${changeAmount >= 0 ? "text-emerald-600" : "text-rose-600"}`}
+                  {changeAmount !== null && (() => {
+                    const received = Number(amountReceived) || 0;
+                    const totalPayable = totalPayableWithDue;
+                    const netDiff = received - totalPayable;
+                    return (
+                      <div
+                        className={`flex items-center justify-between p-3 rounded-2xl ${netDiff >= 0 ? "bg-emerald-50 border border-emerald-100" : "bg-rose-50 border border-rose-100"}`}
                       >
-                        {changeAmount >= 0
-                          ? t("billing.change_to_return")
-                          : t("billing.balance_due")}
-                      </p>
-                      <p
-                        className={`text-xl font-black ${changeAmount >= 0 ? "text-emerald-600" : "text-rose-600"}`}
-                      >
-                        ₹{Math.abs(changeAmount).toLocaleString()}
-                      </p>
-                    </div>
-                  )}
+                        <div>
+                          <p
+                            className={`text-xs font-black uppercase tracking-widest ${netDiff >= 0 ? "text-emerald-600" : "text-rose-600"}`}
+                          >
+                            {netDiff >= 0
+                              ? t("billing.change_to_return")
+                              : (customerPreviousDue > 0 ? "Net Total Due Remaining" : t("billing.balance_due"))}
+                          </p>
+                          {customerPreviousDue > 0 && netDiff < 0 && (
+                            <p className="text-[10px] font-bold text-rose-500 mt-0.5">
+                              (Current: ₹{grandTotal.toLocaleString()} + Pichla: ₹{customerPreviousDue.toLocaleString()})
+                            </p>
+                          )}
+                          {customerPreviousDue < 0 && netDiff < 0 && (
+                            <p className="text-[10px] font-bold text-rose-500 mt-0.5">
+                              (Current: ₹{grandTotal.toLocaleString()} - Jama: ₹{Math.abs(customerPreviousDue).toLocaleString()})
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <p
+                            className={`text-xl font-black ${netDiff >= 0 ? "text-emerald-600" : "text-rose-600"}`}
+                          >
+                            ₹{Math.abs(netDiff).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -4102,6 +4284,7 @@ const Sales = () => {
                       totalAmount: grandTotal,
                       amountPaid: Number(amountReceived) || 0,
                       balanceDue: grandTotal - (Number(amountReceived) || 0),
+                      previousBalance: printData?.previousBalance ?? customerPreviousDue,
                       roundOffAmount: roundOffAmount,
                       specialDiscount: specialDiscAmt,
                       specialDiscountPercent: Number(specialDiscountPercent) || 0,
@@ -4155,6 +4338,7 @@ const Sales = () => {
                       totalAmount: grandTotal,
                       amountPaid: Number(amountReceived) || 0,
                       balanceDue: grandTotal - (Number(amountReceived) || 0),
+                      previousBalance: printData?.previousBalance ?? customerPreviousDue,
                       roundOffAmount: roundOffAmount,
                       specialDiscount: specialDiscAmt,
                       specialDiscountPercent: Number(specialDiscountPercent) || 0,
@@ -4210,6 +4394,7 @@ const Sales = () => {
                       totalAmount: grandTotal,
                       amountPaid: Number(amountReceived) || 0,
                       balanceDue: grandTotal - (Number(amountReceived) || 0),
+                      previousBalance: printData?.previousBalance ?? customerPreviousDue,
                       roundOffAmount: roundOffAmount,
                       specialDiscount: specialDiscAmt,
                       specialDiscountPercent: Number(specialDiscountPercent) || 0,
@@ -4781,7 +4966,13 @@ const Sales = () => {
                     className="w-full bg-slate-50 border-none rounded-[1.5rem] py-4 pl-12 pr-4 text-sm font-bold focus:ring-2 focus:ring-primary-500 transition-all"
                     placeholder="10-digit mobile number"
                     value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCustomerPhone(val);
+                      activeCustomerIdRef.current = null;
+                      setCustomerId(null);
+                      setCustomerPreviousDue(0);
+                    }}
                     maxLength={10}
                   />
                 </div>

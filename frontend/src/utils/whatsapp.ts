@@ -20,10 +20,16 @@ export interface SocialLinks {
  */
 export function formatWhatsAppPhone(phone?: string | null): string {
   if (!phone) return "";
-  const cleaned = phone.toString().replace(/\D/g, "");
+  const raw = phone.toString().trim();
+  const cleaned = raw.replace(/\D/g, "");
   if (!cleaned) return "";
 
-  // 10 digits without country code -> prepend 91
+  // If already prefixed with explicit international '+', keep numeric digits without prepending 91
+  if (raw.startsWith("+")) {
+    return cleaned;
+  }
+
+  // 10 digits without country code -> prepend India 91
   if (cleaned.length === 10) {
     return `91${cleaned}`;
   }

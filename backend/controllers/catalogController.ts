@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import Tenant from '../models/Tenant';
 import Product from '../models/Product';
 import { AuthRequest } from '../middleware/auth';
@@ -32,7 +33,15 @@ export const getCatalogBySlug = async (req: Request, res: Response) => {
             return res.status(404).json({ message: 'Shop not found' });
         }
 
-        const products = await Product.find({ tenantId: tenant._id, stock: { $gt: 0 } })
+        const requestedItemId = (req.query.item || req.query.product || req.query.productId) as string;
+        const productFilter: any = { tenantId: tenant._id };
+        if (requestedItemId && mongoose.Types.ObjectId.isValid(requestedItemId)) {
+            productFilter.$or = [{ stock: { $gt: 0 } }, { _id: requestedItemId }];
+        } else {
+            productFilter.stock = { $gt: 0 };
+        }
+
+        const products = await Product.find(productFilter)
             .select('name pricePerUnit mrp unit imageUrl category stock description')
             .sort({ category: 1, name: 1 });
 
@@ -129,7 +138,15 @@ export const getCatalogByDomain = async (req: Request, res: Response) => {
             tenant.customDomainStatus = 'active';
         }
 
-        const products = await Product.find({ tenantId: tenant._id, stock: { $gt: 0 } })
+        const requestedItemId = (req.query.item || req.query.product || req.query.productId) as string;
+        const productFilter: any = { tenantId: tenant._id };
+        if (requestedItemId && mongoose.Types.ObjectId.isValid(requestedItemId)) {
+            productFilter.$or = [{ stock: { $gt: 0 } }, { _id: requestedItemId }];
+        } else {
+            productFilter.stock = { $gt: 0 };
+        }
+
+        const products = await Product.find(productFilter)
             .select('name pricePerUnit mrp unit imageUrl category stock description')
             .sort({ category: 1, name: 1 });
 

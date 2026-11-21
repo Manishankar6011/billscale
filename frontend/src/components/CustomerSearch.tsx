@@ -105,8 +105,15 @@ const CustomerSearch: React.FC<CustomerSearchProps> = ({ onSelect, onAddNew, ini
                                             </p>
                                         </div>
                                     </div>
-                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <div className="px-3 py-1 bg-primary-600 text-white text-[10px] font-black uppercase rounded-lg">Select</div>
+                                    <div className="flex items-center gap-2">
+                                        {customer.totalDue !== undefined && customer.totalDue > 0 ? (
+                                            <span className="text-[11px] font-black text-rose-600 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-xl">
+                                                Due: ₹{customer.totalDue.toLocaleString()}
+                                            </span>
+                                        ) : null}
+                                        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <div className="px-3 py-1 bg-primary-600 text-white text-[10px] font-black uppercase rounded-lg">Select</div>
+                                        </div>
                                     </div>
                                 </button>
                             ))

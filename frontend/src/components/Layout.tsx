@@ -105,15 +105,15 @@ const Layout = () => {
     { name: t("common.sales"), path: "/dashboard/sales", icon: Receipt, hideForContractor: true, module: "sales" },
     { name: "Customers", path: "/dashboard/customers", icon: UserRound, hideForContractor: true, module: "customers" },
     // Staff-related — primary for Contractors
-    { name: isContractor ? "Workers (श्रमिक)" : t("common.staff"), path: "/dashboard/staff", icon: Users, module: "staff", ownerOnly: true },
+    { name: isContractor ? "Workers" : t("common.staff"), path: "/dashboard/staff", icon: Users, module: "staff", ownerOnly: true },
     {
-      name: isContractor ? "Attendance (हाजिरी)" : t("common.attendance"),
+      name: isContractor ? "Attendance" : t("common.attendance"),
       path: "/dashboard/attendance",
       icon: CalendarCheck,
       module: "attendance",
       ownerOnly: true
     },
-    { name: isContractor ? "Salary & Khata (वेतन / हिसाब)" : t("common.salary"), path: "/dashboard/salary", icon: Wallet, module: "salary", ownerOnly: true },
+    { name: isContractor ? "Salary & Ledger" : t("common.salary"), path: "/dashboard/salary", icon: Wallet, module: "salary", ownerOnly: true },
     { name: t("common.ledger"), path: "/dashboard/ledger", icon: FileText, module: "ledger", ownerOnly: true },
     { name: "Reports", path: "/dashboard/reports", icon: BarChart3, ownerOnly: true, hideForContractor: true, module: "reports" },
     { name: "Product Sales", path: "/dashboard/item-sales", icon: PackageSearch, ownerOnly: true, hideForContractor: true, module: "reports" },

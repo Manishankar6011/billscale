@@ -340,6 +340,43 @@ const A4Invoice: React.FC<A4InvoiceProps> = ({
                             </div>
                         </div>
                     )}
+
+                    {/* Previous Dues Section - shown if customer has previous dues or advance */}
+                    {Number(sale.previousBalance || 0) !== 0 && (() => {
+                        const prevBal = Number(sale.previousBalance || 0);
+                        const curBill = Number(sale.totalAmount || 0);
+                        const paidToday = Number(sale.amountReceivedAtBilling ?? sale.amountPaid ?? 0);
+                        const netRemaining = Math.round((prevBal + curBill - paidToday) * 100) / 100;
+                        return (
+                            <div className="mt-3 p-3 border-2 border-black border-dashed rounded-xl bg-slate-50 space-y-1.5">
+                                <div className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                                    Customer Account Summary
+                                </div>
+                                <div className="flex justify-between text-sm font-bold text-black">
+                                    <span>{prevBal > 0 ? "Previous Dues" : "Previous Advance Credit"}</span>
+                                    <span className={`font-black ${prevBal > 0 ? "text-rose-600" : "text-emerald-700"}`}>
+                                        ₹{Math.abs(prevBal).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between text-sm font-bold text-black">
+                                    <span>Current Bill</span>
+                                    <span>₹{curBill.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                </div>
+                                {paidToday > 0 && (
+                                    <div className="flex justify-between text-sm font-bold text-emerald-700">
+                                        <span>Paid Today</span>
+                                        <span>-₹{paidToday.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    </div>
+                                )}
+                                <div className="flex justify-between text-lg font-black text-black border-t-2 border-black pt-1.5">
+                                    <span>{netRemaining >= 0 ? "Total Outstanding Due" : "Advance Credit (Jama)"}</span>
+                                    <span className={netRemaining > 0 ? "text-rose-700" : "text-emerald-700"}>
+                                        ₹{Math.abs(netRemaining).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                </div>
+                            </div>
+                        );
+                    })()}
                 </div>
             </div>
 

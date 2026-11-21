@@ -671,6 +671,10 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
                         <Plus size={16} />
                       </button>
                     </div>
+                  ) : product.stock <= 0 ? (
+                    <div className="w-full bg-slate-100 text-slate-400 py-4 rounded-2xl flex items-center justify-center gap-2 font-black text-xs uppercase tracking-widest border border-slate-200">
+                      Out of Stock
+                    </div>
                   ) : (
                     <button
                       onClick={() => addToCart(product)}
@@ -999,6 +1003,10 @@ const Catalog: React.FC<CatalogProps> = ({ customDomainMode = false }) => {
                   >
                     <Plus size={18} />
                   </button>
+                </div>
+              ) : spotlightProduct.stock <= 0 ? (
+                <div className="w-full bg-slate-100 text-slate-400 py-4 rounded-2xl flex items-center justify-center gap-2 font-black text-xs uppercase tracking-widest border border-slate-200">
+                  <Package size={16} /> Currently Out of Stock
                 </div>
               ) : (
                 <button

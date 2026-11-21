@@ -114,7 +114,14 @@ const saleSchema: Schema = new mongoose.Schema({
     downPayment: {
         type: Number
     },
+    amountReceivedAtBilling: {
+        type: Number
+    },
     balanceDue: {
+        type: Number,
+        default: 0
+    },
+    previousBalance: {
         type: Number,
         default: 0
     },
@@ -198,5 +205,7 @@ saleSchema.index({ tenantId: 1, invoiceNumber: 1 }, { unique: true });
 saleSchema.index({ tenantId: 1, date: -1 });
 saleSchema.index({ tenantId: 1, status: 1 });
 saleSchema.index({ tenantId: 1, createdAt: -1 });
+saleSchema.index({ tenantId: 1, customerId: 1, date: -1 });
+saleSchema.index({ tenantId: 1, customerPhone: 1, date: -1 });
 
 export default mongoose.model<ISale>('Sale', saleSchema);

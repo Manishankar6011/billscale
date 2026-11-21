@@ -167,7 +167,9 @@ export interface ISale extends Document {
   totalProfit: number;
   amountPaid: number;
   downPayment?: number;
+  amountReceivedAtBilling?: number;
   balanceDue: number;
+  previousBalance?: number;
   roundOffAmount: number;
   taxAmount?: number;
   discount?: number;

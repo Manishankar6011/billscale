@@ -5,28 +5,263 @@ import Customer from '../models/Customer';
 import CustomerPayment from '../models/CustomerPayment';
 import Sale from '../models/Sale';
 
+export const escapeRegex = (text: string) => text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+
+export const isDummyPhone = (phone?: string | null): boolean => {
+    if (!phone) return true;
+    const cleaned = phone.replace(/\D/g, '');
+    if (cleaned.length < 10) return true;
+    if (/^0+$/.test(cleaned) || /^9+$/.test(cleaned) || /^1+$/.test(cleaned) || cleaned === '1234567890') return true;
+    return false;
+};
+
+// Calculate customer's outstanding dues across all sales and payments with zero double-counting
+export const calculateCustomerDue = async (
+    tenantIdInput: any, 
+    customer: { _id?: any; phone?: string; name?: string },
+    excludeSaleId?: any,
+    beforeDate?: Date
+): Promise<number> => {
+    if (!tenantIdInput) return 0;
+    const tenantId = typeof tenantIdInput === 'string' ? new mongoose.Types.ObjectId(tenantIdInput) : tenantIdInput;
+    
+    let custId = customer._id;
+    let custPhone = customer.phone;
+    let custName = customer.name;
+
+    if (!custId && custPhone && !isDummyPhone(custPhone)) {
+        const found = await Customer.findOne({ tenantId, phone: custPhone }).select('_id phone name').lean();
+        if (found) {
+            custId = found._id;
+            custName = found.name;
+        }
+    }
+
+    const salesQuery: any = {
+        tenantId,
+        $or: []
+    };
+    if (excludeSaleId) {
+        const excludeObjId = typeof excludeSaleId === 'string' ? new mongoose.Types.ObjectId(excludeSaleId) : excludeSaleId;
+        salesQuery._id = { $ne: excludeObjId };
+    }
+    if (beforeDate && !isNaN(beforeDate.getTime())) {
+        salesQuery.date = { $lt: beforeDate };
+    }
+    if (custId) {
+        const objId = typeof custId === 'string' ? new mongoose.Types.ObjectId(custId) : custId;
+        salesQuery.$or.push({ customerId: objId });
+        if (custPhone && !isDummyPhone(custPhone)) {
+            salesQuery.$or.push({ customerPhone: custPhone, customerId: { $in: [null, undefined, objId] } });
+        }
+    } else if (custPhone && !isDummyPhone(custPhone)) {
+        salesQuery.$or.push({ customerPhone: custPhone });
+    }
+    // Only match by name if customer has neither _id nor valid phone, and ensure regex is escaped
+    if (salesQuery.$or.length === 0 && custName && custName.trim().toLowerCase() !== 'cash sale') {
+        const escaped = escapeRegex(custName.trim());
+        salesQuery.$or.push({
+            customerName: { $regex: new RegExp(`^${escaped}$`, 'i') },
+            customerPhone: { $in: ["", null, undefined] }
+        });
+    }
+
+    if (salesQuery.$or.length === 0) {
+        return 0;
+    }
+
+    const custObjId = custId ? (typeof custId === 'string' ? new mongoose.Types.ObjectId(custId) : custId) : null;
+    const paymentsQuery: any = custObjId ? { tenantId, customerId: custObjId } : null;
+    if (paymentsQuery && beforeDate && !isNaN(beforeDate.getTime())) {
+        paymentsQuery.paymentDate = { $lt: beforeDate };
+    }
+
+    const [sales, payments] = await Promise.all([
+        Sale.find(salesQuery).select('totalAmount downPayment amountPaid balanceDue paymentMode').lean(),
+        paymentsQuery ? CustomerPayment.find(paymentsQuery).select('amount').lean() : []
+    ]);
+
+    // Outstanding balance on invoices (s.balanceDue accurately reflects unpaid portion of each bill)
+    const totalSalesDue = sales.reduce((sum, s) => {
+        const due = s.balanceDue !== undefined && s.balanceDue !== null 
+            ? Number(s.balanceDue) 
+            : Math.max(0, (Number(s.totalAmount) || 0) - (Number(s.downPayment ?? s.amountPaid) || 0));
+        return sum + Math.max(0, due);
+    }, 0);
+
+    // Total payments received in CustomerPayment
+    const totalPaymentsReceived = (payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    
+    // Amount absorbed by sales: difference between initial unpaid at checkout and current balanceDue
+    let totalPaymentsAbsorbed = 0;
+    sales.forEach(s => {
+        const total = Number(s.totalAmount) || 0;
+        const curBal = s.balanceDue !== undefined && s.balanceDue !== null ? Number(s.balanceDue) : 0;
+        if (s.downPayment !== undefined && s.downPayment !== null) {
+            const initialPaid = Number(s.downPayment);
+            const credited = Math.max(0, (total - initialPaid) - curBal);
+            totalPaymentsAbsorbed += credited;
+        } else if (curBal === 0 && (s.paymentMode === 'cash' || !s.paymentMode)) {
+            // Legacy cash bill fully paid at counter — absorbed 0 from CustomerPayment
+        } else {
+            // For legacy records without downPayment, credit is difference between total and remaining due
+            const totalPaidOnSale = Math.max(0, total - curBal);
+            totalPaymentsAbsorbed += totalPaidOnSale;
+        }
+    });
+    // Absorbed payments cannot exceed total payments received
+    totalPaymentsAbsorbed = Math.min(totalPaymentsReceived, totalPaymentsAbsorbed);
+
+    const unallocatedAdvance = Math.max(0, totalPaymentsReceived - totalPaymentsAbsorbed);
+    // Return signed net due: positive means outstanding dues, negative means advance credit (Jama)
+    const netDue = Math.round((totalSalesDue - unallocatedAdvance) * 100) / 100;
+    return netDue;
+};
+
 // @desc    Search customers by name or phone
 // @route   GET /api/customers/search
 // @access  Private
 export const searchCustomers = async (req: AuthRequest, res: Response) => {
     try {
         const { query } = req.query;
-        const tenantId = req.tenantId;
+        const tenantIdStr = req.tenantId as string;
+        const tenantId = new mongoose.Types.ObjectId(tenantIdStr);
         
-        if (!query) {
-            const recentCustomers = await Customer.find({ tenantId }).sort({ createdAt: -1 }).limit(10);
-            return res.status(200).json(recentCustomers);
+        let filter: any = { tenantId };
+        if (query) {
+            const escaped = escapeRegex((query as string).trim());
+            filter.$or = [
+                { name: { $regex: escaped, $options: 'i' } },
+                { phone: { $regex: escaped, $options: 'i' } }
+            ];
         }
 
-        const customers = await Customer.find({
-            tenantId,
-            $or: [
-                { name: { $regex: query as string, $options: 'i' } },
-                { phone: { $regex: query as string, $options: 'i' } }
-            ]
-        }).limit(10);
+        const customers = await Customer.find(filter).sort({ createdAt: -1 }).limit(10).lean();
 
-        res.status(200).json(customers);
+        if (customers.length === 0) {
+            return res.status(200).json([]);
+        }
+
+        const customerIds = customers.map(c => c._id);
+        const customerPhones = customers.map(c => c.phone).filter(p => !isDummyPhone(p));
+
+        // Batch fetch sales and customer payments for all customers in 2 queries instead of 2 * N queries
+        const salesOrConditions: any[] = [{ customerId: { $in: customerIds } }];
+        if (customerPhones.length > 0) {
+            salesOrConditions.push({ 
+                customerPhone: { $in: customerPhones },
+                customerId: { $in: [null, undefined, ...customerIds] }
+            });
+        }
+
+        const [sales, payments] = await Promise.all([
+            Sale.find({
+                tenantId,
+                $or: salesOrConditions
+            }).select('customerId customerPhone totalAmount downPayment amountPaid balanceDue paymentMode').lean(),
+            CustomerPayment.find({
+                tenantId,
+                customerId: { $in: customerIds }
+            }).select('customerId amount').lean()
+        ]);
+
+        // Build in-memory lookup maps
+        const paymentsMap = new Map<string, number>();
+        payments.forEach(p => {
+            const cid = p.customerId?.toString();
+            if (cid) {
+                paymentsMap.set(cid, (paymentsMap.get(cid) || 0) + (Number(p.amount) || 0));
+            }
+        });
+
+        // Group sales by customer ID and phone
+        const salesByCustomerId = new Map<string, any[]>();
+        const salesByPhone = new Map<string, any[]>();
+        sales.forEach(s => {
+            if (s.customerId) {
+                const cid = s.customerId.toString();
+                if (!salesByCustomerId.has(cid)) salesByCustomerId.set(cid, []);
+                salesByCustomerId.get(cid)!.push(s);
+            } else if (s.customerPhone && !isDummyPhone(s.customerPhone)) {
+                if (!salesByPhone.has(s.customerPhone)) salesByPhone.set(s.customerPhone, []);
+                salesByPhone.get(s.customerPhone)!.push(s);
+            }
+        });
+
+        const customersWithDues = customers.map(c => {
+            const cid = c._id.toString();
+            const matchedSalesSet = new Set<any>();
+
+            // Add sales matched by customerId
+            (salesByCustomerId.get(cid) || []).forEach(s => matchedSalesSet.add(s));
+
+            // Add legacy sales matched by phone without customerId
+            if (c.phone && !isDummyPhone(c.phone) && salesByPhone.has(c.phone)) {
+                salesByPhone.get(c.phone)!.forEach(s => matchedSalesSet.add(s));
+            }
+
+            const matchedSales = Array.from(matchedSalesSet);
+            const totalSalesDue = matchedSales.reduce((sum, s) => {
+                const due = s.balanceDue !== undefined && s.balanceDue !== null 
+                    ? Number(s.balanceDue) 
+                    : Math.max(0, (Number(s.totalAmount) || 0) - (Number(s.downPayment ?? s.amountPaid) || 0));
+                return sum + Math.max(0, due);
+            }, 0);
+
+            const totalPaymentsReceived = paymentsMap.get(cid) || 0;
+            let totalPaymentsAbsorbed = 0;
+            matchedSales.forEach(s => {
+                const total = Number(s.totalAmount) || 0;
+                const curBal = s.balanceDue !== undefined && s.balanceDue !== null ? Number(s.balanceDue) : 0;
+                if (s.downPayment !== undefined && s.downPayment !== null) {
+                    const initialPaid = Number(s.downPayment);
+                    const credited = Math.max(0, (total - initialPaid) - curBal);
+                    totalPaymentsAbsorbed += credited;
+                } else if (curBal === 0 && (s.paymentMode === 'cash' || !s.paymentMode)) {
+                    // Legacy cash bill fully paid at counter — absorbed 0 from CustomerPayment
+                } else {
+                    const totalPaidOnSale = Math.max(0, total - curBal);
+                    totalPaymentsAbsorbed += totalPaidOnSale;
+                }
+            });
+            totalPaymentsAbsorbed = Math.min(totalPaymentsReceived, totalPaymentsAbsorbed);
+
+            const unallocatedAdvance = Math.max(0, totalPaymentsReceived - totalPaymentsAbsorbed);
+            const totalDue = Math.max(0, Math.round((totalSalesDue - unallocatedAdvance) * 100) / 100);
+
+            return {
+                ...c,
+                totalDue
+            };
+        });
+
+        res.status(200).json(customersWithDues);
+    } catch (err: any) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
+// @desc    Get single customer balance / dues
+// @route   GET /api/customers/:id/dues
+// @access  Private
+export const getCustomerBalance = async (req: AuthRequest, res: Response) => {
+    try {
+        const tenantId = req.tenantId;
+        const customerId = req.params.id;
+
+        const customer = await Customer.findOne({ _id: customerId, tenantId }).lean();
+        if (!customer) {
+            return res.status(404).json({ message: 'Customer not found' });
+        }
+
+        const totalDue = await calculateCustomerDue(tenantId, customer);
+
+        res.status(200).json({
+            customerId: customer._id,
+            name: customer.name,
+            phone: customer.phone,
+            totalDue
+        });
     } catch (err: any) {
         res.status(500).json({ message: err.message });
     }
@@ -59,6 +294,8 @@ export const getCustomers = async (req: AuthRequest, res: Response) => {
                                                     $and: [
                                                         { $eq: [{ $ifNull: ['$customerId', null] }, null] },
                                                         { $ne: [{ $ifNull: ['$$custPhone', ""] }, ""] }, 
+                                                        { $gt: [{ $strLenCP: { $ifNull: ['$$custPhone', ""] } }, 9] },
+                                                        { $not: { $in: ['$$custPhone', ['0000000000', '1234567890', '9999999999', '1111111111']] } },
                                                         { $eq: ['$customerPhone', '$$custPhone'] }
                                                     ] 
                                                 },
@@ -66,6 +303,7 @@ export const getCustomers = async (req: AuthRequest, res: Response) => {
                                                     $and: [
                                                         { $eq: [{ $ifNull: ['$customerId', null] }, null] },
                                                         { $eq: [{ $ifNull: ['$$custPhone', ""] }, ""] }, 
+                                                        { $ne: [{ $toLower: { $ifNull: ['$$custName', ""] } }, "cash sale"] },
                                                         { $eq: [{ $toLower: { $ifNull: ['$customerName', ""] } }, { $toLower: { $ifNull: ['$$custName', ""] } }] }
                                                     ] 
                                                 }
@@ -207,41 +445,104 @@ export const getCustomerLedger = async (req: AuthRequest, res: Response) => {
         };
 
         // For backward compatibility with older records before customerId was added
-        if (customer.phone) {
-            salesQuery.$or.push({ customerPhone: customer.phone });
-        } else {
+        if (customer.phone && !isDummyPhone(customer.phone)) {
+            salesQuery.$or.push({ customerPhone: customer.phone, customerId: { $in: [null, undefined, customer._id] } });
+        } else if (customer.name && customer.name.trim().toLowerCase() !== 'cash sale') {
             salesQuery.$or.push({ 
-                customerName: { $regex: new RegExp(`^${customer.name}$`, 'i') },
-                customerId: { $exists: false }
+                customerName: { $regex: new RegExp(`^${escapeRegex(customer.name.trim())}$`, 'i') },
+                customerId: { $exists: false },
+                customerPhone: { $in: ["", null, undefined] }
             });
         }
 
-        const sales = await Sale.find(salesQuery).sort({ date: 1 }).lean();
+        const sales = await Sale.find(salesQuery)
+            .populate('items.productId', 'name unit mrp')
+            .sort({ date: 1 })
+            .lean();
 
         // Fetch payments
         const payments = await CustomerPayment.find({ tenantId, customerId }).sort({ paymentDate: 1 }).lean();
 
+        // Calculate total payments received for this customer
+        const totalCustomerPayments = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+        // Track sequential payment pool to resolve down payments for legacy records without double counting
+        let unallocatedPaymentsPool = totalCustomerPayments;
+        const ledgerSales = sales.map(s => {
+            let dp = 0;
+            if (s.downPayment != null) {
+                dp = Number(s.downPayment);
+            } else if (unallocatedPaymentsPool <= 0) {
+                dp = Number(s.amountPaid || 0);
+            } else if (Number(s.balanceDue || 0) === 0 && (s.paymentMode === 'cash' || !s.paymentMode)) {
+                // Legacy cash bill paid in full at checkout — counter payment was the full bill
+                dp = Number(s.totalAmount || s.amountPaid || 0);
+            } else {
+                const total = Number(s.totalAmount) || 0;
+                const curBal = s.balanceDue != null ? Number(s.balanceDue) : Math.max(0, total - (Number(s.amountPaid) || 0));
+                const totalPaidSoFar = Math.max(0, total - curBal);
+                const creditedFromPayments = Math.min(unallocatedPaymentsPool, totalPaidSoFar);
+                unallocatedPaymentsPool = Math.max(0, unallocatedPaymentsPool - creditedFromPayments);
+                dp = Math.max(0, totalPaidSoFar - creditedFromPayments);
+            }
+            const due = Math.max(0, Math.round(((Number(s.totalAmount) || 0) - dp) * 100) / 100);
+
+            // Detailed item list for this bill
+            const billItems = [
+                ...(s.items || []).map((item: any) => ({
+                    name: item.productId?.name || item.name || 'Product',
+                    quantity: item.quantity,
+                    unit: item.unit || item.productId?.unit || '',
+                    price: item.sellingPrice,
+                    mrp: item.mrpAtTime || item.productId?.mrp || item.sellingPrice,
+                    total: Number(item.quantity || 1) * Number(item.sellingPrice || 0)
+                })),
+                ...(s.customItems || []).map((ci: any) => ({
+                    name: ci.name || 'Direct Item',
+                    quantity: ci.quantity || 1,
+                    unit: '',
+                    price: ci.price,
+                    mrp: ci.mrp || ci.price,
+                    total: Number(ci.quantity || 1) * Number(ci.price || 0)
+                })),
+                ...(s.additionalItems || []).map((ai: any) => ({
+                    name: ai.name || 'Additional Charge',
+                    quantity: 1,
+                    unit: '',
+                    price: ai.price,
+                    mrp: ai.price,
+                    total: Number(ai.price || 0)
+                }))
+            ];
+
+            return {
+                id: s._id,
+                type: 'sale' as const,
+                date: s.date || s.createdAt,
+                amount: s.totalAmount,
+                paid: dp,
+                due: due,
+                invoiceNumber: s.invoiceNumber,
+                paymentMode: s.paymentMode,
+                items: billItems,
+                status: s.status
+            };
+        });
+
         // Merge and sort
         const ledger = [
-            ...sales.map(s => {
-                const dp = s.downPayment !== undefined ? s.downPayment : s.amountPaid;
-                return {
-                    id: s._id,
-                    type: 'sale',
-                    date: s.date,
-                    amount: s.totalAmount,
-                    paid: dp,
-                    due: s.totalAmount - dp,
-                    invoiceNumber: s.invoiceNumber
-                };
-            }),
+            ...ledgerSales,
             ...payments.map(p => ({
                 id: p._id,
-                type: 'payment',
-                date: p.paymentDate,
+                type: 'payment' as const,
+                date: p.paymentDate || p.createdAt,
                 amount: p.amount,
+                paid: p.amount,
+                due: 0,
+                invoiceNumber: undefined,
                 paymentMode: p.paymentMode,
-                notes: p.notes
+                notes: p.notes,
+                items: []
             }))
         ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
@@ -249,14 +550,18 @@ export const getCustomerLedger = async (req: AuthRequest, res: Response) => {
         let runningBalance = 0;
         const ledgerWithBalance = ledger.map(entry => {
             if (entry.type === 'sale') {
-                runningBalance += (entry.amount - ((entry as any).paid || 0));
+                runningBalance += entry.due;
             } else {
                 runningBalance -= entry.amount;
             }
-            return { ...entry, runningBalance };
+            return {
+                ...entry,
+                runningBalance: Math.round(runningBalance * 100) / 100
+            };
         });
 
-        res.status(200).json(ledgerWithBalance);
+        // Return latest first so user sees recent purchases and dues first
+        res.status(200).json([...ledgerWithBalance].reverse());
     } catch (err: any) {
         res.status(500).json({ message: err.message });
     }
@@ -266,26 +571,36 @@ export const getCustomerLedger = async (req: AuthRequest, res: Response) => {
 // @route   POST /api/customers/:id/payments
 // @access  Private
 export const addCustomerPayment = async (req: AuthRequest, res: Response) => {
+    let session: mongoose.ClientSession | null = null;
     try {
         const tenantId = req.tenantId;
         const customerId = req.params.id;
         const { amount, paymentDate, paymentMode, notes } = req.body;
 
-        const customer = await Customer.findOne({ _id: customerId, tenantId });
+        const numAmount = Math.round(Number(amount) * 100) / 100;
+        if (isNaN(numAmount) || numAmount <= 0) {
+            return res.status(400).json({ message: 'Invalid payment amount' });
+        }
+
+        session = await mongoose.startSession();
+        session.startTransaction();
+
+        const customer = await Customer.findOne({ _id: customerId, tenantId }).session(session);
         if (!customer) {
+            await session.abortTransaction();
             return res.status(404).json({ message: 'Customer not found' });
         }
 
         const payment = new CustomerPayment({
             tenantId,
             customerId,
-            amount,
+            amount: numAmount,
             paymentDate: paymentDate || new Date(),
             paymentMode: paymentMode || 'cash',
             notes
         });
 
-        await payment.save();
+        await payment.save({ session });
 
         // Distribute payment to oldest pending sales
         const salesQuery: any = {
@@ -297,36 +612,49 @@ export const addCustomerPayment = async (req: AuthRequest, res: Response) => {
         };
 
         // For backward compatibility
-        if (customer.phone) {
-            salesQuery.$or.push({ customerPhone: customer.phone });
-        } else {
+        if (customer.phone && !isDummyPhone(customer.phone)) {
+            salesQuery.$or.push({ customerPhone: customer.phone, customerId: { $in: [null, undefined, customer._id] } });
+        } else if (customer.name && customer.name.trim().toLowerCase() !== 'cash sale') {
             salesQuery.$or.push({ 
-                customerName: { $regex: new RegExp(`^${customer.name}$`, 'i') },
-                customerId: { $exists: false }
+                customerName: { $regex: new RegExp(`^${escapeRegex(customer.name.trim())}$`, 'i') },
+                customerId: { $exists: false },
+                customerPhone: { $in: ["", null, undefined] }
             });
         }
 
-        const pendingSales = await Sale.find(salesQuery).sort({ date: 1 });
+        const pendingSales = await Sale.find(salesQuery).sort({ date: 1 }).session(session);
 
-        let remainingPayment = amount;
+        let remainingPayment = numAmount;
         for (const sale of pendingSales) {
             if (remainingPayment <= 0) break;
 
-            const due = sale.balanceDue;
+            const due = Math.round((Number(sale.balanceDue) || 0) * 100) / 100;
             if (due > 0) {
+                // Lock in down payment for legacy records before mutating amountPaid
+                if (sale.downPayment === undefined || sale.downPayment === null) {
+                    sale.downPayment = Math.max(0, Number(sale.amountPaid) || 0);
+                }
                 const payAmount = Math.min(due, remainingPayment);
-                sale.amountPaid += payAmount;
-                sale.balanceDue -= payAmount;
-                remainingPayment -= payAmount;
+                sale.amountPaid = Math.round(((Number(sale.amountPaid) || 0) + payAmount) * 100) / 100;
+                sale.balanceDue = Math.max(0, Math.round((due - payAmount) * 100) / 100);
+                remainingPayment = Math.round((remainingPayment - payAmount) * 100) / 100;
                 
                 sale.status = sale.balanceDue <= 0 ? 'paid' : 'partial';
-                await sale.save();
+                await sale.save({ session });
             }
         }
 
+        await session.commitTransaction();
         res.status(201).json(payment);
     } catch (err: any) {
+        if (session) {
+            await session.abortTransaction();
+        }
         res.status(500).json({ message: err.message });
+    } finally {
+        if (session) {
+            session.endSession();
+        }
     }
 };
 
@@ -344,12 +672,13 @@ export const deleteCustomer = async (req: AuthRequest, res: Response) => {
         }
 
         // Check if customer has sales or payments
+        const salesOr: any[] = [{ customerId }];
+        if (customer.phone && !isDummyPhone(customer.phone)) {
+            salesOr.push({ customerPhone: customer.phone, customerId: { $in: [null, undefined, customerId] } });
+        }
         const salesCount = await Sale.countDocuments({ 
             tenantId, 
-            $or: [
-                { customerId },
-                { customerPhone: customer.phone }
-            ] 
+            $or: salesOr
         });
         
         const paymentsCount = await CustomerPayment.countDocuments({ tenantId, customerId });
@@ -388,12 +717,13 @@ export const getCustomerReport = async (req: AuthRequest, res: Response) => {
             ]
         };
 
-        if (customer.phone) {
-            salesQuery.$or.push({ customerPhone: customer.phone });
-        } else {
+        if (customer.phone && !isDummyPhone(customer.phone)) {
+            salesQuery.$or.push({ customerPhone: customer.phone, customerId: { $in: [null, undefined, customer._id] } });
+        } else if (customer.name && customer.name.trim().toLowerCase() !== 'cash sale') {
             salesQuery.$or.push({ 
-                customerName: { $regex: new RegExp(`^${customer.name}$`, 'i') },
-                customerId: { $exists: false }
+                customerName: { $regex: new RegExp(`^${escapeRegex(customer.name.trim())}$`, 'i') },
+                customerId: { $exists: false },
+                customerPhone: { $in: ["", null, undefined] }
             });
         }
 
@@ -411,16 +741,35 @@ export const getCustomerReport = async (req: AuthRequest, res: Response) => {
             if (start) {
                 // Calculate opening balance from sales and payments before start date
                 const priorSalesQuery = { ...salesQuery, date: { $lt: start } };
-                const priorSales = await Sale.find(priorSalesQuery).lean();
+                const priorSales = await Sale.find(priorSalesQuery).select('totalAmount downPayment amountPaid balanceDue paymentMode').lean();
                 
                 const priorPaymentsQuery = { ...paymentsQuery, paymentDate: { $lt: start } };
-                const priorPayments = await CustomerPayment.find(priorPaymentsQuery).lean();
+                const priorPayments = await CustomerPayment.find(priorPaymentsQuery).select('amount').lean();
 
-                const priorSalesTotal = priorSales.reduce((acc, s) => acc + s.totalAmount, 0);
-                const priorSalesPaid = priorSales.reduce((acc, s) => acc + (s.downPayment !== undefined ? s.downPayment : s.amountPaid), 0);
-                const priorPaymentsTotal = priorPayments.reduce((acc, p) => acc + p.amount, 0);
+                const priorSalesTotal = priorSales.reduce((acc, s) => acc + (Number(s.totalAmount) || 0), 0);
+                const priorPaymentsTotal = priorPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
 
-                openingBalance = priorSalesTotal - priorSalesPaid - priorPaymentsTotal;
+                let priorPaymentsPool = priorPaymentsTotal;
+                const priorSalesPaid = priorSales.reduce((acc, s) => {
+                    let paid = 0;
+                    if (s.downPayment != null) {
+                        paid = Number(s.downPayment);
+                    } else if (priorPaymentsPool <= 0) {
+                        paid = Number(s.amountPaid || 0);
+                    } else if (Number(s.balanceDue || 0) === 0 && (s.paymentMode === 'cash' || !s.paymentMode)) {
+                        paid = Number(s.totalAmount || s.amountPaid || 0);
+                    } else {
+                        const total = Number(s.totalAmount) || 0;
+                        const curBal = s.balanceDue != null ? Number(s.balanceDue) : Math.max(0, total - (Number(s.amountPaid) || 0));
+                        const totalPaidSoFar = Math.max(0, total - curBal);
+                        const creditedFromPayments = Math.min(priorPaymentsPool, totalPaidSoFar);
+                        priorPaymentsPool = Math.max(0, priorPaymentsPool - creditedFromPayments);
+                        paid = Math.max(0, totalPaidSoFar - creditedFromPayments);
+                    }
+                    return acc + paid;
+                }, 0);
+
+                openingBalance = Math.round((priorSalesTotal - priorSalesPaid - priorPaymentsTotal) * 100) / 100;
 
                 salesQuery.date = { $gte: start };
                 paymentsQuery.paymentDate = { $gte: start };
@@ -446,10 +795,26 @@ export const getCustomerReport = async (req: AuthRequest, res: Response) => {
             .sort({ paymentDate: 1 })
             .lean();
 
-        // Combine and sort
+        // Combine and sort with zero double-counting
+        const totalCustomerPaymentsInReport = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+        let paymentsPoolInReport = totalCustomerPaymentsInReport;
         const transactions = [
             ...sales.map(s => {
-                const dp = s.downPayment !== undefined ? s.downPayment : s.amountPaid;
+                let dp = 0;
+                if (s.downPayment != null) {
+                    dp = Number(s.downPayment);
+                } else if (paymentsPoolInReport <= 0) {
+                    dp = Number(s.amountPaid || 0);
+                } else if (Number(s.balanceDue || 0) === 0 && (s.paymentMode === 'cash' || !s.paymentMode)) {
+                    dp = Number(s.totalAmount || s.amountPaid || 0);
+                } else {
+                    const total = Number(s.totalAmount) || 0;
+                    const curBal = s.balanceDue != null ? Number(s.balanceDue) : Math.max(0, total - (Number(s.amountPaid) || 0));
+                    const totalPaidSoFar = Math.max(0, total - curBal);
+                    const creditedFromPayments = Math.min(paymentsPoolInReport, totalPaidSoFar);
+                    paymentsPoolInReport = Math.max(0, paymentsPoolInReport - creditedFromPayments);
+                    dp = Math.max(0, totalPaidSoFar - creditedFromPayments);
+                }
                 return {
                     id: s._id,
                     type: 'sale',
@@ -490,7 +855,7 @@ export const getCustomerReport = async (req: AuthRequest, res: Response) => {
 
         // Summary
         const periodSalesTotal = sales.reduce((acc, s) => acc + s.totalAmount, 0);
-        const periodSalesPaid = sales.reduce((acc, s) => acc + (s.downPayment !== undefined ? s.downPayment : s.amountPaid), 0);
+        const periodSalesPaid = sales.reduce((acc, s) => acc + (s.downPayment != null ? Number(s.downPayment) : Number(s.amountPaid || 0)), 0);
         const periodPaymentsTotal = payments.reduce((acc, p) => acc + p.amount, 0);
         
         const summary = {

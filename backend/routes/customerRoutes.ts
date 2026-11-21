@@ -1,5 +1,5 @@
 import express from 'express';
-import { searchCustomers, getCustomers, createCustomer, updateCustomer, deleteCustomer, getCustomerLedger, addCustomerPayment, getCustomerReport, getCustomerItems } from '../controllers/customerController';
+import { searchCustomers, getCustomers, createCustomer, updateCustomer, deleteCustomer, getCustomerLedger, addCustomerPayment, getCustomerReport, getCustomerItems, getCustomerBalance } from '../controllers/customerController';
 import { protect } from '../middleware/auth';
 import { checkPermission } from '../middleware/permission';
 
@@ -9,6 +9,8 @@ router.use(protect);
 
 router.get('/', checkPermission('customers', 'view'), getCustomers);
 router.get('/search', checkPermission('customers', 'view'), searchCustomers);
+router.get('/:id/balance', checkPermission('customers', 'view'), getCustomerBalance);
+router.get('/:id/dues', checkPermission('customers', 'view'), getCustomerBalance);
 router.post('/', checkPermission('customers', 'create'), createCustomer);
 router.put('/:id', checkPermission('customers', 'edit'), updateCustomer);
 router.get('/:id/ledger', checkPermission('customers', 'view'), getCustomerLedger);

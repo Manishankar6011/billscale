@@ -4,9 +4,11 @@ import Sale from "../models/Sale";
 import Purchase from "../models/Purchase";
 import Product from "../models/Product";
 import Customer from "../models/Customer";
+import CustomerPayment from "../models/CustomerPayment";
 import Tenant from "../models/Tenant";
 import mongoose from "mongoose";
 import { hasUserPermission } from "../middleware/permission";
+import { calculateCustomerDue, isDummyPhone, escapeRegex } from "./customerController";
 
 // @desc    Get all sales
 // @route   GET /api/transactions/sales
@@ -153,6 +155,7 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     customerGSTIN,
     customerState,
     customerStateCode,
+    previousBalance,
     specialDiscount,
     specialDiscountPercent,
     specialDiscountLabel,
@@ -187,6 +190,10 @@ export const processSale = async (req: AuthRequest, res: Response) => {
 
     // 1. Handle Customer Auto-Creation/Linking preparation
     let finalCustomerId = req.body.customerId || null;
+    if (finalCustomerId) {
+      const validCust = await Customer.findOne({ _id: finalCustomerId, tenantId: req.tenantId }).select('_id').lean();
+      if (!validCust) finalCustomerId = null;
+    }
     const isGenericWalkIn = !customerPhone && (!customerName || customerName.trim().toLowerCase() === "cash sale");
     const shouldLookupCustomer = !finalCustomerId && !isGenericWalkIn && (customerPhone || customerName);
 
@@ -338,16 +345,40 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     totalAmount = Math.max(0, Math.round(totalAmount * 100) / 100);
 
     const finalAmountPaid = Number(amountPaid) || 0;
-    const balanceDue = Math.max(0, Math.round((totalAmount - finalAmountPaid) * 100) / 100);
+    // Cap bill down payment to totalAmount; any surplus goes towards clearing previous dues
+    const amountAppliedToSale = Math.min(totalAmount, Math.max(0, finalAmountPaid));
+    const balanceDue = Math.max(0, Math.round((totalAmount - amountAppliedToSale) * 100) / 100);
+    const overpayment = Math.max(0, Math.round((finalAmountPaid - amountAppliedToSale) * 100) / 100);
 
     // Auto-calculate status based on balance
     let calculatedStatus = status;
     if (balanceDue <= 0) {
       calculatedStatus = "paid";
-    } else if (finalAmountPaid > 0) {
+    } else if (amountAppliedToSale > 0) {
       calculatedStatus = "partial";
     } else {
       calculatedStatus = "pending";
+    }
+
+    // Resolve customer previous dues directly from database ledger OUTSIDE transaction session
+    let resolvedPreviousBalance = 0;
+    const targetCustId = finalCustomerId || existingCustomer?._id;
+    if (targetCustId || customerPhone) {
+      try {
+        resolvedPreviousBalance = await calculateCustomerDue(req.tenantId, {
+          _id: targetCustId,
+          phone: customerPhone,
+          name: customerName,
+        });
+      } catch (e) {
+        console.error("Error calculating customer previous due in processSale:", e);
+        if (previousBalance !== undefined && previousBalance !== null && previousBalance !== "") {
+          const parsed = Number(previousBalance);
+          if (!isNaN(parsed)) {
+            resolvedPreviousBalance = Math.max(0, parsed);
+          }
+        }
+      }
     }
 
     // Start MongoDB ACID Transaction for writes only (strictly sequential on session)
@@ -435,9 +466,11 @@ export const processSale = async (req: AuthRequest, res: Response) => {
       totalAmount,
       totalProfit,
       taxAmount: totalTaxAmount,
-      amountPaid: finalAmountPaid,
-      downPayment: finalAmountPaid,
+      amountPaid: amountAppliedToSale,
+      downPayment: amountAppliedToSale,
+      amountReceivedAtBilling: finalAmountPaid,
       balanceDue: balanceDue,
+      previousBalance: resolvedPreviousBalance,
       roundOffAmount: finalRoundOff,
       paymentMode,
       status: calculatedStatus,
@@ -450,6 +483,51 @@ export const processSale = async (req: AuthRequest, res: Response) => {
     });
 
     await sale.save({ session });
+
+    // If customer paid extra amount towards previous dues / advance, record it as a CustomerPayment and clear pending sales
+    if (overpayment > 0 && finalCustomerId) {
+      const overpaymentRecord = new CustomerPayment({
+        tenantId: req.tenantId,
+        customerId: finalCustomerId,
+        amount: overpayment,
+        paymentDate: finalSaleDate,
+        paymentMode: paymentMode || "cash",
+        notes: `Payment towards previous dues received at checkout (${invoiceNumber})`,
+      });
+      await overpaymentRecord.save({ session });
+
+      // Distribute overpayment to oldest pending sales of this customer (by customerId or legacy customerPhone)
+      const pendingOr: any[] = [{ customerId: finalCustomerId }];
+      if (customerPhone && !isDummyPhone(customerPhone)) {
+        pendingOr.push({ customerPhone, customerId: { $in: [null, undefined, finalCustomerId] } });
+      }
+      const pendingSales = await Sale.find({
+        tenantId: req.tenantId,
+        _id: { $ne: sale._id },
+        status: { $in: ["pending", "partial"] },
+        $or: pendingOr,
+      })
+        .sort({ date: 1 })
+        .session(session);
+
+      let remainingOverpayment = overpayment;
+      for (const pendingSale of pendingSales) {
+        if (remainingOverpayment <= 0) break;
+        const pendingDue = Math.round((Number(pendingSale.balanceDue) || 0) * 100) / 100;
+        if (pendingDue > 0) {
+          // Lock in down payment for legacy records before mutating amountPaid
+          if (pendingSale.downPayment === undefined || pendingSale.downPayment === null) {
+            pendingSale.downPayment = Math.max(0, Number(pendingSale.amountPaid) || 0);
+          }
+          const payAmt = Math.min(pendingDue, remainingOverpayment);
+          pendingSale.amountPaid = Math.round(((Number(pendingSale.amountPaid) || 0) + payAmt) * 100) / 100;
+          pendingSale.balanceDue = Math.max(0, Math.round((pendingDue - payAmt) * 100) / 100);
+          remainingOverpayment = Math.round((remainingOverpayment - payAmt) * 100) / 100;
+          pendingSale.status = pendingSale.balanceDue <= 0 ? "paid" : "partial";
+          await pendingSale.save({ session });
+        }
+      }
+    }
     const tSave = Date.now();
 
     // Commit transaction immediately to release DB locks
@@ -519,6 +597,7 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
     customerGSTIN,
     customerState,
     customerStateCode,
+    previousBalance,
     specialDiscount,
     specialDiscountPercent,
     specialDiscountLabel,
@@ -573,6 +652,10 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
 
     // 2. Handle Customer
     let finalCustomerId = req.body.customerId || null;
+    if (finalCustomerId) {
+      const validCust = await Customer.findOne({ _id: finalCustomerId, tenantId: req.tenantId }).session(session).select('_id').lean();
+      if (!validCust) finalCustomerId = null;
+    }
 
     if (!finalCustomerId && (customerPhone || customerName)) {
       let existingCustomer;
@@ -720,11 +803,14 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
     totalAmount = Math.max(0, Math.round(totalAmount * 100) / 100);
 
     const finalAmountPaid = Number(amountPaid) || 0;
-    const balanceDue = Math.max(0, Math.round((totalAmount - finalAmountPaid) * 100) / 100);
+    // Cap bill down payment to totalAmount; surplus goes towards clearing previous dues
+    const amountAppliedToSale = Math.min(totalAmount, Math.max(0, finalAmountPaid));
+    const balanceDue = Math.max(0, Math.round((totalAmount - amountAppliedToSale) * 100) / 100);
+    const overpayment = Math.max(0, Math.round((finalAmountPaid - amountAppliedToSale) * 100) / 100);
 
     let calculatedStatus = status;
     if (balanceDue <= 0) calculatedStatus = "paid";
-    else if (finalAmountPaid > 0) calculatedStatus = "partial";
+    else if (amountAppliedToSale > 0) calculatedStatus = "partial";
     else calculatedStatus = "pending";
 
     // Update Sale
@@ -741,12 +827,47 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
     oldSale.totalAmount = totalAmount;
     oldSale.totalProfit = totalProfit;
     oldSale.taxAmount = totalTaxAmount;
-    oldSale.amountPaid = finalAmountPaid;
-    oldSale.downPayment = finalAmountPaid;
+    oldSale.amountPaid = amountAppliedToSale;
+    // Preserve initial down payment on edit so subsequent payments aren't destroyed or double counted
+    if (oldSale.downPayment === undefined || oldSale.downPayment === null) {
+      oldSale.downPayment = amountAppliedToSale;
+    } else if (amountAppliedToSale < oldSale.downPayment) {
+      oldSale.downPayment = amountAppliedToSale;
+    }
+    (oldSale as any).amountReceivedAtBilling = finalAmountPaid;
     oldSale.balanceDue = balanceDue;
     oldSale.roundOffAmount = finalRoundOff;
     oldSale.paymentMode = paymentMode;
     oldSale.status = calculatedStatus;
+    
+    // Preserve historical previous balance snapshot unless customer was reassigned or missing
+    let updatedPreviousBalance = Number(oldSale.previousBalance) || 0;
+    const oldCustIdStr = oldSale.customerId ? oldSale.customerId.toString() : "";
+    const newCustIdStr = finalCustomerId ? finalCustomerId.toString() : "";
+    const customerChanged = oldCustIdStr !== newCustIdStr;
+    if (customerChanged || oldSale.previousBalance === undefined || oldSale.previousBalance === null) {
+      if (finalCustomerId || customerPhone) {
+        try {
+          updatedPreviousBalance = await calculateCustomerDue(
+            req.tenantId,
+            { _id: finalCustomerId, phone: customerPhone, name: customerName },
+            oldSale._id,
+            oldSale.date ? new Date(oldSale.date) : undefined
+          );
+        } catch (e) {
+          if (previousBalance !== undefined && previousBalance !== null && previousBalance !== "") {
+            const parsedPrevBal = Number(previousBalance);
+            if (!isNaN(parsedPrevBal)) {
+              updatedPreviousBalance = parsedPrevBal;
+            }
+          }
+        }
+      } else {
+        updatedPreviousBalance = 0;
+      }
+    }
+    (oldSale as any).previousBalance = updatedPreviousBalance;
+
     const canEditInvoiceDate = hasUserPermission(req.user, 'sales', 'editInvoiceDate');
     if (canEditInvoiceDate && date && !isNaN(new Date(date).getTime())) {
       oldSale.date = new Date(date);
@@ -758,6 +879,73 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
     if (!oldSale.createdBy) oldSale.createdBy = req.user?._id;
 
     await oldSale.save({ session });
+
+    // Handle checkout overpayment (extra amount paid towards previous dues / advance)
+    if (finalCustomerId) {
+      const existingOverpayment = await CustomerPayment.findOne({
+        tenantId: req.tenantId,
+        customerId: finalCustomerId,
+        notes: { $regex: new RegExp(`Payment towards previous dues received at checkout \\(${escapeRegex(oldSale.invoiceNumber)}\\)`, 'i') },
+      }).session(session);
+
+      if (overpayment > 0) {
+        const prevOverpaymentAmount = existingOverpayment ? Number(existingOverpayment.amount) || 0 : 0;
+        if (existingOverpayment) {
+          existingOverpayment.amount = overpayment;
+          existingOverpayment.paymentDate = oldSale.date || new Date();
+          existingOverpayment.paymentMode = paymentMode || "cash";
+          await existingOverpayment.save({ session });
+        } else {
+          const overpaymentRecord = new CustomerPayment({
+            tenantId: req.tenantId,
+            customerId: finalCustomerId,
+            amount: overpayment,
+            paymentDate: oldSale.date || new Date(),
+            paymentMode: paymentMode || "cash",
+            notes: `Payment towards previous dues received at checkout (${oldSale.invoiceNumber})`,
+          });
+          await overpaymentRecord.save({ session });
+        }
+
+        // Only distribute the incremental new overpayment if amount increased beyond what was already distributed
+        const incrementalOverpayment = Math.round(Math.max(0, overpayment - prevOverpaymentAmount) * 100) / 100;
+        if (incrementalOverpayment > 0) {
+          const pendingOr: any[] = [{ customerId: finalCustomerId }];
+          if (customerPhone && !isDummyPhone(customerPhone)) {
+            pendingOr.push({ customerPhone, customerId: { $in: [null, undefined, finalCustomerId] } });
+          }
+          const pendingSales = await Sale.find({
+            tenantId: req.tenantId,
+            _id: { $ne: oldSale._id },
+            status: { $in: ["pending", "partial"] },
+            $or: pendingOr,
+          })
+            .sort({ date: 1 })
+            .session(session);
+
+          let remainingOverpayment = incrementalOverpayment;
+          for (const pendingSale of pendingSales) {
+            if (remainingOverpayment <= 0) break;
+            const pendingDue = Math.round((Number(pendingSale.balanceDue) || 0) * 100) / 100;
+            if (pendingDue > 0) {
+              // Lock in down payment for legacy records before mutating amountPaid
+              if (pendingSale.downPayment === undefined || pendingSale.downPayment === null) {
+                pendingSale.downPayment = Math.max(0, Number(pendingSale.amountPaid) || 0);
+              }
+              const payAmt = Math.min(pendingDue, remainingOverpayment);
+              pendingSale.amountPaid = Math.round(((Number(pendingSale.amountPaid) || 0) + payAmt) * 100) / 100;
+              pendingSale.balanceDue = Math.max(0, Math.round((pendingDue - payAmt) * 100) / 100);
+              remainingOverpayment = Math.round((remainingOverpayment - payAmt) * 100) / 100;
+              pendingSale.status = pendingSale.balanceDue <= 0 ? "paid" : "partial";
+              await pendingSale.save({ session });
+            }
+          }
+        }
+      } else if (existingOverpayment) {
+        // Overpayment was reduced to 0 in this edit — remove the payment record
+        await CustomerPayment.deleteOne({ _id: existingOverpayment._id }).session(session);
+      }
+    }
 
     // Commit transaction immediately to release DB locks
     await session.commitTransaction();
@@ -1320,7 +1508,7 @@ export const deletePurchase = async (req: AuthRequest, res: Response) => {
 export const getPublicSale = async (req: Request, res: Response) => {
   try {
     const sale = await Sale.findById(req.params.id)
-      .populate("items.productId", "name unit mrp purchasePrice hasSubUnit subUnitName subUnitValue subUnitMrp subUnitPurchasePrice subUnitSalePrice")
+      .populate("items.productId", "name unit mrp hasSubUnit subUnitName subUnitValue subUnitMrp subUnitSalePrice")
       .populate(
         "tenantId",
         "companyName phone address email logoUrl signature upiId billingEmail billingAddress name socialLinks",
@@ -1330,7 +1518,39 @@ export const getPublicSale = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Invoice not found" });
     }
 
-    res.status(200).json(sale);
+    // Sanitize public payload: strictly protect merchant's internal purchase costs and profit margins
+    const saleObj: any = sale.toObject();
+    delete saleObj.totalProfit;
+    if (Array.isArray(saleObj.items)) {
+      saleObj.items = saleObj.items.map((it: any) => {
+        delete it.purchasePriceAtTime;
+        delete it.profitPercent;
+        delete it.profitAmount;
+        if (it.productId && typeof it.productId === 'object') {
+          delete it.productId.purchasePrice;
+          delete it.productId.subUnitPurchasePrice;
+        }
+        return it;
+      });
+    }
+    if (Array.isArray(saleObj.customItems)) {
+      saleObj.customItems = saleObj.customItems.map((ci: any) => {
+        delete ci.purchasePrice;
+        delete ci.profitPercent;
+        delete ci.profitAmount;
+        return ci;
+      });
+    }
+    if (Array.isArray(saleObj.additionalItems)) {
+      saleObj.additionalItems = saleObj.additionalItems.map((ai: any) => {
+        delete ai.purchasePrice;
+        delete ai.profitPercent;
+        delete ai.profitAmount;
+        return ai;
+      });
+    }
+
+    res.status(200).json(saleObj);
   } catch (err: any) {
     res.status(500).json({ message: err.message });
   }

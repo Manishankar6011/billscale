@@ -221,6 +221,7 @@ export const getItemSalesByDateRange = async (req: AuthRequest, res: Response) =
         },
       },
       { $unwind: "$allItems" },
+      { $sort: { date: -1 } },
       {
         $group: {
           _id: {
@@ -273,7 +274,8 @@ export const getItemSalesByDateRange = async (req: AuthRequest, res: Response) =
           totalQuantity: 1,
           totalRevenue: 1,
           totalProfit: 1,
-          sales: 1,
+          salesCount: { $size: "$sales" },
+          sales: { $slice: ["$sales", 200] },
         },
       },
       { $sort: { totalQuantity: -1 } },
@@ -296,7 +298,7 @@ export const getItemSalesByDateRange = async (req: AuthRequest, res: Response) =
       });
     }
 
-    const itemSales = await Sale.aggregate(pipeline);
+    const itemSales = await Sale.aggregate(pipeline).allowDiskUse(true);
 
     itemSales.forEach((item: any) => {
       if (Array.isArray(item.sales)) {

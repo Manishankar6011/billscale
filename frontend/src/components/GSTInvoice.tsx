@@ -639,6 +639,38 @@ const GSTInvoice: React.FC<GSTInvoiceProps> = ({
 
         {/* Bottom Section */}
         <div className="border-t border-black p-1">
+          {Number(sale.previousBalance || 0) !== 0 && (() => {
+            const prevBal = Number(sale.previousBalance || 0);
+            const curBill = Number(sale.totalAmount || 0);
+            const paidToday = Number(sale.amountReceivedAtBilling ?? sale.amountPaid ?? 0);
+            const netRemaining = Math.round((prevBal + curBill - paidToday) * 100) / 100;
+            return (
+              <div className="mb-2 p-2 border border-black border-dashed bg-gray-50 flex justify-between items-center text-[10px]">
+                <div>
+                  <span className="font-bold uppercase">{prevBal > 0 ? "Previous Dues: " : "Previous Advance: "}</span>
+                  <span className={`font-black ${prevBal > 0 ? "text-red-600" : "text-emerald-700"}`}>
+                    ₹{Math.abs(prevBal).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-bold uppercase">Current Bill: </span>
+                  <span className="font-black">₹{curBill.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+                {paidToday > 0 && (
+                  <div>
+                    <span className="font-bold uppercase text-emerald-800">Paid Today: </span>
+                    <span className="font-black text-emerald-800">-₹{paidToday.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                )}
+                <div className="border-l border-black pl-2">
+                  <span className="font-black uppercase">{netRemaining >= 0 ? "Total Outstanding: " : "Advance Credit: "}</span>
+                  <span className={netRemaining > 0 ? "font-black text-red-700" : "font-black text-emerald-700"}>
+                    ₹{Math.abs(netRemaining).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
           {totalDiscount > 0 && (
             <div className="mb-2 p-1 border border-green-600 border-dashed bg-green-50 w-full">
                 <p className="text-[10px] font-black uppercase tracking-widest text-green-700 text-center">
