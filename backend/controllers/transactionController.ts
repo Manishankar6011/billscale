@@ -8,7 +8,7 @@ import CustomerPayment from "../models/CustomerPayment";
 import Tenant from "../models/Tenant";
 import mongoose from "mongoose";
 import { hasUserPermission } from "../middleware/permission";
-import { calculateCustomerDue, isDummyPhone } from "./customerController";
+import { calculateCustomerDue, isDummyPhone, escapeRegex } from "./customerController";
 
 // @desc    Get all sales
 // @route   GET /api/transactions/sales
@@ -515,6 +515,10 @@ export const processSale = async (req: AuthRequest, res: Response) => {
         if (remainingOverpayment <= 0) break;
         const pendingDue = Math.round((Number(pendingSale.balanceDue) || 0) * 100) / 100;
         if (pendingDue > 0) {
+          // Lock in down payment for legacy records before mutating amountPaid
+          if (pendingSale.downPayment === undefined || pendingSale.downPayment === null) {
+            pendingSale.downPayment = Math.max(0, Number(pendingSale.amountPaid) || 0);
+          }
           const payAmt = Math.min(pendingDue, remainingOverpayment);
           pendingSale.amountPaid = Math.round(((Number(pendingSale.amountPaid) || 0) + payAmt) * 100) / 100;
           pendingSale.balanceDue = Math.max(0, Math.round((pendingDue - payAmt) * 100) / 100);
@@ -838,7 +842,9 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
     
     // Preserve historical previous balance snapshot unless customer was reassigned or missing
     let updatedPreviousBalance = Number(oldSale.previousBalance) || 0;
-    const customerChanged = finalCustomerId && oldSale.customerId && finalCustomerId.toString() !== oldSale.customerId.toString();
+    const oldCustIdStr = oldSale.customerId ? oldSale.customerId.toString() : "";
+    const newCustIdStr = finalCustomerId ? finalCustomerId.toString() : "";
+    const customerChanged = oldCustIdStr !== newCustIdStr;
     if (customerChanged || oldSale.previousBalance === undefined || oldSale.previousBalance === null) {
       if (finalCustomerId || customerPhone) {
         try {
@@ -856,6 +862,8 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
             }
           }
         }
+      } else {
+        updatedPreviousBalance = 0;
       }
     }
     (oldSale as any).previousBalance = updatedPreviousBalance;
@@ -872,43 +880,70 @@ export const updateSale = async (req: AuthRequest, res: Response) => {
 
     await oldSale.save({ session });
 
-    // If customer paid extra amount towards previous dues / advance, record it as a CustomerPayment and clear pending sales
-    if (overpayment > 0 && finalCustomerId) {
-      const overpaymentRecord = new CustomerPayment({
+    // Handle checkout overpayment (extra amount paid towards previous dues / advance)
+    if (finalCustomerId) {
+      const existingOverpayment = await CustomerPayment.findOne({
         tenantId: req.tenantId,
         customerId: finalCustomerId,
-        amount: overpayment,
-        paymentDate: oldSale.date || new Date(),
-        paymentMode: paymentMode || "cash",
-        notes: `Payment towards previous dues received at checkout (${oldSale.invoiceNumber})`,
-      });
-      await overpaymentRecord.save({ session });
+        notes: { $regex: new RegExp(`Payment towards previous dues received at checkout \\(${escapeRegex(oldSale.invoiceNumber)}\\)`, 'i') },
+      }).session(session);
 
-      const pendingOr: any[] = [{ customerId: finalCustomerId }];
-      if (customerPhone && !isDummyPhone(customerPhone)) {
-        pendingOr.push({ customerPhone, customerId: { $in: [null, undefined, finalCustomerId] } });
-      }
-      const pendingSales = await Sale.find({
-        tenantId: req.tenantId,
-        _id: { $ne: oldSale._id },
-        status: { $in: ["pending", "partial"] },
-        $or: pendingOr,
-      })
-        .sort({ date: 1 })
-        .session(session);
-
-      let remainingOverpayment = overpayment;
-      for (const pendingSale of pendingSales) {
-        if (remainingOverpayment <= 0) break;
-        const pendingDue = Math.round((Number(pendingSale.balanceDue) || 0) * 100) / 100;
-        if (pendingDue > 0) {
-          const payAmt = Math.min(pendingDue, remainingOverpayment);
-          pendingSale.amountPaid = Math.round(((Number(pendingSale.amountPaid) || 0) + payAmt) * 100) / 100;
-          pendingSale.balanceDue = Math.max(0, Math.round((pendingDue - payAmt) * 100) / 100);
-          remainingOverpayment = Math.round((remainingOverpayment - payAmt) * 100) / 100;
-          pendingSale.status = pendingSale.balanceDue <= 0 ? "paid" : "partial";
-          await pendingSale.save({ session });
+      if (overpayment > 0) {
+        const prevOverpaymentAmount = existingOverpayment ? Number(existingOverpayment.amount) || 0 : 0;
+        if (existingOverpayment) {
+          existingOverpayment.amount = overpayment;
+          existingOverpayment.paymentDate = oldSale.date || new Date();
+          existingOverpayment.paymentMode = paymentMode || "cash";
+          await existingOverpayment.save({ session });
+        } else {
+          const overpaymentRecord = new CustomerPayment({
+            tenantId: req.tenantId,
+            customerId: finalCustomerId,
+            amount: overpayment,
+            paymentDate: oldSale.date || new Date(),
+            paymentMode: paymentMode || "cash",
+            notes: `Payment towards previous dues received at checkout (${oldSale.invoiceNumber})`,
+          });
+          await overpaymentRecord.save({ session });
         }
+
+        // Only distribute the incremental new overpayment if amount increased beyond what was already distributed
+        const incrementalOverpayment = Math.round(Math.max(0, overpayment - prevOverpaymentAmount) * 100) / 100;
+        if (incrementalOverpayment > 0) {
+          const pendingOr: any[] = [{ customerId: finalCustomerId }];
+          if (customerPhone && !isDummyPhone(customerPhone)) {
+            pendingOr.push({ customerPhone, customerId: { $in: [null, undefined, finalCustomerId] } });
+          }
+          const pendingSales = await Sale.find({
+            tenantId: req.tenantId,
+            _id: { $ne: oldSale._id },
+            status: { $in: ["pending", "partial"] },
+            $or: pendingOr,
+          })
+            .sort({ date: 1 })
+            .session(session);
+
+          let remainingOverpayment = incrementalOverpayment;
+          for (const pendingSale of pendingSales) {
+            if (remainingOverpayment <= 0) break;
+            const pendingDue = Math.round((Number(pendingSale.balanceDue) || 0) * 100) / 100;
+            if (pendingDue > 0) {
+              // Lock in down payment for legacy records before mutating amountPaid
+              if (pendingSale.downPayment === undefined || pendingSale.downPayment === null) {
+                pendingSale.downPayment = Math.max(0, Number(pendingSale.amountPaid) || 0);
+              }
+              const payAmt = Math.min(pendingDue, remainingOverpayment);
+              pendingSale.amountPaid = Math.round(((Number(pendingSale.amountPaid) || 0) + payAmt) * 100) / 100;
+              pendingSale.balanceDue = Math.max(0, Math.round((pendingDue - payAmt) * 100) / 100);
+              remainingOverpayment = Math.round((remainingOverpayment - payAmt) * 100) / 100;
+              pendingSale.status = pendingSale.balanceDue <= 0 ? "paid" : "partial";
+              await pendingSale.save({ session });
+            }
+          }
+        }
+      } else if (existingOverpayment) {
+        // Overpayment was reduced to 0 in this edit — remove the payment record
+        await CustomerPayment.deleteOne({ _id: existingOverpayment._id }).session(session);
       }
     }
 

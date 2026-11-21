@@ -5,7 +5,7 @@ import Customer from '../models/Customer';
 import CustomerPayment from '../models/CustomerPayment';
 import Sale from '../models/Sale';
 
-const escapeRegex = (text: string) => text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+export const escapeRegex = (text: string) => text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
 
 export const isDummyPhone = (phone?: string | null): boolean => {
     if (!phone) return true;
@@ -77,7 +77,7 @@ export const calculateCustomerDue = async (
     }
 
     const [sales, payments] = await Promise.all([
-        Sale.find(salesQuery).select('totalAmount downPayment amountPaid balanceDue').lean(),
+        Sale.find(salesQuery).select('totalAmount downPayment amountPaid balanceDue paymentMode').lean(),
         paymentsQuery ? CustomerPayment.find(paymentsQuery).select('amount').lean() : []
     ]);
 
@@ -101,6 +101,8 @@ export const calculateCustomerDue = async (
             const initialPaid = Number(s.downPayment);
             const credited = Math.max(0, (total - initialPaid) - curBal);
             totalPaymentsAbsorbed += credited;
+        } else if (curBal === 0 && (s.paymentMode === 'cash' || !s.paymentMode)) {
+            // Legacy cash bill fully paid at counter — absorbed 0 from CustomerPayment
         } else {
             // For legacy records without downPayment, credit is difference between total and remaining due
             const totalPaidOnSale = Math.max(0, total - curBal);
@@ -156,7 +158,7 @@ export const searchCustomers = async (req: AuthRequest, res: Response) => {
             Sale.find({
                 tenantId,
                 $or: salesOrConditions
-            }).select('customerId customerPhone totalAmount downPayment amountPaid balanceDue').lean(),
+            }).select('customerId customerPhone totalAmount downPayment amountPaid balanceDue paymentMode').lean(),
             CustomerPayment.find({
                 tenantId,
                 customerId: { $in: customerIds }
@@ -215,6 +217,8 @@ export const searchCustomers = async (req: AuthRequest, res: Response) => {
                     const initialPaid = Number(s.downPayment);
                     const credited = Math.max(0, (total - initialPaid) - curBal);
                     totalPaymentsAbsorbed += credited;
+                } else if (curBal === 0 && (s.paymentMode === 'cash' || !s.paymentMode)) {
+                    // Legacy cash bill fully paid at counter — absorbed 0 from CustomerPayment
                 } else {
                     const totalPaidOnSale = Math.max(0, total - curBal);
                     totalPaymentsAbsorbed += totalPaidOnSale;
@@ -470,6 +474,9 @@ export const getCustomerLedger = async (req: AuthRequest, res: Response) => {
                 dp = Number(s.downPayment);
             } else if (unallocatedPaymentsPool <= 0) {
                 dp = Number(s.amountPaid || 0);
+            } else if (Number(s.balanceDue || 0) === 0 && (s.paymentMode === 'cash' || !s.paymentMode)) {
+                // Legacy cash bill paid in full at checkout — counter payment was the full bill
+                dp = Number(s.totalAmount || s.amountPaid || 0);
             } else {
                 const total = Number(s.totalAmount) || 0;
                 const curBal = s.balanceDue != null ? Number(s.balanceDue) : Math.max(0, total - (Number(s.amountPaid) || 0));
@@ -623,6 +630,10 @@ export const addCustomerPayment = async (req: AuthRequest, res: Response) => {
 
             const due = Math.round((Number(sale.balanceDue) || 0) * 100) / 100;
             if (due > 0) {
+                // Lock in down payment for legacy records before mutating amountPaid
+                if (sale.downPayment === undefined || sale.downPayment === null) {
+                    sale.downPayment = Math.max(0, Number(sale.amountPaid) || 0);
+                }
                 const payAmount = Math.min(due, remainingPayment);
                 sale.amountPaid = Math.round(((Number(sale.amountPaid) || 0) + payAmount) * 100) / 100;
                 sale.balanceDue = Math.max(0, Math.round((due - payAmount) * 100) / 100);
@@ -730,7 +741,7 @@ export const getCustomerReport = async (req: AuthRequest, res: Response) => {
             if (start) {
                 // Calculate opening balance from sales and payments before start date
                 const priorSalesQuery = { ...salesQuery, date: { $lt: start } };
-                const priorSales = await Sale.find(priorSalesQuery).select('totalAmount downPayment amountPaid balanceDue').lean();
+                const priorSales = await Sale.find(priorSalesQuery).select('totalAmount downPayment amountPaid balanceDue paymentMode').lean();
                 
                 const priorPaymentsQuery = { ...paymentsQuery, paymentDate: { $lt: start } };
                 const priorPayments = await CustomerPayment.find(priorPaymentsQuery).select('amount').lean();
@@ -745,6 +756,8 @@ export const getCustomerReport = async (req: AuthRequest, res: Response) => {
                         paid = Number(s.downPayment);
                     } else if (priorPaymentsPool <= 0) {
                         paid = Number(s.amountPaid || 0);
+                    } else if (Number(s.balanceDue || 0) === 0 && (s.paymentMode === 'cash' || !s.paymentMode)) {
+                        paid = Number(s.totalAmount || s.amountPaid || 0);
                     } else {
                         const total = Number(s.totalAmount) || 0;
                         const curBal = s.balanceDue != null ? Number(s.balanceDue) : Math.max(0, total - (Number(s.amountPaid) || 0));
@@ -792,6 +805,8 @@ export const getCustomerReport = async (req: AuthRequest, res: Response) => {
                     dp = Number(s.downPayment);
                 } else if (paymentsPoolInReport <= 0) {
                     dp = Number(s.amountPaid || 0);
+                } else if (Number(s.balanceDue || 0) === 0 && (s.paymentMode === 'cash' || !s.paymentMode)) {
+                    dp = Number(s.totalAmount || s.amountPaid || 0);
                 } else {
                     const total = Number(s.totalAmount) || 0;
                     const curBal = s.balanceDue != null ? Number(s.balanceDue) : Math.max(0, total - (Number(s.amountPaid) || 0));

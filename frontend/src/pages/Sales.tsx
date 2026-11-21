@@ -951,16 +951,19 @@ const Sales = () => {
     const pct = ((val / rawTotal) * 100).toFixed(2);
     setSpecialDiscountPercent(pct);
   };
-  const totalPayableWithDue = grandTotal + (customerPreviousDue > 0 ? customerPreviousDue : 0);
+  const totalPayableWithDue = Math.max(0, grandTotal + (customerPreviousDue || 0));
   const changeAmount =
     amountReceived !== "" ? Number(amountReceived) - totalPayableWithDue : null;
 
   // Auto-sync amountReceived for cash sales
   useEffect(() => {
     if (paymentMode === "cash" && isModalOpen && !selectedSaleForEdit) {
-      setAmountReceived(grandTotal.toString());
+      const suggestedAmount = customerPreviousDue < 0
+        ? Math.max(0, grandTotal + customerPreviousDue)
+        : grandTotal;
+      setAmountReceived(suggestedAmount.toString());
     }
-  }, [grandTotal, paymentMode, isModalOpen, selectedSaleForEdit]);
+  }, [grandTotal, customerPreviousDue, paymentMode, isModalOpen, selectedSaleForEdit]);
 
   // Mutations
   const createSaleMutation = useMutation({
@@ -2863,6 +2866,16 @@ const Sales = () => {
                           </span>
                         </div>
                       )}
+                      {customerPreviousDue < 0 && (
+                        <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                          <span className="text-xs font-black text-emerald-800">
+                            💰 Previous Advance Credit (Jama):
+                          </span>
+                          <span className="text-xs font-black text-emerald-600">
+                            ₹{Math.abs(customerPreviousDue).toLocaleString()}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -4088,6 +4101,37 @@ const Sales = () => {
                   );
                 })()}
 
+                {/* Customer Previous Advance summary if advance exists */}
+                {customerPreviousDue < 0 && (() => {
+                  const advance = Math.abs(customerPreviousDue);
+                  const paid = Number(amountReceived) || 0;
+                  const netDue = (grandTotal - advance) - paid;
+                  return (
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-1.5">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-emerald-800">Previous Advance (Jama):</span>
+                        <span className="font-black text-emerald-600">₹{advance.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-slate-600">Current Bill:</span>
+                        <span className="font-black text-slate-800">₹{grandTotal.toLocaleString()}</span>
+                      </div>
+                      {paid > 0 && (
+                        <div className="flex justify-between items-center text-xs font-bold text-emerald-700">
+                          <span>Paid Today:</span>
+                          <span>-₹{paid.toLocaleString()}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center text-sm font-black pt-1 border-t border-emerald-200">
+                        <span className="text-slate-800">{netDue > 0 ? "Net Total Due Remaining:" : "Remaining Advance Credit:"}</span>
+                        <span className={netDue > 0 ? "text-rose-700" : "text-emerald-700"}>
+                          ₹{Math.abs(netDue).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Amount Received / Change Calculator */}
                 <div className="space-y-2">
                   <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -4104,7 +4148,7 @@ const Sales = () => {
                     />
                     <button
                       type="button"
-                      onClick={() => setAmountReceived(grandTotal.toString())}
+                      onClick={() => setAmountReceived(totalPayableWithDue.toString())}
                       className="px-4 py-3 bg-primary-50 text-primary-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-primary-100 transition-all border border-primary-200 whitespace-nowrap"
                     >
                       {t("billing.exact_amount")}
@@ -4112,7 +4156,7 @@ const Sales = () => {
                   </div>
                   {changeAmount !== null && (() => {
                     const received = Number(amountReceived) || 0;
-                    const totalPayable = customerPreviousDue > 0 ? (customerPreviousDue + grandTotal) : grandTotal;
+                    const totalPayable = totalPayableWithDue;
                     const netDiff = received - totalPayable;
                     return (
                       <div
@@ -4129,6 +4173,11 @@ const Sales = () => {
                           {customerPreviousDue > 0 && netDiff < 0 && (
                             <p className="text-[10px] font-bold text-rose-500 mt-0.5">
                               (Current: ₹{grandTotal.toLocaleString()} + Pichla: ₹{customerPreviousDue.toLocaleString()})
+                            </p>
+                          )}
+                          {customerPreviousDue < 0 && netDiff < 0 && (
+                            <p className="text-[10px] font-bold text-rose-500 mt-0.5">
+                              (Current: ₹{grandTotal.toLocaleString()} - Jama: ₹{Math.abs(customerPreviousDue).toLocaleString()})
                             </p>
                           )}
                         </div>
